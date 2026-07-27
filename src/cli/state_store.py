@@ -8,14 +8,22 @@ _PACKAGE_NAME = "daysurface"
 _CONFIG_DIR = Path.home() / ".config" / _PACKAGE_NAME
 _STATE_FILE = _CONFIG_DIR / "state.json"
 
+# State written before the DaySurface rename. Read-only fallback: this file
+# holds the telemetry opt-out and the one-time notice flags, so ignoring it
+# would silently re-enable telemetry for someone who had opted out. The next
+# save_state writes to the new location, retiring the old file.
+_LEGACY_STATE_FILES = (Path.home() / ".config" / "mcp-template" / "state.json",)
+
 
 def load_state() -> dict[str, Any]:
     """Read the persisted state dict, returning {} on missing or corrupt files."""
-    if _STATE_FILE.exists():
+    for path in (_STATE_FILE, *_LEGACY_STATE_FILES):
+        if not path.exists():
+            continue
         try:
-            return json.loads(_STATE_FILE.read_text())
+            return json.loads(path.read_text())
         except (json.JSONDecodeError, OSError):
-            return {}
+            continue
     return {}
 
 

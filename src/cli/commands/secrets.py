@@ -31,18 +31,35 @@ def _get_cli_name() -> str:
 
 
 _SERVICE_NAME = _get_cli_name()
+# Keyring service names used before the DaySurface rename. Secrets are stored
+# per-service, so reads have to fall back to these or an existing keyring looks
+# empty after the rename. Writes only ever target _SERVICE_NAME, so the legacy
+# namespace drains as keys are re-set, and delete clears every namespace.
+_LEGACY_SERVICE_NAMES = ("mymcp",)
+_ALL_SERVICE_NAMES = (_SERVICE_NAME, *_LEGACY_SERVICE_NAMES)
 _KEYS_META = "__secret_keys__"
 
 
+def _read_password(key: str) -> str | None:
+    """Read a secret from the current service, falling back to legacy ones."""
+    for service in _ALL_SERVICE_NAMES:
+        value = keyring.get_password(service, key)
+        if value is not None:
+            return value
+    return None
+
+
 def _get_tracked_keys() -> list[str]:
-    raw = keyring.get_password(_SERVICE_NAME, _KEYS_META)
-    if raw is None:
-        return []
-    try:
-        keys = json.loads(raw)
-        return sorted(set(keys))
-    except (json.JSONDecodeError, TypeError):
-        return []
+    keys: set[str] = set()
+    for service in _ALL_SERVICE_NAMES:
+        raw = keyring.get_password(service, _KEYS_META)
+        if raw is None:
+            continue
+        try:
+            keys.update(json.loads(raw))
+        except (json.JSONDecodeError, TypeError):
+            continue
+    return sorted(keys)
 
 
 def _set_tracked_keys(keys: list[str]) -> None:
@@ -57,10 +74,32 @@ def _track_key(key: str) -> None:
 
 
 def _untrack_key(key: str) -> None:
-    keys = _get_tracked_keys()
-    if key in keys:
-        keys.remove(key)
-        _set_tracked_keys(keys)
+    """Drop a key from the tracked list in every service that still lists it.
+
+    Pruning only the current service would leave the key in a legacy index,
+    where the merged read in _get_tracked_keys would resurrect it.
+    """
+    for service in _ALL_SERVICE_NAMES:
+        raw = keyring.get_password(service, _KEYS_META)
+        if raw is None:
+            continue
+        try:
+            remaining = sorted(set(json.loads(raw)) - {key})
+        except (json.JSONDecodeError, TypeError):
+            continue
+        keyring.set_password(service, _KEYS_META, json.dumps(remaining))
+
+
+def _purge_legacy(key: str) -> bool:
+    """Delete a secret from the legacy services. True if one was removed."""
+    removed = False
+    for service in _LEGACY_SERVICE_NAMES:
+        try:
+            keyring.delete_password(service, key)
+        except keyring.errors.PasswordDeleteError:
+            continue
+        removed = True
+    return removed
 
 
 def _mask_value(value: str) -> str:
@@ -130,7 +169,7 @@ def get_secret(
     ] = False,
 ) -> None:
     """Retrieve a secret from the OS keyring."""
-    value = keyring.get_password(_SERVICE_NAME, key)
+    value = _read_password(key)
     if value is None:
         console.print(f"[red]Error:[/red] secret not found: {key}")
         console.print("  List stored secrets: [bold]daysurface secrets list[/bold]")
@@ -154,6 +193,10 @@ def delete(
         console.print(f"[yellow][DRY RUN][/yellow] Would delete secret {key}")
         return
 
+    # Clear the pre-rename namespace too, otherwise `get` would still resolve
+    # the key through the legacy fallback after a "successful" delete.
+    legacy_removed = _purge_legacy(key)
+
     try:
         keyring.delete_password(_SERVICE_NAME, key)
     except keyring.errors.PasswordDeleteError:
@@ -164,7 +207,10 @@ def delete(
             raise
         _untrack_key(key)
         if not is_quiet():
-            console.print(f"[dim]No-op:[/dim] {key} not present")
+            if legacy_removed:
+                console.print(f"[green]Deleted[/green] {key}")
+            else:
+                console.print(f"[dim]No-op:[/dim] {key} not present")
         return
 
     _untrack_key(key)
@@ -184,7 +230,7 @@ def list_secrets() -> None:
 
     rows = []
     for key in keys:
-        value = keyring.get_password(_SERVICE_NAME, key)
+        value = _read_password(key)
         rows.append(
             {
                 "Key": key,
@@ -304,7 +350,7 @@ def export_secrets(
         return
 
     for key in keys:
-        value = keyring.get_password(_SERVICE_NAME, key)
+        value = _read_password(key)
         if value is None:
             continue
         display = value if reveal else _mask_value(value)
