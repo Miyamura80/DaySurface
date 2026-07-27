@@ -39,12 +39,17 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     # NULL is not representable in the old schema; a revoked row keeps no
-    # token to restore, so back-fill an empty blob before tightening.
+    # token to restore, so back-fill an empty blob before tightening. Bind it
+    # as a LargeBinary parameter rather than a bare '' literal: the column is
+    # binary, and a text literal is dialect-dependent (SQLite's type affinity
+    # would store a str where the ORM expects bytes).
+    google_tokens = sa.table(
+        "google_tokens", sa.column("refresh_token_enc", sa.LargeBinary())
+    )
     op.execute(
-        sa.text(
-            "UPDATE google_tokens SET refresh_token_enc = '' "
-            "WHERE refresh_token_enc IS NULL"
-        )
+        google_tokens.update()
+        .where(google_tokens.c.refresh_token_enc.is_(None))
+        .values(refresh_token_enc=b"")
     )
     with op.batch_alter_table("google_tokens") as batch_op:
         batch_op.alter_column(

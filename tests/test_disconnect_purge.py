@@ -12,7 +12,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from unittest.mock import patch
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -117,6 +117,38 @@ class TestPurgeOnDisconnect(TestTemplate):
                 assert session.query(WebhookDelivery).count() == 1
                 # Subscriptions carry no email content and must survive.
                 assert session.query(WebhookSubscription).count() == 2
+
+    def test_delivery_purge_matches_on_a_subquery_not_an_id_list(self):
+        # A busy mailbox banks one event per message. If the delivery delete
+        # expanded those ids into an IN (...) list it would eventually exceed
+        # the driver's bind-parameter limit, and the best-effort caller would
+        # swallow the error and leave payloads behind. Pin the subquery form:
+        # the emitted SQL must not carry one parameter per event.
+        statements: list[tuple[str, int]] = []
+
+        with _patch_db(), _plaintext_encryption():
+            self._seed_user("busy")
+            with db_engine.use_db_session() as session:
+                for i in range(9):  # 10 events total for this user
+                    enqueue_event(
+                        session,
+                        user_id="busy",
+                        event_type="gmail.message.new",
+                        payload={"subject": f"msg {i}"},
+                    )
+                session.commit()
+
+            def record(_conn, _cur, statement, parameters, _ctx, _many):  # noqa: ANN202
+                statements.append((statement, len(parameters or ())))
+
+            event.listen(db_engine._engine, "before_cursor_execute", record)
+            events, deliveries = purge_user_events("busy")
+
+        assert (events, deliveries) == (10, 10)
+        deletes = [s for s in statements if s[0].lstrip().upper().startswith("DELETE")]
+        delivery_delete = next(s for s in deletes if "webhook_deliveries" in s[0])
+        assert "SELECT" in delivery_delete[0].upper()  # subquery, not a list
+        assert delivery_delete[1] == 1  # the user_id bind, nothing per-event
 
     def test_disconnect_purges_webhook_events_and_erases_token(self):
         with _patch_db() as factory, _plaintext_encryption():
