@@ -53,16 +53,16 @@ The CLI is built to be driven non-interactively (by scripts and AI agents):
   add `--stdin` to read it from stdin - handy for piping:
 
   ```bash
-  echo true | mycli config set llm_config.cache_enabled --stdin
-  echo "$API_KEY" | mycli secrets set OPENAI_API_KEY --stdin
-  cat .env | mycli secrets import --stdin
+  echo true | daysurface config set llm_config.cache_enabled --stdin
+  echo "$API_KEY" | daysurface secrets set OPENAI_API_KEY --stdin
+  cat .env | daysurface secrets import --stdin
   ```
 
 - **`--dry-run` previews destructive actions** (`config set`, `secrets set`,
   `secrets delete`, `secrets import`) without writing anything.
 - **Idempotent where it counts.** Deleting an absent secret is a no-op success,
   so retries are safe.
-- **Examples in every `--help`.** Run `mycli <command> --help` to see concrete
+- **Examples in every `--help`.** Run `daysurface <command> --help` to see concrete
   invocations to pattern-match off.
 
 <Cards>

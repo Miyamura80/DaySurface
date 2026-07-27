@@ -14,6 +14,13 @@ from rich.console import Console
 app = typer.Typer(no_args_is_help=True)
 console = Console(stderr=True)
 
+# Click derives the completion env var from the program name, so this constant
+# has to stay in step with the console script in pyproject.toml. Deriving both
+# the binary lookup and the env var from it keeps them from drifting apart on a
+# rename - a mismatch makes the subprocess emit nothing and completions fail.
+_CLI_NAME = "daysurface"
+_COMPLETE_ENV_VAR = f"_{_CLI_NAME.upper().replace('-', '_')}_COMPLETE"
+
 
 class Shell(StrEnum):
     bash = "bash"
@@ -30,18 +37,20 @@ _RC_FILES = {
 
 def _generate_completion_script(shell: Shell) -> str:
     """Generate completion script by invoking Typer's built-in mechanism."""
-    env_var = "_MYMCP_COMPLETE"
+    # Typer's instruction format is "<action>_<shell>". "source_*" emits the
+    # completion script; "complete_*" asks it to actually complete a command
+    # line and dies with KeyError: COMP_WORDS outside a real completion.
     source_map = {
-        Shell.bash: "complete_bash",
-        Shell.zsh: "complete_zsh",
-        Shell.fish: "complete_fish",
+        Shell.bash: "source_bash",
+        Shell.zsh: "source_zsh",
+        Shell.fish: "source_fish",
     }
-    daysurface = shutil.which("daysurface") or sys.argv[0]
+    executable = shutil.which(_CLI_NAME) or sys.argv[0]
     result = subprocess.run(
-        [daysurface],
+        [executable],
         capture_output=True,
         text=True,
-        env={**os.environ, env_var: source_map[shell]},
+        env={**os.environ, _COMPLETE_ENV_VAR: source_map[shell]},
     )
     return result.stdout
 

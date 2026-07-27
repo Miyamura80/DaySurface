@@ -12,7 +12,7 @@ export const site = {
   tagline: "An MCP server for Gmail",
   // Used for <title>, meta description, and OG tags.
   description:
-    "DaySurface is a Model Context Protocol server that gives your AI agent real capabilities: one codebase exposed over CLI, MCP, and HTTP.",
+    "DaySurface is a Model Context Protocol server that lets your agent rank, triage, and draft replies for a Gmail inbox - over MCP, CLI, and HTTP.",
   // TODO: the canonical deployed URL (also set `site` in astro.config.mjs).
   url: "https://daysurface.com",
   // TODO: links used across nav, footer, and CTAs.

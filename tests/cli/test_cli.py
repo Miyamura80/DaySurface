@@ -121,3 +121,7 @@ class TestCLI(TestTemplate):
     def test_completions_show(self):
         result = runner.invoke(app, ["completions", "show", "bash"])
         assert result.exit_code == 0
+        # `show` degrades to a warning and still exits 0 when the subprocess
+        # emits nothing, so assert on real script content - an exit-code-only
+        # check passes even when completions are completely broken.
+        assert "_daysurface_completion" in result.output
