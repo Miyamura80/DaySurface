@@ -211,6 +211,27 @@ class TestPurgeOnDisconnect(TestTemplate):
 
             assert gmail_status(GmailStatusInput(user_id="u1")).connected is False
 
+    def test_unrevoked_row_without_a_token_reads_as_disconnected(self):
+        # The inconsistent shape the loader predicate exists to absorb: live
+        # (revoked_at NULL) but holding no ciphertext. It should not be
+        # writable - disconnect sets both columns in one commit - but if one
+        # ever appears, status must agree with the client and say "not
+        # connected" rather than advertising a connection that cannot work.
+        with _patch_db() as factory, _plaintext_encryption():
+            session = factory()
+            session.add(
+                GoogleToken(
+                    user_id="u1",
+                    email="u1@x.com",
+                    refresh_token_enc=None,
+                    key_id="plaintext",
+                    revoked_at=None,
+                )
+            )
+            session.commit()
+
+            assert gmail_status(GmailStatusInput(user_id="u1")).connected is False
+
     def test_disconnect_survives_webhook_purge_failure(self):
         # The token revoke is already committed before the purge runs, so a
         # purge DB error must not turn a successful disconnect into an error.
