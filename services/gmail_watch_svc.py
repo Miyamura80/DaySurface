@@ -177,9 +177,16 @@ def renew_due_watches() -> int:
 
 
 def _load_token_row_by_email(session: Session, email: str) -> GoogleToken | None:
+    """Resolve a mailbox for an inbound push. Mirrors ``_load_token_row``'s
+    definition of active: un-revoked *and* still holding a credential, so a
+    disconnected mailbox stops resolving (and stops enqueueing) immediately."""
     return (
         session.query(GoogleToken)
-        .filter(GoogleToken.email == email, GoogleToken.revoked_at.is_(None))
+        .filter(
+            GoogleToken.email == email,
+            GoogleToken.revoked_at.is_(None),
+            GoogleToken.refresh_token_enc.isnot(None),
+        )
         .first()
     )
 

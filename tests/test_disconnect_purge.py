@@ -10,6 +10,7 @@ same purge is covered in ``tests/test_inbox_curation.py``.
 from __future__ import annotations
 
 from contextlib import contextmanager
+from datetime import UTC, datetime
 from unittest.mock import patch
 
 from sqlalchemy import create_engine, event
@@ -23,9 +24,9 @@ from db import engine as db_engine
 from db.base import Base
 from db.models.google_tokens import GoogleToken
 from db.models.webhooks import WebhookDelivery, WebhookEvent, WebhookSubscription
-from models.gmail import GmailDisconnectInput
+from models.gmail import GmailDisconnectInput, GmailStatusInput
 from models.webhooks import WebhookSubscribeInput
-from services.gmail_svc import gmail_disconnect
+from services.gmail_svc import gmail_disconnect, gmail_status
 from services.webhooks_svc import (
     enqueue_event,
     purge_user_events,
@@ -171,6 +172,44 @@ class TestPurgeOnDisconnect(TestTemplate):
                 remaining = session.query(WebhookEvent).all()
                 assert [e.user_id for e in remaining] == ["u2"]
                 assert session.query(WebhookDelivery).count() == 1
+
+    def test_disconnect_cleans_up_an_already_revoked_connection(self):
+        # The purge is best-effort, and it did not exist before this change, so
+        # a user can hold banked payloads behind an already-revoked row. A
+        # second disconnect must still reach them: revoked=False (nothing live
+        # to revoke) but the leftovers are gone.
+        with _patch_db() as factory, _plaintext_encryption():
+            session = factory()
+            session.add(
+                GoogleToken(
+                    user_id="u1",
+                    email="u1@x.com",
+                    refresh_token_enc=None,
+                    key_id="plaintext",
+                    revoked_at=datetime(2026, 1, 1, tzinfo=UTC),
+                )
+            )
+            session.commit()
+            self._seed_user("u1")  # events banked while the row was revoked
+
+            with patch("services.gmail_svc.httpx.post") as post:
+                result = gmail_disconnect(GmailDisconnectInput(user_id="u1"))
+
+            assert result.revoked is False  # nothing live was revoked
+            post.assert_not_called()  # and no pointless call to Google
+            with db_engine.use_db_session() as session:
+                assert session.query(WebhookEvent).count() == 0
+                assert session.query(WebhookDelivery).count() == 0
+
+    def test_erased_row_reads_as_disconnected_everywhere(self):
+        # A NULL ciphertext is not a usable connection: status must not report
+        # it as connected while the client would fail closed on it.
+        with _patch_db() as factory, _plaintext_encryption():
+            self._seed_token(factory, "u1")
+            with patch("services.gmail_svc.httpx.post"):
+                gmail_disconnect(GmailDisconnectInput(user_id="u1"))
+
+            assert gmail_status(GmailStatusInput(user_id="u1")).connected is False
 
     def test_disconnect_survives_webhook_purge_failure(self):
         # The token revoke is already committed before the purge runs, so a
