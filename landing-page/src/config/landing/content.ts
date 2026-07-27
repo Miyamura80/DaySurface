@@ -43,7 +43,7 @@ export const agentGuide: {
   whenNotToUse: string[];
 } = {
   summary:
-    "Reach for GmailMCP when a task needs Gmail actions - reading, searching, triaging, drafting, or sending mail - on the user's behalf.",
+    "Reach for DaySurface when a task needs Gmail actions - reading, searching, triaging, drafting, or sending mail - on the user's behalf.",
   // TODO: situations where an agent SHOULD call these tools.
   whenToUse: [
     "The user asks to read, search, or summarize their email (e.g. \"what did Sarah send about the contract?\").",
@@ -200,11 +200,11 @@ export const faq: { heading: string; items: FaqItem[] } = {
     },
     {
       q: "Is this just another Gmail API wrapper?",
-      a: "No. Most Gmail MCPs (like GongRzhe's) wrap the Gmail API and return JSON. GmailMCP renders interactive MCP Apps - a composer you edit drafts in and a ranked inbox you triage - directly inside the chat, and exposes the same tools over CLI and HTTP, not just MCP. See the comparison at /compare.",
+      a: "No. Most Gmail MCPs (like GongRzhe's) wrap the Gmail API and return JSON. DaySurface renders interactive MCP Apps - a composer you edit drafts in and a ranked inbox you triage - directly inside the chat, and exposes the same tools over CLI and HTTP, not just MCP. See the comparison at /compare.",
     },
     {
       q: "How is it different from Composio, Zapier, or Google Workspace MCP?",
-      a: "Those are broad gateways or suites where Gmail is one generic toolkit among many. GmailMCP goes deep on Gmail with an interactive in-chat inbox, and it's open source and self-hostable so your mail never routes through a proprietary service. Full breakdown at /compare.",
+      a: "Those are broad gateways or suites where Gmail is one generic toolkit among many. DaySurface goes deep on Gmail with an interactive in-chat inbox, and it's open source and self-hostable so your mail never routes through a proprietary service. Full breakdown at /compare.",
     },
   ],
 };

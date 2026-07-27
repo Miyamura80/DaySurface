@@ -1,5 +1,5 @@
-# Render Blueprint (Infrastructure-as-Code) for the MCP-Template backend.
-# One-click deploy: https://render.com/deploy?repo=https://github.com/Miyamura80/MCP-Template
+# Render Blueprint (Infrastructure-as-Code) for the DaySurface backend.
+# One-click deploy: https://render.com/deploy?repo=https://github.com/Miyamura80/DaySurface
 # Spec: https://render.com/docs/blueprint-spec
 #
 # Provisions the FastAPI + MCP backend (Docker) plus a managed Postgres DB.
@@ -10,7 +10,7 @@
 # of time), then redeploy. See README "One-click deploy".
 
 databases:
-  - name: mcp-template-db
+  - name: daysurface-db
     # `free` Postgres expires ~30 days after creation; upgrade to a paid plan
     # (e.g. basic-256mb) in the dashboard for anything long-lived.
     plan: free
@@ -18,7 +18,7 @@ databases:
 
 services:
   - type: web
-    name: mcp-template
+    name: daysurface
     runtime: docker
     dockerfilePath: ./Dockerfile
     plan: free # free web services spin down when idle; upgrade for always-on.
@@ -37,7 +37,7 @@ services:
       # --- Wired automatically ---
       - key: BACKEND_DB_URI
         fromDatabase:
-          name: mcp-template-db
+          name: daysurface-db
           property: connectionString
       - key: SESSION_SECRET_KEY
         generateValue: true # strong random value, generated once

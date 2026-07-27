@@ -10,7 +10,7 @@ from rich.table import Table
 
 from src.cli.state_store import load_state, save_state
 
-_PACKAGE_NAME = "mcp-template"
+_PACKAGE_NAME = "daysurface"
 _TIMEOUT = 5
 _VALID_PACKAGE_RE = re.compile(r"^[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?$")
 
@@ -159,7 +159,7 @@ def show_first_install_notice() -> None:
         f"[bold green]🔒 Security verification available for {pkg}[/bold green]\n"
         f"   Snyk:   {get_snyk_advisor_url(pkg)}\n"
         f"   Socket: {get_socket_url(pkg)}\n"
-        f"   [dim]Run 'mymcp security' for full details.[/dim]"
+        f"   [dim]Run 'daysurface security' for full details.[/dim]"
     )
 
     state["security_notice_shown"] = True

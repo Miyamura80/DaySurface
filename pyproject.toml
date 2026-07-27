@@ -1,7 +1,7 @@
 [project]
-name = "mcp-template"
+name = "daysurface"
 version = "0.1.1"
-description = "🪛 CLI tool template (python) with batteries included. Auto-install, updates, linting, dead code analysis, and a whole lot more."
+description = "DaySurface is an MCP server for Gmail - rank, triage, and draft replies from inside your agent, over MCP, CLI, and HTTP."
 authors = [
     { name = "Miyamura80", email = "eitomiyamura@gmail.com" }
 ]
@@ -17,7 +17,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries",
     "Topic :: Utilities",
 ]
-keywords = ["cli", "template", "typer", "uv", "tooling"]
+keywords = ["gmail", "mcp", "cli", "agent", "email"]
 dependencies = [
     "pyyaml>=6.0.3",
     "python-dotenv>=1.2.1",
@@ -33,7 +33,6 @@ dependencies = [
     "litellm>=1.59.8,!=1.82.*",
     "tenacity>=9.0.0",
     "pillow>=12.3.0",
-    "google-genai>=2.3.0",
     "ty>=0.0.14",
     "pytest-env>=1.2.0",
     "pydantic-settings>=2.14.2",
@@ -44,7 +43,6 @@ dependencies = [
     "openfeature-sdk>=0.10.0",
     "scrubadub>=2.0.1",
     "pydantic>=2.13.4",
-    "numpy>=2.4.6",
     "typer",
     "questionary",
     "rich>=15.0.0",
@@ -78,18 +76,18 @@ readme = "README.md"
 requires-python = ">= 3.12"
 
 [project.urls]
-Homepage = "https://github.com/Miyamura80/MCP-Template"
-Repository = "https://github.com/Miyamura80/MCP-Template"
-Issues = "https://github.com/Miyamura80/MCP-Template/issues"
+Homepage = "https://github.com/Miyamura80/DaySurface"
+Repository = "https://github.com/Miyamura80/DaySurface"
+Issues = "https://github.com/Miyamura80/DaySurface/issues"
 
 [project.scripts]
-mymcp = "src.cli.app:main_cli"
+daysurface = "src.cli.app:main_cli"
 # Primary remote-MCP entrypoint: HTTP API + MCP (streamable HTTP) on one port.
-mymcp-serve = "api_server:main"
+daysurface-serve = "api_server:main"
 # Legacy stdio transport, kept for local Claude Desktop / dev only.
-mymcp-mcp = "mcp_server:main"
-# Deprecated alias for mymcp-serve; prefer the new name.
-mymcp-api = "api_server:main"
+daysurface-mcp = "mcp_server:main"
+# Deprecated alias for daysurface-serve; prefer the new name.
+daysurface-api = "api_server:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -150,7 +148,7 @@ python-version = "3.12"
 [tool.deptry]
 ignore = ["DEP002"]
 extend_exclude = ["scripts/sync_agent_config.py", "landing-page/scripts/gen-og.py", ".agents/skills/goose-gui-e2e/scripts/"]
-package_module_name_map = { "PyJWT" = "jwt", "google-api-python-client" = "googleapiclient", "google-auth" = "google", "google-genai" = "google", "openfeature-sdk" = "openfeature", "pillow" = "PIL", "pyyaml" = "yaml", "python-dotenv" = "dotenv" }
+package_module_name_map = { "PyJWT" = "jwt", "google-api-python-client" = "googleapiclient", "google-auth" = "google", "openfeature-sdk" = "openfeature", "pillow" = "PIL", "pyyaml" = "yaml", "python-dotenv" = "dotenv" }
 
 [tool.vulture]
 exclude = [
@@ -194,10 +192,7 @@ exclude = [
     "src/utils/errors.py",
     "src/utils/theme.py",
     "tests/conftest.py",
-    "init/",
-    "init/onboard.py",
     "src/cli/",
-    "templates/",
     "services/",
     "models/",
     "mcp_server/",
@@ -226,7 +221,6 @@ exclude = [
 [tool.file_length]
 max_lines = 500
 exclude = [
-    "init/onboard.py",
     "api_server/routes/payments/webhooks.py",
     "api_server/middleware/rate_limit.py",
     "tests/test_gmail_services.py",

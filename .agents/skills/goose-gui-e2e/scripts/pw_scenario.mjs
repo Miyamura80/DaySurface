@@ -1,6 +1,6 @@
 // Drive one MCP-App e2e scenario through the real Goose desktop GUI via
 // Playwright-Electron, then ASSERT ON THE RENDERED ui:// IFRAME - the L4 gap that
-// motivated MCP-Template issue #37.
+// motivated DaySurface issue #37.
 //   node pw_scenario.mjs <scenario.json> <shotPath>
 //
 // Flow: type the prompt -> the mock emits the app-returning tool call -> the

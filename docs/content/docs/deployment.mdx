@@ -5,7 +5,7 @@ description: One-click deploy to Railway or Render, or run the container on any 
 
 import { Train, Server } from 'lucide-react';
 
-`mymcp-serve` runs the FastAPI app, which mounts FastMCP at `/mcp`. One image,
+`daysurface-serve` runs the FastAPI app, which mounts FastMCP at `/mcp`. One image,
 one process, one port -- anything that can run a container can host it. Deploy it
 one-click to Railway or Render, or run the container yourself.
 
@@ -13,13 +13,13 @@ one-click to Railway or Render, or run the container yourself.
   <Card
     icon={<Train />}
     title="Deploy on Railway"
-    href="https://railway.com/deploy/gmailmcp"
+    href="https://railway.com/deploy/daysurface"
     description="One-click template: backend + managed Postgres, migrations run automatically."
   />
   <Card
     icon={<Server />}
     title="Deploy to Render"
-    href="https://render.com/deploy?repo=https://github.com/Miyamura80/MCP-Template"
+    href="https://render.com/deploy?repo=https://github.com/Miyamura80/DaySurface"
     description="One-click blueprint from render.yaml, database and session secret wired."
   />
 </Cards>
@@ -38,7 +38,7 @@ Render's button takes an absolute repo URL, so it can't auto-follow a fork.
 
 ## Railway
 
-The committed [`railway.json`](https://github.com/Miyamura80/MCP-Template/blob/main/railway.json)
+The committed [`railway.json`](https://github.com/Miyamura80/DaySurface/blob/main/railway.json)
 pins the Docker build, pre-deploy migrations, and health check, so the template
 inherits them. To re-generate or update the template: **project Settings ->
 Generate Template from Project -> Publish** (dashboard only; the CLI can't
@@ -83,7 +83,7 @@ can't be pre-baked):
 
 ## Render
 
-Driven by [`render.yaml`](https://github.com/Miyamura80/MCP-Template/blob/main/render.yaml).
+Driven by [`render.yaml`](https://github.com/Miyamura80/DaySurface/blob/main/render.yaml).
 The database and `SESSION_SECRET_KEY` are wired automatically; you're prompted
 for the WorkOS and Google OAuth secrets. After the first deploy, set
 `MCP_PUBLIC_URL` to `https://<your-render-host>/mcp` and `GOOGLE_REDIRECT_URI`
@@ -105,7 +105,7 @@ map above for the full set.
 
 ## Optional integrations
 
-See [`.env.example`](https://github.com/Miyamura80/MCP-Template/blob/main/.env.example)
+See [`.env.example`](https://github.com/Miyamura80/DaySurface/blob/main/.env.example)
 for the full list of optional integrations (LLM keys, Stripe, LangFuse, Telegram,
 etc.). Add any you need from the platform dashboard after the first deploy.
 

@@ -7,7 +7,7 @@ import tailwindcss from "@tailwindcss/vite";
 // https://astro.build/config
 export default defineConfig({
   // Set this to the deployed origin so canonical/OG URLs resolve correctly.
-  site: "https://gmailmcp.com",
+  site: "https://daysurface.com",
   output: "static",
   vite: {
     plugins: [tailwindcss()],

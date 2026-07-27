@@ -66,16 +66,16 @@ export const comparison: {
   competitors: Competitor[];
   matrix: MatrixRow[];
 } = {
-  heading: "How GmailMCP compares",
+  heading: "How DaySurface compares",
   subhead:
-    "Most Gmail MCPs hand your agent raw API calls and a wall of JSON. GmailMCP is a Gmail product: an interactive inbox you can drive from inside the chat, open source and yours to host.",
+    "Most Gmail MCPs hand your agent raw API calls and a wall of JSON. DaySurface is a Gmail product: an interactive inbox you can drive from inside the chat, open source and yours to host.",
   asOf: "June 2026",
   disclaimer:
     "Comparison reflects publicly documented capabilities as of June 2026. The MCP ecosystem moves fast - if something here is out of date, open an issue and we'll fix it.",
   pillars: [
     {
       title: "Interactive UI, not just JSON",
-      body: "GmailMCP renders MCP Apps - sandboxed UI that lives inside the chat. Review and edit a draft in a real composer, then triage a ranked inbox in an embedded dashboard, all without leaving your agent. The inbox ranking and triage flow exist because the interactive surface makes them useful; other Gmail MCPs return raw search results and stop there.",
+      body: "DaySurface renders MCP Apps - sandboxed UI that lives inside the chat. Review and edit a draft in a real composer, then triage a ranked inbox in an embedded dashboard, all without leaving your agent. The inbox ranking and triage flow exist because the interactive surface makes them useful; other Gmail MCPs return raw search results and stop there.",
     },
     {
       title: "One codebase, three transports",
@@ -96,7 +96,7 @@ export const comparison: {
       url: "https://github.com/GongRzhe/Gmail-MCP-Server",
       headline: "The open-source Gmail MCP, upgraded.",
       summary:
-        "GongRzhe's server is a faithful, well-loved wrapper around the Gmail API - around a dozen tools for send, draft, read, search, labels and attachments, run locally over stdio with a credentials file on disk. You get clean primitives and JSON back. GmailMCP shares the open-source spirit but goes further: it renders an interactive composer and a ranked-inbox dashboard inside the chat, and the same tools are reachable over a CLI and an HTTP API, not just stdio.",
+        "GongRzhe's server is a faithful, well-loved wrapper around the Gmail API - around a dozen tools for send, draft, read, search, labels and attachments, run locally over stdio with a credentials file on disk. You get clean primitives and JSON back. DaySurface shares the open-source spirit but goes further: it renders an interactive composer and a ranked-inbox dashboard inside the chat, and the same tools are reachable over a CLI and an HTTP API, not just stdio.",
       pickThem:
         "you want a minimal, local, stdio-only Gmail wrapper to embed in a desktop client and you're happy driving everything through JSON tool calls.",
       pickUs:
@@ -111,7 +111,7 @@ export const comparison: {
       url: "https://composio.dev/toolkits/gmail",
       headline: "A Gmail product, not a Gmail endpoint in a 500-app gateway.",
       summary:
-        "Composio's strength is breadth: one managed endpoint and hosted OAuth across hundreds of SaaS apps, with Gmail exposed as a generic search / read / draft / send toolkit. GmailMCP trades breadth for depth on email - an interactive composer and ranked-inbox dashboard rendered in the chat - and it's open source, so you self-host with your own credentials instead of routing mail through a proprietary gateway.",
+        "Composio's strength is breadth: one managed endpoint and hosted OAuth across hundreds of SaaS apps, with Gmail exposed as a generic search / read / draft / send toolkit. DaySurface trades breadth for depth on email - an interactive composer and ranked-inbox dashboard rendered in the chat - and it's open source, so you self-host with your own credentials instead of routing mail through a proprietary gateway.",
       pickThem:
         "you need one managed endpoint spanning many SaaS apps and you don't want to run any infrastructure yourself.",
       pickUs:
@@ -126,7 +126,7 @@ export const comparison: {
       url: "https://zapier.com/mcp",
       headline: "Built for an agent in the loop, not a no-code workflow.",
       summary:
-        "Zapier and Pipedream expose Gmail as actions inside their automation platforms - great for fire-and-forget workflows, with tools often auto-generated from API specs. GmailMCP is purpose-built for a human-in-the-loop agent: an interactive composer where you review and edit before anything sends, a ranked inbox you triage in-chat, and an open-source codebase you host yourself rather than orchestrate through a workflow runner.",
+        "Zapier and Pipedream expose Gmail as actions inside their automation platforms - great for fire-and-forget workflows, with tools often auto-generated from API specs. DaySurface is purpose-built for a human-in-the-loop agent: an interactive composer where you review and edit before anything sends, a ranked inbox you triage in-chat, and an open-source codebase you host yourself rather than orchestrate through a workflow runner.",
       pickThem:
         "your goal is automated, multi-app workflows triggered by events, and you're already invested in their builder.",
       pickUs:
@@ -141,7 +141,7 @@ export const comparison: {
       url: "https://github.com/taylorwilsdon/google_workspace_mcp",
       headline: "Gmail done deeply vs. Workspace done broadly.",
       summary:
-        "Google Workspace MCP covers a huge surface - Gmail, Calendar, Drive and Docs - as headless tools you run yourself. It's a great fit when you need the whole suite. GmailMCP goes the other way: deep on Gmail with an interactive in-chat composer and ranked-inbox dashboard, a minimal single Gmail scope, and the same tools exposed over CLI and HTTP as well as MCP.",
+        "Google Workspace MCP covers a huge surface - Gmail, Calendar, Drive and Docs - as headless tools you run yourself. It's a great fit when you need the whole suite. DaySurface goes the other way: deep on Gmail with an interactive in-chat composer and ranked-inbox dashboard, a minimal single Gmail scope, and the same tools exposed over CLI and HTTP as well as MCP.",
       pickThem:
         "you need Calendar, Drive and Docs alongside Gmail in one server.",
       pickUs:

@@ -69,6 +69,7 @@ Add the field to `common/global_config.py`:
 ```python
 from .config_models import MyFeatureConfig
 
+
 class Config(BaseSettings):
     # ... existing fields ...
     my_feature: MyFeatureConfig

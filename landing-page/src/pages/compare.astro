@@ -8,7 +8,7 @@ import { site, comparison } from "../config/landing";
 
 const origin = (Astro.site ?? new URL(site.url)).origin;
 
-const pageTitle = `Compare GmailMCP - alternatives & 'vs' breakdowns`;
+const pageTitle = `Compare DaySurface - alternatives & 'vs' breakdowns`;
 const pageDescription = comparison.subhead;
 
 // schema.org: a comparison WebPage that lists the competitors we cover, plus a
@@ -26,11 +26,11 @@ const jsonLd = [
   {
     "@context": "https://schema.org",
     "@type": "ItemList",
-    name: "GmailMCP comparisons",
+    name: "DaySurface comparisons",
     itemListElement: comparison.competitors.map((c, i) => ({
       "@type": "ListItem",
       position: i + 1,
-      name: `GmailMCP vs ${c.name}`,
+      name: `DaySurface vs ${c.name}`,
       url: `${origin}/vs/${c.id}`,
     })),
   },
@@ -91,7 +91,7 @@ const jsonLd = [
                 {c.category}
               </span>
               <h3 class="mt-2 text-xl font-semibold">
-                GmailMCP vs {c.name}
+                DaySurface vs {c.name}
               </h3>
               <p class="mt-3 grow text-pretty leading-relaxed text-fg-muted">
                 {c.headline}
@@ -111,7 +111,7 @@ const jsonLd = [
         href="/#how-it-works"
         class="inline-flex items-center gap-2 bg-accent px-5 py-2.5 font-semibold text-accent-fg transition hover:bg-accent-strong"
       >
-        Add GmailMCP to your client
+        Add DaySurface to your client
       </a>
     </div>
   </main>

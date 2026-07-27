@@ -7,7 +7,7 @@
 `skills/<name>/SKILL.md` is the single source of truth for every self-published
 agent skill (the layout skills.sh crawls on GitHub). This script mirrors each
 skill into the landing page's discovery tree so the same content is served at
-`https://gmailmcp.com/.well-known/agent-skills/...`:
+`https://daysurface.com/.well-known/agent-skills/...`:
 
 - copies `skills/<name>/SKILL.md` -> `landing-page/public/.well-known/agent-skills/<name>/SKILL.md`
 - regenerates `landing-page/public/.well-known/agent-skills/index.json` with a

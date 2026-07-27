@@ -13,7 +13,7 @@ agents" guidance.)
 
 - `src/cli/commands/<feature>.py` - one command (`main()`) or a command group
   (`app: typer.Typer`). Auto-discovered by `commands/__init__.py`:
-  - `main()` callable → single command (`my_tool.py` → `mymcp my-tool`)
+  - `main()` callable → single command (`my_tool.py` → `daysurface my-tool`)
   - `app` Typer → subcommand group
   - module-level `EPILOG` string → passed as the command's `--help` epilog
 - `src/utils/stdin.py` - `resolve_value()` for the `-` / `--stdin` convention
@@ -34,7 +34,9 @@ if value is None:
         value = typer.prompt("Enter value", hide_input=True)
     else:
         console.print("[red]Error:[/red] no value specified.")
-        console.print("  mymcp <cmd> <value>  |  echo <value> | mymcp <cmd> --stdin")
+        console.print(
+            "  daysurface <cmd> <value>  |  echo <value> | daysurface <cmd> --stdin"
+        )
         raise typer.Exit(code=1)
 ```
 
@@ -45,8 +47,12 @@ positional value `str | None = None` so it can come from stdin instead.
 ```python
 def set_value(
     key: Annotated[str, typer.Argument(help="...")],
-    value: Annotated[str | None, typer.Argument(help="Use '-' or --stdin for stdin.")] = None,
-    use_stdin: Annotated[bool, typer.Option("--stdin", help="Read value from stdin.")] = False,
+    value: Annotated[
+        str | None, typer.Argument(help="Use '-' or --stdin for stdin.")
+    ] = None,
+    use_stdin: Annotated[
+        bool, typer.Option("--stdin", help="Read value from stdin.")
+    ] = False,
 ) -> None:
     value = resolve_value(value, use_stdin=use_stdin)
 ```
@@ -60,12 +66,12 @@ from src.utils.cli_help import examples_epilog
 
 # group subcommand
 @app.command("set", epilog=examples_epilog(
-    "mymcp config set key true",
-    "echo true | mymcp config set key --stdin",
+    "daysurface config set key true",
+    "echo true | daysurface config set key --stdin",
 ))
 
 # single-command module (greet.py / doctor.py)
-EPILOG = examples_epilog("mymcp greet Ada", "mymcp greet Ada --shout")
+EPILOG = examples_epilog("daysurface greet Ada", "daysurface greet Ada --shout")
 ```
 
 ### 4. `--dry-run` on anything destructive
@@ -88,7 +94,7 @@ On failure, name the fix or the discovery command. Exit non-zero.
 
 ```python
 console.print(f"[red]Error:[/red] secret not found: {key}")
-console.print("  List stored secrets: [bold]mymcp secrets list[/bold]")
+console.print("  List stored secrets: [bold]daysurface secrets list[/bold]")
 raise typer.Exit(code=1)
 ```
 

@@ -36,9 +36,9 @@ def _generate_completion_script(shell: Shell) -> str:
         Shell.zsh: "complete_zsh",
         Shell.fish: "complete_fish",
     }
-    mymcp = shutil.which("mymcp") or sys.argv[0]
+    daysurface = shutil.which("daysurface") or sys.argv[0]
     result = subprocess.run(
-        [mymcp],
+        [daysurface],
         capture_output=True,
         text=True,
         env={**os.environ, env_var: source_map[shell]},
@@ -50,24 +50,24 @@ def _generate_completion_script(shell: Shell) -> str:
 def install(
     shell: Annotated[Shell, typer.Argument(help="Shell to install completions for.")],
 ) -> None:
-    """Install shell completions for mymcp."""
+    """Install shell completions for daysurface."""
     script = _generate_completion_script(shell)
     if not script.strip():
         console.print("[yellow]Could not generate completion script.[/yellow]")
         console.print(
-            "Try using Typer's built-in: [bold]mymcp --install-completion[/bold]"
+            "Try using Typer's built-in: [bold]daysurface --install-completion[/bold]"
         )
         return
 
     rc_file = _RC_FILES[shell]
 
-    if rc_file.exists() and "# mymcp completions" in rc_file.read_text():
+    if rc_file.exists() and "# daysurface completions" in rc_file.read_text():
         console.print(f"[yellow]Completions already installed in {rc_file}[/yellow]")
         return
 
     rc_file.parent.mkdir(parents=True, exist_ok=True)
     with open(rc_file, "a") as f:
-        f.write(f"\n# mymcp completions\n{script}\n")
+        f.write(f"\n# daysurface completions\n{script}\n")
 
     console.print("[green]Completions installed![/green] Restart your shell or run:")
     console.print(f"  source {rc_file}")
@@ -84,5 +84,5 @@ def show(
     else:
         console.print("[yellow]Could not generate completion script.[/yellow]")
         console.print(
-            "Try using Typer's built-in: [bold]mymcp --show-completion[/bold]"
+            "Try using Typer's built-in: [bold]daysurface --show-completion[/bold]"
         )

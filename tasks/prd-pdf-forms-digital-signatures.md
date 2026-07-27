@@ -178,7 +178,7 @@ signing once filling is done.
 - [ ] `@service pdf_request_signature(doc_id, placement)` where `placement`
       is a signature field name OR `{page, x, y}` for flat PDFs; validates
       doc is `open`, transitions to `awaiting_signature`, records placement.
-- [ ] Enhancer attaches the `pdf_signer` app (`send_app("ui://mymcp/pdf_signer")`)
+- [ ] Enhancer attaches the `pdf_signer` app (`send_app("ui://daysurface/pdf_signer")`)
       when apps are available.
 - [ ] Structured result contains only `{status: "awaiting_user_signature"}`
       guidance text telling the model the user must complete signing - never

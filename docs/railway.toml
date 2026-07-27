@@ -3,9 +3,9 @@
 # Docs: https://docs.railway.com/reference/config-as-code
 #
 # Sibling services in the same Railway project (eito-projects):
-#   - gmailmcp-backend       -> /railway.json        (Python API, mcp.gmailmcp.com)
-#   - gmailmcp-landing-page  -> /landing-page/...     (Astro static, gmailmcp.com)
-#   - gmailmcp-docs          -> this file             (Next.js docs, docs.gmailmcp.com)
+#   - daysurface-backend       -> /railway.json        (Python API, mcp.daysurface.com)
+#   - daysurface-landing-page  -> /landing-page/...     (Astro static, daysurface.com)
+#   - daysurface-docs          -> this file             (Next.js docs, docs.daysurface.com)
 #
 # Builder is RAILPACK: Railway auto-detects the bun/Next.js project from bun.lock.
 # `bun install` runs the `postinstall` hook (fumadocs-mdx) to generate .source.

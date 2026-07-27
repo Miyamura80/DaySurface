@@ -22,9 +22,9 @@ GOOSE_PROVIDER: $1
 GOOSE_MODEL: $2
 GOOSE_MODE: auto
 extensions:
-  mymcp:
+  daysurface:
     type: streamable_http
-    name: mymcp
+    name: daysurface
     uri: ${MCP_URL}
     enabled: true
     timeout: 300
@@ -37,7 +37,7 @@ case "$mode" in
   mock)
     write_config openai gpt-4o-mini
     printf 'OPENAI_API_KEY: sk-mock\nOPENAI_BASE_URL: http://127.0.0.1:%s/v1\n' "$MOCK_PORT" > "$CFG_DIR/secrets.yaml"
-    echo "configured: MOCK LLM (scenario plan drives tool calls); mymcp -> ${MCP_URL}";;
+    echo "configured: MOCK LLM (scenario plan drives tool calls); daysurface -> ${MCP_URL}";;
   real)
     provider="${2:?real mode needs a provider, e.g. anthropic}"; key="${3:?real mode needs an API key}"
     model="${GOOSE_REAL_MODEL:-claude-sonnet-5}"

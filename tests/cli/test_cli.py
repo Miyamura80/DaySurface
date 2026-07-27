@@ -16,12 +16,12 @@ class TestCLI(TestTemplate):
     def test_version(self):
         result = runner.invoke(app, ["--version"])
         assert result.exit_code == 0
-        assert "mymcp" in result.output
+        assert "daysurface" in result.output
 
     def test_help(self):
         result = runner.invoke(app, ["--help"])
         assert result.exit_code == 0
-        assert "CLI Template" in result.output
+        assert "DaySurface" in result.output
 
     def test_greet(self):
         result = runner.invoke(app, ["greet", "Alice"])
@@ -101,10 +101,10 @@ class TestCLI(TestTemplate):
         # than rendered --help output, which word-wraps at the terminal width.
         from src.cli.commands import doctor, greet  # noqa: PLC0415
 
-        assert "mymcp --dry-run greet" in greet.EPILOG
-        assert "mymcp greet Ada --dry-run" not in greet.EPILOG
-        assert "mymcp --format json doctor" in doctor.EPILOG
-        assert "mymcp doctor --format json" not in doctor.EPILOG
+        assert "daysurface --dry-run greet" in greet.EPILOG
+        assert "daysurface greet Ada --dry-run" not in greet.EPILOG
+        assert "daysurface --format json doctor" in doctor.EPILOG
+        assert "daysurface doctor --format json" not in doctor.EPILOG
 
     def test_format_json(self):
         result = runner.invoke(app, ["--format", "json", "config", "show"])

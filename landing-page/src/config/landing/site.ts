@@ -8,23 +8,23 @@
 
 export const site = {
   // TODO: product identity
-  name: "GmailMCP",
-  tagline: "An MCP server starter",
+  name: "DaySurface",
+  tagline: "An MCP server for Gmail",
   // Used for <title>, meta description, and OG tags.
   description:
-    "GmailMCP is a Model Context Protocol server that gives your AI agent real capabilities: one codebase exposed over CLI, MCP, and HTTP.",
+    "DaySurface is a Model Context Protocol server that gives your AI agent real capabilities: one codebase exposed over CLI, MCP, and HTTP.",
   // TODO: the canonical deployed URL (also set `site` in astro.config.mjs).
-  url: "https://gmailmcp.com",
+  url: "https://daysurface.com",
   // TODO: links used across nav, footer, and CTAs.
-  docsUrl: "https://docs.gmailmcp.com",
-  githubUrl: "https://github.com/Miyamura80/MCP-Template",
+  docsUrl: "https://docs.daysurface.com",
+  githubUrl: "https://github.com/Miyamura80/DaySurface",
   // TODO: the deployed streamable-HTTP MCP endpoint users add to their client.
   // This is the URL you paste / one-click-install into Claude, Cursor, etc.
-  mcpUrl: "https://mcp.gmailmcp.com/mcp",
+  mcpUrl: "https://mcp.daysurface.com/mcp",
   // TODO: the deployed HTTP API base URL (same backend, vanity host for REST).
-  apiUrl: "https://api.gmailmcp.com",
+  apiUrl: "https://api.daysurface.com",
   // Server name used in client configs / deep links (no spaces).
-  serverName: "gmail-mcp",
+  serverName: "daysurface",
 } as const;
 
 /**
@@ -43,11 +43,11 @@ export const site = {
  */
 export const serverCard = {
   // Reverse-DNS registry identity, exactly one slash. Usually io.github.<owner>/<repo>.
-  name: "io.github.Miyamura80/MCP-Template",
+  name: "io.github.Miyamura80/DaySurface",
   // SemVer - keep in step with pyproject.toml / server.json when you release.
   version: "0.1.1",
   // Concise capability summary (<=100 chars for the registry server.json schema).
-  description: "Give your AI agent real tools - one service registry over CLI, MCP, and HTTP.",
+  description: "Rank, triage, and draft replies for a Gmail inbox - over MCP, CLI, and HTTP.",
   // repository.source value the MCP registry expects ("github" | "gitlab" | ...).
   repositorySource: "github",
 } as const;

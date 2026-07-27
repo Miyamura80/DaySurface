@@ -49,7 +49,7 @@ Each event is a single `data:` line carrying a JSON message:
 ```
 data: {"message_type":"start","_meta":{"response_type":"nlws","version":"0.1","query_id":"a1b2c3"}}
 
-data: {"message_type":"result","index":0,"item":{"@type":"TechArticle","@context":"https://schema.org","name":"Setup","url":"https://docs.gmailmcp.com/mcp/setup","description":"...","text":"..."}}
+data: {"message_type":"result","index":0,"item":{"@type":"TechArticle","@context":"https://schema.org","name":"Setup","url":"https://docs.daysurface.com/mcp/setup","description":"...","text":"..."}}
 
 data: {"message_type":"result","index":1,"item":{"@type":"SearchSummary","@context":"https://schema.org","text":"The generated answer text."}}
 
@@ -72,18 +72,18 @@ generated answer is included as a `SearchSummary` entry at index 0:
     {
       "url": "",
       "name": "Answer",
-      "site": "https://docs.gmailmcp.com",
+      "site": "https://docs.daysurface.com",
       "score": 1.0,
       "description": "The generated answer text.",
       "schema_object": { "@type": "SearchSummary", "@context": "https://schema.org", "text": "The generated answer text." }
     },
     {
-      "url": "https://docs.gmailmcp.com/mcp/setup",
+      "url": "https://docs.daysurface.com/mcp/setup",
       "name": "Setup",
-      "site": "https://docs.gmailmcp.com",
+      "site": "https://docs.daysurface.com",
       "score": 7.21,
       "description": "...",
-      "schema_object": { "@type": "TechArticle", "@context": "https://schema.org", "name": "Setup", "url": "https://docs.gmailmcp.com/mcp/setup", "description": "...", "text": "..." }
+      "schema_object": { "@type": "TechArticle", "@context": "https://schema.org", "name": "Setup", "url": "https://docs.daysurface.com/mcp/setup", "description": "...", "text": "..." }
     }
   ]
 }
@@ -112,6 +112,6 @@ later without touching the route or service layer. Configure it under `ask` in
 |-----|---------|-------------|
 | `enabled` | `false` | Master switch; `404` when disabled |
 | `corpus_path` | `docs/content/docs` | Docs corpus root |
-| `docs_base_url` | `https://docs.gmailmcp.com` | Base URL for result links |
+| `docs_base_url` | `https://docs.daysurface.com` | Base URL for result links |
 | `top_k` | `5` | Number of chunks retrieved per query |
 | `rate_limit_per_minute` | `20` | Per-IP request limit |

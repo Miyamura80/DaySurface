@@ -182,7 +182,7 @@ class TestElicitationFallback(PdfSigningTestBase):
         opened = self._open(make_acroform_pdf())
         result, tool = self._run_enhancer(opened.doc_id, _mock_ctx(can_elicit=True))
         assert result.status == "awaiting_user_signature"
-        assert tool.app_resource_uri == "ui://mymcp/pdf_signer"
+        assert tool.app_resource_uri == "ui://daysurface/pdf_signer"
 
     def test_no_app_host_signs_via_elicitation(self, monkeypatch):
         monkeypatch.setenv("MCP_DISABLE_APPS", "1")

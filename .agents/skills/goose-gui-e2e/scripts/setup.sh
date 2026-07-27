@@ -64,7 +64,7 @@ fi
 # ---- 3. pnpm install the ui workspace (with the node-gyp override) ----
 # Gate on a completion stamp, NOT on node_modules existing: a failed pnpm install
 # leaves a partial node_modules behind, and gating on the dir would skip the retry.
-PNPM_STAMP="$GOOSE_SRC/ui/node_modules/.mcp-template-install-done"
+PNPM_STAMP="$GOOSE_SRC/ui/node_modules/.daysurface-install-done"
 if [ ! -f "$PNPM_STAMP" ]; then
   WS="$GOOSE_SRC/ui/pnpm-workspace.yaml"
   # Match the override KEY (quoted, with colon), not any mention: goose's file has a

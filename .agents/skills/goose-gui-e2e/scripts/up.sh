@@ -27,9 +27,9 @@ log "API key: ${API_KEY:0:12}..."
 # with no linked account / OAuth / network. Hard-refused under DEV_ENV=prod; here
 # DEV_ENV=dev so it's active. No Gmail tool ever reaches Google in this stack.
 if ! is_up_http "$SRV_URL/health"; then
-  log "template server down -> starting mymcp-serve"
+  log "template server down -> starting daysurface-serve"
   start_detached mcp-server \
-    "cd $REPO && exec env DEV_ENV=dev BACKEND_DB_URI=$BACKEND_DB_URI SENTRY_DSN= GMAIL_PUBSUB_TOPIC=projects/mcp-e2e/topics/gmail-e2e GMAIL_FAKE_BACKEND=1 uv run mymcp-serve"
+    "cd $REPO && exec env DEV_ENV=dev BACKEND_DB_URI=$BACKEND_DB_URI SENTRY_DSN= GMAIL_PUBSUB_TOPIC=projects/mcp-e2e/topics/gmail-e2e GMAIL_FAKE_BACKEND=1 uv run daysurface-serve"
   wait_http "$SRV_URL/health" 90 1 && log "server healthy" || { log "FATAL server"; tail -12 "$E2E_HOME/mcp-server.log"; exit 1; }
 fi
 

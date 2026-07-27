@@ -3,7 +3,7 @@
  *
  * Runs before `astro build` (see package.json `build`). The committed snapshot
  * is what the `/api` reference page (Scalar) renders, served same-origin from
- * `gmailmcp.com/openapi.json` - so the page has no runtime dependency on the
+ * `daysurface.com/openapi.json` - so the page has no runtime dependency on the
  * API host being up or CORS-readable from the landing origin.
  *
  * Strategy:

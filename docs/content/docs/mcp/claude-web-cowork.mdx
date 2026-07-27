@@ -15,7 +15,7 @@ over its public **streamable-HTTP** endpoint at `/mcp`.
 
 <Callout type="info">
 You need a deployed server. See [Deployment](/docs/deployment) for hosting the
-single `mymcp-serve` process that exposes `/mcp`. `localhost` will **not** work
+single `daysurface-serve` process that exposes `/mcp`. `localhost` will **not** work
 here - the client runs in Anthropic's cloud and must reach a public URL.
 </Callout>
 
@@ -53,7 +53,7 @@ the consent screen. No client IDs, no pasted keys.
 Open **Settings > Connectors** (in Cowork/Desktop: **Customize > Connectors**)
 and choose **Add custom connector**. Then:
 
-1. Give it a descriptive **name** (e.g. `mymcp`).
+1. Give it a descriptive **name** (e.g. `daysurface`).
 2. Paste your connection **URL** from Step 1.
 3. Leave the OAuth client ID/secret **blank** - the server advertises its
    authorization server via discovery, so Claude registers itself automatically.
@@ -71,7 +71,7 @@ connector across a team.
 
 ### Enable it in a conversation
 
-In any chat, click the **+** button, open **Connectors**, and toggle `mymcp`
+In any chat, click the **+** button, open **Connectors**, and toggle `daysurface`
 on. Your tools are now available to the assistant. Browse what's exposed in
 [Tools](/docs/mcp/tools) and just ask Claude to use them.
 

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://gmailmcp.com/schemas/a2a_agent_card.schema.json",
+  "$id": "https://daysurface.com/schemas/a2a_agent_card.schema.json",
   "title": "A2A AgentCard (v0.3.0 contract subset)",
   "description": "Validates the required-field contract of the Agent2Agent AgentCard as served at /.well-known/agent-card.json. Hand-authored from the A2A specification v0.3.0; kept self-contained so tests need no network access.",
   "type": "object",

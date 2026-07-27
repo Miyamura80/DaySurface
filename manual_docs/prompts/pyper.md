@@ -5,11 +5,12 @@ Let's suppose you have an original for loop that you want to parallelize.
 
 ```python
 results = []
-for data in data_list: # <-- NTOE: Assuming here no shared state, hence parallelization is safe
+for data in (
+    data_list
+):  # <-- NTOE: Assuming here no shared state, hence parallelization is safe
     s1 = f2(data)
     s2 = f3(s1)
     results.append(s2)
-
 ```
 
 
@@ -19,12 +20,14 @@ import asyncio
 import time
 from pyper import task
 
+
 def get_data(data_list: list):
     for data in data_list:
-        yield data # <-- NTOE: Make sure this is a yield statement
+        yield data  # <-- NTOE: Make sure this is a yield statement
+
 
 def f2(x: int):
-    return x * 2 # <-- NTOE: These are okay to return
+    return x * 2  # <-- NTOE: These are okay to return
 
 
 WORKERS = 10

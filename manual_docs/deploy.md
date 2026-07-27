@@ -1,7 +1,7 @@
 # Deployment
 
-[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/gmailmcp)
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Miyamura80/MCP-Template)
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/daysurface)
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Miyamura80/DaySurface)
 
 Both targets provision the backend (FastAPI + MCP at `/mcp`) as a Docker service plus a managed Postgres database, run Alembic migrations, and prompt for the required secrets. The landing page (`landing-page/`) deploys separately and is not included.
 

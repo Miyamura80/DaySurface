@@ -72,15 +72,15 @@ export const getStarted: {
       icon: "/logos/cli.svg",
       setupTitle: "Install the CLI",
       setupBody:
-        "Clone the template and sync dependencies with uv. The mymcp command is ready to run.",
+        "Clone the template and sync dependencies with uv. The daysurface command is ready to run.",
       setupKind: "code",
       setupLang: "bash",
-      setupCode: `git clone https://github.com/Miyamura80/MCP-Template
-cd MCP-Template && make all`,
+      setupCode: `git clone https://github.com/Miyamura80/DaySurface
+cd DaySurface && make all`,
       callTitle: "Call a tool",
       callBody: "Invoke any service straight from your shell: typed inputs, structured output.",
       callLang: "bash",
-      callCode: `$ mymcp gmail-curate-inbox --limit 3
+      callCode: `$ daysurface gmail-curate-inbox --limit 3
 
 0.86  Re: Q3 contract redlines        legal@acme.com    ✎ draft
 0.61  Design review for v2 dashboard  sarah@team.io

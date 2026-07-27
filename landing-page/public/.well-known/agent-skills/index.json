@@ -2,11 +2,11 @@
   "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
   "skills": [
     {
-      "name": "gmail-mcp",
+      "name": "daysurface",
       "type": "skill-md",
-      "description": "Triage and curate a Gmail inbox by connecting to the GmailMCP server over MCP and calling its typed tools.",
-      "url": "/.well-known/agent-skills/gmail-mcp/SKILL.md",
-      "digest": "sha256:1edcaa012e617768c7ae2a407074030bd1cc58dce517d93ac46c138f56730c82"
+      "description": "Triage and curate a Gmail inbox by connecting to the DaySurface server over MCP and calling its typed tools.",
+      "url": "/.well-known/agent-skills/daysurface/SKILL.md",
+      "digest": "sha256:ee0c83b0782e3a1b2562cb6d5ae1a555396616510791dfdfb01687163866022b"
     }
   ]
 }

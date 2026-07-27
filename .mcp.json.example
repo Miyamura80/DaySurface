@@ -1,9 +1,9 @@
 {
   "mcpServers": {
-    "mymcp": {
+    "daysurface": {
       "command": "uvx",
       "args": [
-        "mymcp-mcp"
+        "daysurface-mcp"
       ],
       "env": {}
     }

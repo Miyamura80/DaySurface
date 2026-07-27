@@ -11,7 +11,6 @@ import typer
 
 from src.cli.commands import discover_commands
 from src.cli.completions import app as completions_app
-from src.cli.scaffold import init_command
 from src.cli.security import security_command, show_first_install_notice
 from src.cli.state import (
     OutputFormat,
@@ -45,8 +44,8 @@ _FORMAT_MAP = {
 }
 
 app = typer.Typer(
-    name="mymcp",
-    help="CLI Template - a batteries-included Python CLI.",
+    name="daysurface",
+    help="DaySurface - an MCP server for Gmail, on the command line.",
     no_args_is_help=True,
     rich_markup_mode="rich",
 )
@@ -59,10 +58,10 @@ def _load_cli_branding() -> tuple[str, str]:
 
 def _version_callback(value: bool) -> None:
     if value:
-        version = importlib.metadata.version("mcp-template")
+        version = importlib.metadata.version("daysurface")
         emoji, _ = _load_cli_branding()
         prefix = f"{emoji} " if emoji else ""
-        typer.echo(f"{prefix}mymcp {version}")
+        typer.echo(f"{prefix}daysurface {version}")
         raise typer.Exit()
 
 
@@ -142,7 +141,6 @@ def _register_builtin_commands() -> None:
     app.add_typer(completions_app, name="completions", help="Manage shell completions.")
     app.add_typer(telemetry_app, name="telemetry", help="Manage anonymous telemetry.")
     app.command(name="update")(update_command)
-    app.command(name="init")(init_command)
     app.command(name="security")(security_command)
 
 
@@ -182,12 +180,12 @@ def main_cli() -> None:
     _register_builtin_commands()
     _register_user_commands()
 
-    version = importlib.metadata.version("mcp-template")
+    version = importlib.metadata.version("daysurface")
     emoji, primary = _load_cli_branding()
     prefix = f"{emoji} " if emoji else ""
     app.info.help = (
-        f"{prefix}[{primary}]CLI Template[/{primary}] "
-        f"[dim]v{version}[/dim] - a batteries-included Python CLI."
+        f"{prefix}[{primary}]DaySurface[/{primary}] "
+        f"[dim]v{version}[/dim] - an MCP server for Gmail, on the command line."
     )
 
     command = _detect_command(sys.argv)

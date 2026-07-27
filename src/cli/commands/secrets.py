@@ -25,9 +25,9 @@ def _get_cli_name() -> str:
     """Derive CLI name from package console_scripts entry point."""
     eps = importlib.metadata.entry_points(group="console_scripts")
     for ep in eps:
-        if ep.dist and ep.dist.name == "mcp-template":
+        if ep.dist and ep.dist.name == "daysurface":
             return ep.name
-    return "mymcp"
+    return "daysurface"
 
 
 _SERVICE_NAME = _get_cli_name()
@@ -72,9 +72,9 @@ def _mask_value(value: str) -> str:
 @app.command(
     "set",
     epilog=examples_epilog(
-        "mymcp secrets set OPENAI_API_KEY sk-...",
-        "echo sk-... | mymcp secrets set OPENAI_API_KEY --stdin",
-        "mymcp --dry-run secrets set OPENAI_API_KEY sk-...",
+        "daysurface secrets set OPENAI_API_KEY sk-...",
+        "echo sk-... | daysurface secrets set OPENAI_API_KEY --stdin",
+        "daysurface --dry-run secrets set OPENAI_API_KEY sk-...",
     ),
 )
 def set_secret(
@@ -99,8 +99,8 @@ def set_secret(
         else:
             console.print("[red]Error:[/red] no secret value specified.")
             console.print(
-                f"  mymcp secrets set {key} <value>   |   "
-                f"echo <value> | mymcp secrets set {key} --stdin"
+                f"  daysurface secrets set {key} <value>   |   "
+                f"echo <value> | daysurface secrets set {key} --stdin"
             )
             raise typer.Exit(code=1)
 
@@ -118,8 +118,8 @@ def set_secret(
 @app.command(
     "get",
     epilog=examples_epilog(
-        "mymcp secrets get OPENAI_API_KEY",
-        "mymcp secrets get OPENAI_API_KEY --reveal",
+        "daysurface secrets get OPENAI_API_KEY",
+        "daysurface secrets get OPENAI_API_KEY --reveal",
     ),
 )
 def get_secret(
@@ -133,7 +133,7 @@ def get_secret(
     value = keyring.get_password(_SERVICE_NAME, key)
     if value is None:
         console.print(f"[red]Error:[/red] secret not found: {key}")
-        console.print("  List stored secrets: [bold]mymcp secrets list[/bold]")
+        console.print("  List stored secrets: [bold]daysurface secrets list[/bold]")
         raise typer.Exit(code=1)
 
     display = value if reveal else _mask_value(value)
@@ -142,8 +142,8 @@ def get_secret(
 
 @app.command(
     epilog=examples_epilog(
-        "mymcp secrets delete OPENAI_API_KEY",
-        "mymcp --dry-run secrets delete OPENAI_API_KEY",
+        "daysurface secrets delete OPENAI_API_KEY",
+        "daysurface --dry-run secrets delete OPENAI_API_KEY",
     )
 )
 def delete(
@@ -173,7 +173,7 @@ def delete(
         console.print(f"[green]Deleted[/green] {key}")
 
 
-@app.command("list", epilog=examples_epilog("mymcp --format json secrets list"))
+@app.command("list", epilog=examples_epilog("daysurface --format json secrets list"))
 def list_secrets() -> None:
     """List stored secret key names (never values)."""
     keys = _get_tracked_keys()
@@ -213,7 +213,7 @@ def _load_import_values(
     if sys.stdin.isatty():
         console.print(
             "[red]Error:[/red] --stdin given but stdin is a terminal; "
-            "pipe a .env in, e.g. cat .env | mymcp secrets import --stdin"
+            "pipe a .env in, e.g. cat .env | daysurface secrets import --stdin"
         )
         raise typer.Exit(code=2)
     return dotenv_values(stream=io.StringIO(sys.stdin.read())), "stdin"
@@ -222,9 +222,9 @@ def _load_import_values(
 @app.command(
     "import",
     epilog=examples_epilog(
-        "mymcp secrets import --file .env",
-        "cat .env | mymcp secrets import --stdin",
-        "mymcp --dry-run secrets import --file .env",
+        "daysurface secrets import --file .env",
+        "cat .env | daysurface secrets import --stdin",
+        "daysurface --dry-run secrets import --file .env",
     ),
 )
 def import_secrets(
@@ -286,7 +286,9 @@ def import_secrets(
 
 @app.command(
     "export",
-    epilog=examples_epilog("mymcp secrets export", "mymcp secrets export --reveal"),
+    epilog=examples_epilog(
+        "daysurface secrets export", "daysurface secrets export --reveal"
+    ),
 )
 def export_secrets(
     reveal: Annotated[

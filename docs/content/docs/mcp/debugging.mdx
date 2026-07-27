@@ -8,7 +8,7 @@ description: Test and troubleshoot MCP tools
 Use the [MCP Inspector](https://github.com/modelcontextprotocol/inspector) to test tools interactively without an AI client:
 
 ```bash
-npx @modelcontextprotocol/inspector uv --directory /path/to/MCP-Template run mymcp-mcp
+npx @modelcontextprotocol/inspector uv --directory /path/to/DaySurface run daysurface-mcp
 ```
 
 This opens a web UI where you can:
@@ -22,14 +22,14 @@ This opens a web UI where you can:
 
 ### Server not showing up in client
 
-- Verify the path in your config points to the correct `MCP-Template` directory
+- Verify the path in your config points to the correct `DaySurface` directory
 - Make sure `uv` is installed and on your PATH
 - Restart your AI client after saving the config
 
 ### Tools not appearing
 
-- Run `uv sync` in the MCP-Template directory to ensure dependencies are installed
-- Try running `uv --directory /path/to/MCP-Template run mymcp-mcp` manually to check for errors
+- Run `uv sync` in the DaySurface directory to ensure dependencies are installed
+- Try running `uv --directory /path/to/DaySurface run daysurface-mcp` manually to check for errors
 
 ### Tool call returns an error
 

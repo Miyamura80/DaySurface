@@ -10,7 +10,7 @@
     }
   ],
   "final": "Opened the thread.",
-  "app_uri": "ui://mymcp/gmail_inbox",
+  "app_uri": "ui://daysurface/gmail_inbox",
   "expect": {
     "tool_called": "gmail_get_thread",
     "round_trip": true,

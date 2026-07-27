@@ -1,16 +1,16 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.Miyamura80/MCP-Template",
-  "description": "🪛 CLI tool template (python) with batteries included. Auto-install, updates, linting, dead code analysis, and a whole lot more.",
+  "name": "io.github.Miyamura80/DaySurface",
+  "description": "DaySurface is an MCP server for Gmail - rank, triage, and draft replies from inside your agent, over MCP, CLI, and HTTP.",
   "version": "0.1.1",
   "repository": {
-    "url": "https://github.com/Miyamura80/MCP-Template",
+    "url": "https://github.com/Miyamura80/DaySurface",
     "source": "github"
   },
   "packages": [
     {
       "registryType": "pypi",
-      "identifier": "mcp-template",
+      "identifier": "daysurface",
       "version": "0.1.1",
       "runtimeHint": "python",
       "transport": {

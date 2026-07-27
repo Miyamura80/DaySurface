@@ -31,11 +31,11 @@ ACCENT = (195, 255, 253)  # Core Cyan 500
 
 # --- copy (keep in sync with src/config/landing.ts) -------------------------
 EYEBROW = "MCP SERVER STARTER"
-WORDMARK = "GmailMCP"
+WORDMARK = "DaySurface"
 HEADLINE = ["Give your AI agent", "real tools."]
 SUBHEAD = "One service registry, exposed identically over CLI, MCP, and HTTP."
 PILLS = ["CLI", "MCP", "HTTP"]
-REPO = "github.com/Miyamura80/MCP-Template"
+REPO = "github.com/Miyamura80/DaySurface"
 
 W, H = 1200, 630
 PAD = 80

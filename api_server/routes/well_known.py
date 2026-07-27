@@ -87,7 +87,7 @@ _WEB_BOT_AUTH_MEDIA_TYPE = "application/http-message-signatures-directory+json"
 def _server_version() -> str:
     """Resolve the published package version; fall back when not installed."""
     try:
-        return _pkg_version("mcp-template")
+        return _pkg_version("daysurface")
     except PackageNotFoundError:
         return "0.0.0"
 

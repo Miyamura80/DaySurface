@@ -5,7 +5,7 @@ startCommand:
     properties: {}
   commandFunction: |-
     (config) => ({
-      command: 'mymcp-mcp',
+      command: 'daysurface-mcp',
       args: [],
       env: {}
     })

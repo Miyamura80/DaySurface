@@ -4,7 +4,6 @@ root_packages =
     utils
     src
     tests
-    init
     services
     models
     mcp_server
@@ -20,25 +19,22 @@ forbidden_modules =
     utils
     src
     tests
-    init
 
-[importlinter:contract:utils_no_tests_init]
-name = Utils does not import tests or init
+[importlinter:contract:utils_no_tests]
+name = Utils does not import tests
 type = forbidden
 source_modules =
     utils
 forbidden_modules =
     tests
-    init
 
-[importlinter:contract:src_no_tests_init]
-name = Src does not import tests or init
+[importlinter:contract:src_no_tests]
+name = Src does not import tests
 type = forbidden
 source_modules =
     src
 forbidden_modules =
     tests
-    init
 
 [importlinter:contract:services_no_transport]
 name = Services do not import CLI or MCP transport layers
@@ -47,7 +43,6 @@ source_modules =
     services
 forbidden_modules =
     tests
-    init
     src.cli
     mcp_server
     api_server
@@ -59,7 +54,6 @@ source_modules =
     models
 forbidden_modules =
     tests
-    init
     services
     mcp_server
     api_server
@@ -78,7 +72,6 @@ forbidden_modules =
     mcp_server
     api_server
     tests
-    init
 
 [importlinter:contract:api_server_no_cli]
 # api_server intentionally imports mcp_server to mount it at /mcp (remote MCP transport).
@@ -90,7 +83,6 @@ source_modules =
 forbidden_modules =
     src.cli
     tests
-    init
 
 [importlinter:contract:pdf_core_isolated_from_gmail]
 # The PDF form/signing domain is designed to be extractable as a standalone
@@ -139,7 +131,6 @@ source_modules =
     common
     utils
     src
-    init
     services
     models
     mcp_server
@@ -147,14 +138,3 @@ source_modules =
     api_server
 forbidden_modules =
     tests
-
-[importlinter:contract:init_is_leaf]
-name = Init is a leaf module
-type = forbidden
-source_modules =
-    common
-    utils
-    src
-    tests
-forbidden_modules =
-    init

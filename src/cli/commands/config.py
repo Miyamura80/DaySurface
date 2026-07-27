@@ -16,8 +16,8 @@ console = Console(stderr=True)
 
 @app.command(
     epilog=examples_epilog(
-        "mymcp config show",
-        "mymcp --format json config show",
+        "daysurface config show",
+        "daysurface --format json config show",
     )
 )
 def show() -> None:
@@ -33,8 +33,8 @@ def show() -> None:
 
 @app.command(
     epilog=examples_epilog(
-        "mymcp config get llm_config.default_model",
-        "mymcp --format json config get llm_config.cache_enabled",
+        "daysurface config get llm_config.default_model",
+        "daysurface --format json config get llm_config.cache_enabled",
     )
 )
 def get(
@@ -52,7 +52,7 @@ def get(
         result = config_get(ConfigGetInput(key=key))
     except KeyError:
         console.print(f"[red]Error:[/red] config key not found: {key}")
-        console.print("  List available keys: [bold]mymcp config show[/bold]")
+        console.print("  List available keys: [bold]daysurface config show[/bold]")
         raise typer.Exit(code=1) from None
 
     if isinstance(result.value, dict):
@@ -64,9 +64,9 @@ def get(
 @app.command(
     "set",
     epilog=examples_epilog(
-        "mymcp config set llm_config.cache_enabled true",
-        "echo true | mymcp config set llm_config.cache_enabled --stdin",
-        "mymcp --dry-run config set llm_config.default_model gpt-4o",
+        "daysurface config set llm_config.cache_enabled true",
+        "echo true | daysurface config set llm_config.cache_enabled --stdin",
+        "daysurface --dry-run config set llm_config.default_model gpt-4o",
     ),
 )
 def set_value(
@@ -85,8 +85,8 @@ def set_value(
     if value is None:
         console.print("[red]Error:[/red] no value specified.")
         console.print(
-            "  mymcp config set <key> <value>   |   "
-            "echo <value> | mymcp config set <key> --stdin"
+            "  daysurface config set <key> <value>   |   "
+            "echo <value> | daysurface config set <key> --stdin"
         )
         raise typer.Exit(code=1)
 

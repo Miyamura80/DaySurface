@@ -416,4 +416,4 @@ class TestMCPInitializeWithOAuthToken(TestTemplate):
             )
         assert resp.status_code == 200, resp.text
         msg = _read_sse_first_message(resp)
-        assert msg["result"]["serverInfo"]["name"] == "mymcp"
+        assert msg["result"]["serverInfo"]["name"] == "daysurface"

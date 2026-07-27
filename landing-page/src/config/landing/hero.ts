@@ -19,7 +19,7 @@ export const hero: {
   // Keep the headline short (< ~44 chars) and benefit/identity-driven.
   headline: "Give your AI agent real tools.",
   subhead:
-    "GmailMCP is a Model Context Protocol server you can ship today. One service registry, exposed identically over CLI, MCP, and HTTP, so any agent that speaks MCP can call it.",
+    "DaySurface is a Model Context Protocol server you can ship today. One service registry, exposed identically over CLI, MCP, and HTTP, so any agent that speaks MCP can call it.",
 };
 
 /**

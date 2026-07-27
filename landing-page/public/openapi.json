@@ -1,9 +1,9 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "GmailMCP API",
+    "title": "DaySurface API",
     "version": "0.1.0",
-    "description": "GmailMCP is a Model Context Protocol server that gives your AI agent real capabilities: one codebase exposed over CLI, MCP, and HTTP."
+    "description": "DaySurface is a Model Context Protocol server that gives your AI agent real capabilities: one codebase exposed over CLI, MCP, and HTTP."
   },
   "paths": {
     "/health": {
@@ -3274,8 +3274,8 @@
   },
   "servers": [
     {
-      "url": "https://api.gmailmcp.com",
-      "description": "GmailMCP production API"
+      "url": "https://api.daysurface.com",
+      "description": "DaySurface production API"
     }
   ]
 }
