@@ -343,3 +343,54 @@ def enqueue_event(
         len(matching),
     )
     return event_id
+
+
+# ---------------------------------------------------------------------------
+# Purge - called on Gmail disconnect
+# ---------------------------------------------------------------------------
+
+
+def purge_user_events(user_id: str) -> tuple[int, int]:
+    """Delete every webhook event (and its deliveries) for a user.
+
+    Event payloads bank Gmail-derived content - subject, sender, snippet - as
+    plaintext JSON, so disconnecting must leave none of them behind. Returns
+    ``(events_deleted, deliveries_deleted)``.
+
+    Deliveries are removed in the same pass because they are keyed on
+    ``event_id``: leaving them would strand pending rows the runner can only
+    ever mark "dropped". Subscriptions themselves are *not* touched - they hold
+    no email content and survive a disconnect/reconnect cycle.
+
+    Both deletes match on a *subquery*, never a materialized id list: a busy
+    mailbox banks one event per message, and an ``IN (...)`` list that long
+    would blow the driver's bind-parameter limit. That failure would be
+    swallowed by the best-effort caller and quietly leave payloads behind, so
+    the purge must not scale with the user's event count.
+
+    Deliveries are matched by *subscription*, not by the user's event ids:
+    enqueue only ever fans an event out to its own user's subscriptions, so
+    the two predicates select the same rows - but the subscription one does
+    not depend on a snapshot of the event set, so it also catches deliveries
+    for an event enqueued concurrently with this purge. Events are deleted
+    last on purpose: if a push lands mid-purge the residue is a contentless
+    outbox row (which the runner drops as event-missing), never a payload.
+    """
+    with use_db_session() as session:
+        user_subs = (
+            session.query(WebhookSubscription.id)
+            .filter(WebhookSubscription.user_id == user_id)
+            .scalar_subquery()
+        )
+        deliveries = (
+            session.query(WebhookDelivery)
+            .filter(WebhookDelivery.subscription_id.in_(user_subs))
+            .delete(synchronize_session=False)
+        )
+        events = (
+            session.query(WebhookEvent)
+            .filter(WebhookEvent.user_id == user_id)
+            .delete(synchronize_session=False)
+        )
+        session.commit()
+        return int(events), int(deliveries)

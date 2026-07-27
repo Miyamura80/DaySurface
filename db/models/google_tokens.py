@@ -2,7 +2,8 @@
 
 Stores one row per user holding an encrypted Google refresh token plus the
 metadata needed to refresh an access token and surface connection status.
-Access tokens are minted on demand and never persisted.
+Access tokens are minted on demand and never persisted, and the refresh-token
+ciphertext is erased (NULL) when the connection is revoked.
 """
 
 from datetime import UTC, datetime
@@ -21,7 +22,10 @@ class GoogleToken(Base):
     # Indexed: Gmail push notifications fan in keyed on emailAddress, so the
     # push receiver looks up the owning user by email on every delivery.
     email: Mapped[str | None] = mapped_column(String(320), nullable=True, index=True)
-    refresh_token_enc: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    # NULL once the connection is revoked: gmail_disconnect erases the
+    # ciphertext rather than leaving the user's Google credential at rest
+    # behind a revoked_at flag. Always non-NULL while revoked_at is NULL.
+    refresh_token_enc: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     key_id: Mapped[str] = mapped_column(String(32), nullable=False, default="v1")
     scopes: Mapped[list[str] | None] = mapped_column(JSON, nullable=True, default=None)
     # Gmail watch state (users.watch). Populated only when the optional

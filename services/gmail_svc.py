@@ -205,10 +205,20 @@ def _get_db_session() -> Generator[Session, None, None]:
 
 
 def _load_token_row(session: Session, user_id: str) -> GoogleToken | None:
-    """Return the active (non-revoked) GoogleToken row for a user, or None."""
+    """Return the active (non-revoked) GoogleToken row for a user, or None.
+
+    "Active" means both un-revoked *and* still holding a credential: disconnect
+    erases ``refresh_token_enc``, so a row with a NULL ciphertext has nothing to
+    authenticate with. Filtering it here keeps every caller consistent - status
+    can't report a connection the client would then fail closed on.
+    """
     return (
         session.query(GoogleToken)
-        .filter(GoogleToken.user_id == user_id, GoogleToken.revoked_at.is_(None))
+        .filter(
+            GoogleToken.user_id == user_id,
+            GoogleToken.revoked_at.is_(None),
+            GoogleToken.refresh_token_enc.isnot(None),
+        )
         .one_or_none()
     )
 
@@ -278,6 +288,41 @@ def gmail_status(input: GmailStatusInput) -> GmailStatusResult:
         )
 
 
+def _revoke_with_google(row: GoogleToken) -> None:
+    """Best-effort remote revoke of a row's refresh token. Never raises.
+
+    Failures are non-fatal by design: the caller still erases and marks the row
+    revoked locally, so the user is never stuck in a half-connected state.
+    """
+    try:
+        # Call-time import: tests patch
+        # common.token_encryption.require_encryption, so binding it at
+        # module import would bypass the patch.
+        from common.token_encryption import require_encryption  # noqa: PLC0415
+
+        enc = require_encryption()
+        if row.refresh_token_enc is None:
+            raise ValueError("token already erased")  # noqa: TRY301
+        refresh_token = enc.decrypt(row.refresh_token_enc)
+        response = httpx.post(
+            GOOGLE_REVOKE_ENDPOINT,
+            params={"token": refresh_token},
+            timeout=10.0,
+        )
+        # httpx does not raise on 4xx/5xx. Without this a rejected revoke would
+        # pass silently and we would erase the local token believing Google had
+        # dropped the grant; raising routes it through the warning path below.
+        response.raise_for_status()
+    except (httpx.HTTPError, ValueError) as exc:
+        log.warning("Google token revoke failed; revoking locally anyway: {}", exc)
+    except Exception as exc:  # noqa: BLE001
+        # Defensive boundary: decrypt() or require_encryption() may raise
+        # provider-specific errors (cryptography.fernet.InvalidToken,
+        # RuntimeError when key missing in prod). We MUST still mark the
+        # row revoked locally so the user can recover.
+        log.warning("Google revoke errored ({}): proceeding with local revoke", exc)
+
+
 @service(
     name="gmail_disconnect",
     description="Revoke and remove the user's linked Gmail account",
@@ -286,50 +331,38 @@ def gmail_status(input: GmailStatusInput) -> GmailStatusResult:
     mutating=True,
 )
 def gmail_disconnect(input: GmailDisconnectInput) -> GmailDisconnectResult:
-    """Revoke the stored refresh token with Google + mark the row revoked.
+    """Revoke the stored refresh token with Google + erase every trace of it.
 
     If the network revoke fails we still mark the row revoked locally so the
     user is never stuck in a half-connected state.
+
+    The purges below run whether or not there was a live connection to revoke,
+    which makes disconnect a retry-safe cleanup: they are best-effort, so a
+    purge that failed once (or a connection revoked before this cleanup
+    existed) would otherwise leave banked content stranded with no way to
+    reach it. ``revoked`` still reports only whether a live token was revoked.
     """
+    revoked = False
     with _get_db_session() as session:
         row = _load_token_row(session, input.user_id)
-        if row is None:
-            return GmailDisconnectResult(revoked=False)
-
-        # Best-effort decrypt + remote revoke. Failures here are non-fatal:
-        # the row is still marked revoked locally below.
-        try:
-            # Call-time import: tests patch
-            # common.token_encryption.require_encryption, so binding it at
-            # module import would bypass the patch.
-            from common.token_encryption import require_encryption  # noqa: PLC0415
-
-            enc = require_encryption()
-            refresh_token = enc.decrypt(row.refresh_token_enc)
-            httpx.post(
-                GOOGLE_REVOKE_ENDPOINT,
-                params={"token": refresh_token},
-                timeout=10.0,
-            )
-        except (httpx.HTTPError, ValueError) as exc:
-            log.warning("Google token revoke failed; revoking locally anyway: {}", exc)
-        except Exception as exc:  # noqa: BLE001
-            # Defensive boundary: decrypt() or require_encryption() may raise
-            # provider-specific errors (cryptography.fernet.InvalidToken,
-            # RuntimeError when key missing in prod). We MUST still mark the
-            # row revoked locally so the user can recover.
-            log.warning("Google revoke errored ({}): proceeding with local revoke", exc)
-
-        row.revoked_at = datetime.now(UTC)
-        session.commit()
-        _invalidate_gmail_client(input.user_id)
+        if row is not None:
+            _revoke_with_google(row)
+            # Erase the secret itself, not just the flag: a revoked row has no
+            # use for the ciphertext, and keeping it means a disconnect leaves
+            # the user's Google credential sitting at rest indefinitely.
+            # Reconnecting writes a fresh token via _upsert_token_row.
+            row.refresh_token_enc = None
+            row.revoked_at = datetime.now(UTC)
+            session.commit()
+            _invalidate_gmail_client(input.user_id)
+            revoked = True
 
     # Purge all banked curation for this user: disconnecting Gmail must leave no
     # derived inbox content behind. Call-time import avoids a module-load cycle
     # (curation_ledger is DB-only and does not import this module). Best-effort:
     # the token is already revoked+committed above, so a purge failure must not
     # turn a successful disconnect into a server error (same rationale as
-    # mark_state_best_effort).
+    # mark_state_best_effort) - a later disconnect retries the cleanup.
     from sqlalchemy.exc import SQLAlchemyError  # noqa: PLC0415
 
     from services.curation_ledger import purge_user  # noqa: PLC0415
@@ -344,7 +377,29 @@ def gmail_disconnect(input: GmailDisconnectInput) -> GmailDisconnectResult:
             input.user_id,
             exc,
         )
-    return GmailDisconnectResult(revoked=True)
+
+    # Same rule for banked push events: webhook_events payloads carry the
+    # subject / sender / snippet of every notified message as plaintext JSON,
+    # so they must go the same way as the curation ledger. Best-effort for the
+    # same reason - the disconnect itself is already committed.
+    from services.webhooks_svc import purge_user_events  # noqa: PLC0415
+
+    try:
+        events, deliveries = purge_user_events(input.user_id)
+        if events or deliveries:
+            log.debug(
+                "Purged {} webhook events / {} deliveries for user {}",
+                events,
+                deliveries,
+                input.user_id,
+            )
+    except SQLAlchemyError as exc:
+        log.warning(
+            "Webhook event purge failed for user {} (disconnect still succeeded): {}",
+            input.user_id,
+            exc,
+        )
+    return GmailDisconnectResult(revoked=revoked)
 
 
 # ---------------------------------------------------------------------------
@@ -478,7 +533,9 @@ def _get_gmail_client(user_id: str):  # noqa: ANN202 - googleapiclient Resource 
     # the token row was revoked/deleted (possibly by another process).
     with _get_db_session() as session:
         row = _load_token_row(session, user_id)
-        if row is None:
+        # A NULL ciphertext means the row was erased by a disconnect; treat it
+        # exactly like a missing row rather than handing None to decrypt().
+        if row is None or row.refresh_token_enc is None:
             _invalidate_gmail_client(user_id)
             raise GmailNotConnectedError(user_id)
         encrypted = row.refresh_token_enc

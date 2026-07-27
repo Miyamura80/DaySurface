@@ -77,7 +77,9 @@ class WebhookDelivery(Base):
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     event_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    subscription_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    # Indexed: the disconnect purge deletes a user's deliveries by matching
+    # subscription, so without it that delete scans every tenant's outbox.
+    subscription_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     # pending | succeeded | failed
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
