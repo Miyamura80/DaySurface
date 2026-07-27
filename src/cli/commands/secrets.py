@@ -97,6 +97,12 @@ def _purge_legacy(key: str) -> bool:
         try:
             keyring.delete_password(service, key)
         except keyring.errors.PasswordDeleteError:
+            # Same rule as the current service: a delete error on a key that is
+            # actually gone is the no-op case, but if the value is still there
+            # the backend failed. Swallowing that would report a successful
+            # delete while _read_password still resolves the key here.
+            if keyring.get_password(service, key) is not None:
+                raise
             continue
         removed = True
     return removed

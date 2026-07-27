@@ -318,6 +318,39 @@ class TestSecrets(TestTemplate):
             listing = runner.invoke(app, ["secrets", "list"])
             assert "OLD_KEY" not in listing.output
 
+    def test_delete_surfaces_legacy_backend_failure(self):
+        # A legacy backend that fails the delete while the value is still
+        # present must not be reported as a successful delete - the read
+        # fallback would go on resolving the key.
+        fake = FakeKeyring()
+        legacy = _LEGACY_SERVICE_NAMES[0]
+        fake.store[(legacy, "OLD_KEY")] = "old_value_1234"
+
+        def failing_delete(service: str, key: str) -> None:
+            if service == legacy:
+                raise keyring.errors.PasswordDeleteError("backend failure")
+            fake.delete_password(service, key)
+
+        with ExitStack() as stack:
+            stack.enter_context(
+                patch(
+                    "src.cli.commands.secrets.keyring.get_password", fake.get_password
+                )
+            )
+            stack.enter_context(
+                patch(
+                    "src.cli.commands.secrets.keyring.set_password", fake.set_password
+                )
+            )
+            stack.enter_context(
+                patch(
+                    "src.cli.commands.secrets.keyring.delete_password", failing_delete
+                )
+            )
+            result = runner.invoke(app, ["secrets", "delete", "OLD_KEY"])
+            assert result.exit_code != 0
+            assert fake.store[(legacy, "OLD_KEY")] == "old_value_1234"
+
     def test_mask_value_short(self):
         assert _mask_value("abc") == "***"
         assert _mask_value("abcdefgh") == "********"
