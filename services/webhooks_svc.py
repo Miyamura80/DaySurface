@@ -343,3 +343,43 @@ def enqueue_event(
         len(matching),
     )
     return event_id
+
+
+# ---------------------------------------------------------------------------
+# Purge - called on Gmail disconnect
+# ---------------------------------------------------------------------------
+
+
+def purge_user_events(user_id: str) -> tuple[int, int]:
+    """Delete every webhook event (and its deliveries) for a user.
+
+    Event payloads bank Gmail-derived content - subject, sender, snippet - as
+    plaintext JSON, so disconnecting must leave none of them behind. Returns
+    ``(events_deleted, deliveries_deleted)``.
+
+    Deliveries are removed in the same pass because they are keyed on
+    ``event_id``: leaving them would strand pending rows the runner can only
+    ever mark "dropped". Subscriptions themselves are *not* touched - they hold
+    no email content and survive a disconnect/reconnect cycle.
+    """
+    with use_db_session() as session:
+        event_ids = [
+            row[0]
+            for row in session.query(WebhookEvent.id)
+            .filter(WebhookEvent.user_id == user_id)
+            .all()
+        ]
+        deliveries = 0
+        if event_ids:
+            deliveries = (
+                session.query(WebhookDelivery)
+                .filter(WebhookDelivery.event_id.in_(event_ids))
+                .delete(synchronize_session=False)
+            )
+        events = (
+            session.query(WebhookEvent)
+            .filter(WebhookEvent.user_id == user_id)
+            .delete(synchronize_session=False)
+        )
+        session.commit()
+        return int(events), int(deliveries)

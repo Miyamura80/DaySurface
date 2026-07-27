@@ -5,7 +5,7 @@ import { site } from "../config/landing";
 const operator = "GPU-EVM LTD";
 const operatorAddress = "3rd Floor, 86-90 Paul Street, London, England, EC2A 4NE";
 const supportEmail = "support@daysurface.com";
-const effectiveDate = "June 20, 2026";
+const effectiveDate = "July 27, 2026";
 ---
 
 <Base
@@ -49,8 +49,9 @@ const effectiveDate = "June 20, 2026";
         connected and authorized.
       </li>
       <li>
-        <strong>OAuth tokens</strong> &mdash; access and refresh tokens Google
-        issues so the Service can maintain your authorized connection.
+        <strong>OAuth tokens</strong> &mdash; the refresh token Google issues so
+        the Service can maintain your authorized connection. Access tokens are
+        minted on demand for a single request and are never stored.
       </li>
     </ul>
 
@@ -60,6 +61,52 @@ const effectiveDate = "June 20, 2026";
       Service: retrieving the email data your connected AI client requests and
       carrying out the email actions you direct. Gmail data is returned to the
       AI client you connected and is not used for any other purpose.
+    </p>
+
+    <h2 class="mt-10 text-2xl font-semibold">No server-side AI processing</h2>
+    <p class="mt-3">
+      Your email is never sent to an AI model by us. The Service performs no
+      LLM inference on Gmail content: ranking and filtering in the Service are
+      deterministic code, and all AI processing happens in the AI client you
+      chose and connected, under that client's own privacy terms. This is
+      stronger than a promise not to train on your data &mdash; your messages
+      do not reach a model on our side at all.
+    </p>
+
+    <h2 class="mt-10 text-2xl font-semibold">
+      Push notifications and webhooks
+    </h2>
+    <p class="mt-3">
+      The Service offers an optional real-time pipeline. It is off until you
+      turn it on, and it moves Gmail data to two places beyond your AI client:
+    </p>
+    <ul class="mt-3 list-disc space-y-2 pl-6">
+      <li>
+        <strong>Google Cloud Pub/Sub</strong> &mdash; if you start a mailbox
+        watch, Gmail publishes a notification to a Google Cloud Pub/Sub topic
+        we operate, which delivers it to the Service. These notifications carry
+        only your Google account email address and a Gmail history cursor, not
+        message content; the Service then fetches the new message's details
+        from the Gmail API. Pub/Sub is a Google service and the data stays
+        within Google's infrastructure until it reaches us.
+      </li>
+      <li>
+        <strong>Webhook endpoints you register</strong> &mdash; if you
+        subscribe a webhook URL, the Service sends an HTTPS POST to that URL
+        for each new message, containing the message and thread identifiers,
+        labels, and the sender, subject, date, and Gmail snippet (a short
+        preview) of the message. Full message bodies are not sent. Requests are
+        signed with a per-endpoint secret so your receiver can verify them.
+        <strong>The destination is yours to choose, and once data is delivered
+        there it is governed by whoever operates that endpoint, not by this
+        policy.</strong> You can remove a subscription at any time from your
+        settings, which stops future deliveries.
+      </li>
+    </ul>
+    <p class="mt-3">
+      To support retries, pending and recently attempted deliveries and their
+      event payloads are stored by the Service until delivery completes or is
+      abandoned. They are deleted when you disconnect (see below).
     </p>
 
     <h2 class="mt-10 text-2xl font-semibold">Limited Use disclosure</h2>
@@ -94,18 +141,36 @@ const effectiveDate = "June 20, 2026";
 
     <h2 class="mt-10 text-2xl font-semibold">Storage and retention</h2>
     <p class="mt-3">
-      OAuth tokens are stored encrypted at rest so your connection persists
-      between sessions. We do not retain copies of your email content beyond
-      what is needed to fulfill an in-flight request; message data is passed
-      through to your connected AI client rather than stored by the Service.
-      When you disconnect (see below) we delete your stored tokens and revoke
-      them with Google.
+      Your Google refresh token is stored encrypted at rest so your connection
+      persists between sessions. Message data requested by your AI client is
+      passed through rather than stored: we keep no copy of message bodies. Two
+      narrow exceptions are stored per user, both created only by features you
+      use:
+    </p>
+    <ul class="mt-3 list-disc space-y-2 pl-6">
+      <li>
+        the curation ledger &mdash; short summaries your AI client derived
+        while triaging a thread, kept encrypted at rest so repeat requests do
+        not re-read your mailbox; and
+      </li>
+      <li>
+        webhook event payloads &mdash; the message details listed above, kept
+        while a delivery is pending or recently attempted.
+      </li>
+    </ul>
+    <p class="mt-3">
+      When you disconnect (see below) we revoke your token with Google, erase
+      the stored token itself, and delete your curation ledger and your webhook
+      events and pending deliveries.
     </p>
 
     <h2 class="mt-10 text-2xl font-semibold">Subprocessors</h2>
     <p class="mt-3">We rely on the following processors to operate the Service:</p>
     <ul class="mt-3 list-disc space-y-2 pl-6">
-      <li><strong>Google</strong> &mdash; the Gmail API and account authentication.</li>
+      <li>
+        <strong>Google</strong> &mdash; the Gmail API, account authentication,
+        and Google Cloud Pub/Sub for mailbox push notifications.
+      </li>
       <li><strong>Railway</strong> &mdash; application hosting and managed database.</li>
       <li><strong>WorkOS (AuthKit)</strong> &mdash; account authentication for the Service.</li>
     </ul>
@@ -121,8 +186,10 @@ const effectiveDate = "June 20, 2026";
         href="https://myaccount.google.com/permissions"
         rel="noopener"
         target="_blank">Google account permissions</a
-      >. Revoking deletes the stored tokens for that connection. To request
-      deletion of any other data we hold about you, email the address above.
+      >. Disconnecting within your AI client erases the stored token for that
+      connection and deletes the curation ledger and webhook events described
+      above. To request deletion of any other data we hold about you, email the
+      address above.
     </p>
 
     <h2 class="mt-10 text-2xl font-semibold">Changes</h2>

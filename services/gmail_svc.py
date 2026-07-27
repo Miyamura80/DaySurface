@@ -286,7 +286,7 @@ def gmail_status(input: GmailStatusInput) -> GmailStatusResult:
     mutating=True,
 )
 def gmail_disconnect(input: GmailDisconnectInput) -> GmailDisconnectResult:
-    """Revoke the stored refresh token with Google + mark the row revoked.
+    """Revoke the stored refresh token with Google + erase it from the row.
 
     If the network revoke fails we still mark the row revoked locally so the
     user is never stuck in a half-connected state.
@@ -305,6 +305,8 @@ def gmail_disconnect(input: GmailDisconnectInput) -> GmailDisconnectResult:
             from common.token_encryption import require_encryption  # noqa: PLC0415
 
             enc = require_encryption()
+            if row.refresh_token_enc is None:
+                raise ValueError("token already erased")  # noqa: TRY301
             refresh_token = enc.decrypt(row.refresh_token_enc)
             httpx.post(
                 GOOGLE_REVOKE_ENDPOINT,
@@ -320,6 +322,11 @@ def gmail_disconnect(input: GmailDisconnectInput) -> GmailDisconnectResult:
             # row revoked locally so the user can recover.
             log.warning("Google revoke errored ({}): proceeding with local revoke", exc)
 
+        # Erase the secret itself, not just the flag: a revoked row has no use
+        # for the ciphertext, and keeping it means a disconnect leaves the
+        # user's Google credential sitting at rest indefinitely. Reconnecting
+        # writes a fresh token via _upsert_token_row.
+        row.refresh_token_enc = None
         row.revoked_at = datetime.now(UTC)
         session.commit()
         _invalidate_gmail_client(input.user_id)
@@ -341,6 +348,28 @@ def gmail_disconnect(input: GmailDisconnectInput) -> GmailDisconnectResult:
     except SQLAlchemyError as exc:
         log.warning(
             "Curation purge failed for user {} (disconnect still succeeded): {}",
+            input.user_id,
+            exc,
+        )
+
+    # Same rule for banked push events: webhook_events payloads carry the
+    # subject / sender / snippet of every notified message as plaintext JSON,
+    # so they must go the same way as the curation ledger. Best-effort for the
+    # same reason - the disconnect itself is already committed.
+    from services.webhooks_svc import purge_user_events  # noqa: PLC0415
+
+    try:
+        events, deliveries = purge_user_events(input.user_id)
+        if events or deliveries:
+            log.debug(
+                "Purged {} webhook events / {} deliveries for user {}",
+                events,
+                deliveries,
+                input.user_id,
+            )
+    except SQLAlchemyError as exc:
+        log.warning(
+            "Webhook event purge failed for user {} (disconnect still succeeded): {}",
             input.user_id,
             exc,
         )
@@ -478,7 +507,9 @@ def _get_gmail_client(user_id: str):  # noqa: ANN202 - googleapiclient Resource 
     # the token row was revoked/deleted (possibly by another process).
     with _get_db_session() as session:
         row = _load_token_row(session, user_id)
-        if row is None:
+        # A NULL ciphertext means the row was erased by a disconnect; treat it
+        # exactly like a missing row rather than handing None to decrypt().
+        if row is None or row.refresh_token_enc is None:
             _invalidate_gmail_client(user_id)
             raise GmailNotConnectedError(user_id)
         encrypted = row.refresh_token_enc
