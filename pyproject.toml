@@ -132,6 +132,7 @@ max-complexity = 10
 # scripts import app modules but only ever run under the e2e stack, not the app.
 exclude = [
     "scripts/sync_agent_config.py",
+    "scripts/gen_brand_assets.py",
     "landing-page/scripts/gen-og.py",
     ".agents/skills/goose-gui-e2e/scripts/",
 ]
@@ -147,7 +148,7 @@ python-version = "3.12"
 
 [tool.deptry]
 ignore = ["DEP002"]
-extend_exclude = ["scripts/sync_agent_config.py", "landing-page/scripts/gen-og.py", ".agents/skills/goose-gui-e2e/scripts/"]
+extend_exclude = ["scripts/sync_agent_config.py", "scripts/gen_brand_assets.py", "landing-page/scripts/gen-og.py", ".agents/skills/goose-gui-e2e/scripts/"]
 package_module_name_map = { "PyJWT" = "jwt", "google-api-python-client" = "googleapiclient", "google-auth" = "google", "openfeature-sdk" = "openfeature", "pillow" = "PIL", "pyyaml" = "yaml", "python-dotenv" = "dotenv" }
 
 [tool.vulture]
@@ -160,6 +161,7 @@ exclude = [
     ".uv-tools/",
     "docs/",
     "node_modules/",
+    "scripts/gen_brand_assets.py",
     ".agents/skills/goose-gui-e2e/scripts/",
     "tests/test_logging_security.py",
     "tests/test_logging_thread_safety.py",
