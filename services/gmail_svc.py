@@ -288,13 +288,6 @@ def gmail_status(input: GmailStatusInput) -> GmailStatusResult:
         )
 
 
-@service(
-    name="gmail_disconnect",
-    description="Revoke and remove the user's linked Gmail account",
-    input_model=GmailDisconnectInput,
-    output_model=GmailDisconnectResult,
-    mutating=True,
-)
 def _revoke_with_google(row: GoogleToken) -> None:
     """Best-effort remote revoke of a row's refresh token. Never raises.
 
@@ -311,11 +304,15 @@ def _revoke_with_google(row: GoogleToken) -> None:
         if row.refresh_token_enc is None:
             raise ValueError("token already erased")  # noqa: TRY301
         refresh_token = enc.decrypt(row.refresh_token_enc)
-        httpx.post(
+        response = httpx.post(
             GOOGLE_REVOKE_ENDPOINT,
             params={"token": refresh_token},
             timeout=10.0,
         )
+        # httpx does not raise on 4xx/5xx. Without this a rejected revoke would
+        # pass silently and we would erase the local token believing Google had
+        # dropped the grant; raising routes it through the warning path below.
+        response.raise_for_status()
     except (httpx.HTTPError, ValueError) as exc:
         log.warning("Google token revoke failed; revoking locally anyway: {}", exc)
     except Exception as exc:  # noqa: BLE001
@@ -326,6 +323,13 @@ def _revoke_with_google(row: GoogleToken) -> None:
         log.warning("Google revoke errored ({}): proceeding with local revoke", exc)
 
 
+@service(
+    name="gmail_disconnect",
+    description="Revoke and remove the user's linked Gmail account",
+    input_model=GmailDisconnectInput,
+    output_model=GmailDisconnectResult,
+    mutating=True,
+)
 def gmail_disconnect(input: GmailDisconnectInput) -> GmailDisconnectResult:
     """Revoke the stored refresh token with Google + erase every trace of it.
 

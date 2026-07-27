@@ -24,8 +24,13 @@ from db import engine as db_engine
 from db.base import Base
 from db.models.google_tokens import GoogleToken
 from db.models.webhooks import WebhookDelivery, WebhookEvent, WebhookSubscription
-from models.gmail import GmailDisconnectInput, GmailStatusInput
+from models.gmail import (
+    GmailDisconnectInput,
+    GmailDisconnectResult,
+    GmailStatusInput,
+)
 from models.webhooks import WebhookSubscribeInput
+from services import discover_services, get_registry
 from services.gmail_svc import gmail_disconnect, gmail_status
 from services.webhooks_svc import (
     enqueue_event,
@@ -103,6 +108,18 @@ class TestPurgeOnDisconnect(TestTemplate):
             )
         )
         session.commit()
+
+    def test_registry_entry_points_at_the_real_disconnect(self):
+        # Every test here calls gmail_disconnect() directly, which keeps
+        # working even if the @service decorator drifts onto a neighbouring
+        # helper - but CLI/API/MCP all dispatch through the registry, so that
+        # drift would silently break disconnect on every real transport.
+        discover_services()
+        entry = next(e for e in get_registry() if e.name == "gmail_disconnect")
+        assert entry.func is gmail_disconnect
+        assert entry.input_model is GmailDisconnectInput
+        assert entry.output_model is GmailDisconnectResult
+        assert entry.mutating is True
 
     def test_purge_user_events_removes_events_and_deliveries(self):
         with _patch_db(), _plaintext_encryption():
