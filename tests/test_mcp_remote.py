@@ -114,7 +114,7 @@ class TestMCPRemote(TestTemplate):
             assert resp.status_code == 200, resp.text
             msg = _read_sse_first_message(resp)
             assert msg["jsonrpc"] == "2.0"
-            assert msg["result"]["serverInfo"]["name"] == "mymcp"
+            assert msg["result"]["serverInfo"]["name"] == "daysurface"
 
     def test_health_endpoint_unaffected_by_mcp_auth(self):
         # Plain TestClient (no lifespan) -- /health doesn't need the MCP session

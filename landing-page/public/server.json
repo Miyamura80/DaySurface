@@ -1,17 +1,17 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.Miyamura80/MCP-Template",
-  "title": "GmailMCP",
-  "description": "Give your AI agent real tools - one service registry over CLI, MCP, and HTTP.",
+  "name": "io.github.Miyamura80/DaySurface",
+  "title": "DaySurface",
+  "description": "Rank, triage, and draft replies for a Gmail inbox - over MCP, CLI, and HTTP.",
   "version": "0.1.1",
-  "websiteUrl": "https://gmailmcp.com",
+  "websiteUrl": "https://daysurface.com",
   "repository": {
-    "url": "https://github.com/Miyamura80/MCP-Template",
+    "url": "https://github.com/Miyamura80/DaySurface",
     "source": "github"
   },
   "icons": [
     {
-      "src": "https://gmailmcp.com/favicon.svg",
+      "src": "https://daysurface.com/favicon.svg",
       "mimeType": "image/svg+xml",
       "sizes": [
         "any"
@@ -21,7 +21,7 @@
   "remotes": [
     {
       "type": "streamable-http",
-      "url": "https://mcp.gmailmcp.com/mcp"
+      "url": "https://mcp.daysurface.com/mcp"
     }
   ]
 }

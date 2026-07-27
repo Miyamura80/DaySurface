@@ -34,7 +34,7 @@ from fastapi import Response
 # Public deprecation-policy page advertised in the ``Link`` header. Kept
 # relative so it resolves against whichever host serves the docs; override per
 # deployment if the policy lives elsewhere.
-DEPRECATION_POLICY_URL = "https://gmailmcp.com/docs/api/deprecation"
+DEPRECATION_POLICY_URL = "https://daysurface.com/docs/api/deprecation"
 
 
 def _to_utc(value: datetime) -> datetime:

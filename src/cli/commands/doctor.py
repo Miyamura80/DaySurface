@@ -12,9 +12,9 @@ from src.utils.output import render
 console = Console(stderr=True)
 
 EPILOG = examples_epilog(
-    "mymcp doctor",
-    "mymcp doctor --fix",
-    "mymcp --format json doctor",
+    "daysurface doctor",
+    "daysurface doctor --fix",
+    "daysurface --format json doctor",
 )
 
 

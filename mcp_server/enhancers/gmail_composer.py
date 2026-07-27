@@ -18,7 +18,7 @@ from models.gmail import (
 )
 from services.gmail_drafts_svc import GmailReplyInput
 
-INBOX_URI = "ui://mymcp/gmail_inbox"
+INBOX_URI = "ui://daysurface/gmail_inbox"
 
 
 @enhance("gmail_compose", fallback="headless", app_uri=INBOX_URI)

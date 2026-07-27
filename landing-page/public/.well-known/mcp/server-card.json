@@ -1,17 +1,17 @@
 {
-  "name": "io.github.Miyamura80/MCP-Template",
+  "name": "io.github.Miyamura80/DaySurface",
   "version": "0.1.1",
-  "title": "GmailMCP",
-  "description": "Give your AI agent real tools - one service registry over CLI, MCP, and HTTP.",
-  "websiteUrl": "https://gmailmcp.com",
-  "serverUrl": "https://mcp.gmailmcp.com/mcp",
+  "title": "DaySurface",
+  "description": "Rank, triage, and draft replies for a Gmail inbox - over MCP, CLI, and HTTP.",
+  "websiteUrl": "https://daysurface.com",
+  "serverUrl": "https://mcp.daysurface.com/mcp",
   "repository": {
-    "url": "https://github.com/Miyamura80/MCP-Template",
+    "url": "https://github.com/Miyamura80/DaySurface",
     "source": "github"
   },
   "icons": [
     {
-      "src": "https://gmailmcp.com/favicon.svg",
+      "src": "https://daysurface.com/favicon.svg",
       "mimeType": "image/svg+xml",
       "sizes": [
         "any"
@@ -21,17 +21,21 @@
   "remotes": [
     {
       "type": "streamable-http",
-      "url": "https://mcp.gmailmcp.com/mcp"
+      "url": "https://mcp.daysurface.com/mcp"
     }
   ],
   "tools": [
     {
+      "name": "gmail_add_attachment",
+      "description": "Attach one file to an existing Gmail draft and return the draft's full attachment list (each with attachment_id, filename, mime_type, size_bytes). Only the attachments change - body, subject, and recipients are preserved exactly. Pass the file as 'attachment' (filename + mime_type + base64 data_base64)."
+    },
+    {
       "name": "gmail_archive_thread",
-      "description": "Archive a Gmail thread by removing the INBOX label"
+      "description": "Archive a Gmail thread by removing the INBOX label. Also marks the thread dismissed in the curation ledger. During a triage pass, continue on to the next uncurated or stale thread."
     },
     {
       "name": "gmail_compose",
-      "description": "Create a new Gmail draft from the given fields. ALWAYS use this tool instead of composing email text in chat - it creates a real Gmail draft and opens an interactive composer UI where the user can review, edit, and send. When an interactive UI is rendered alongside the result, keep your text response brief since the user can edit in the UI."
+      "description": "Create a new Gmail draft from the given fields and open an interactive composer UI. Returns the draft's actual saved state - draft_id, thread_id, recipients, subject, a body_preview, and the attachment list (each with attachment_id, filename, mime_type, size_bytes) - so you can verify what was saved without a follow-up gmail_get_draft. To edit it afterward use gmail_update_draft, which preserves omitted fields and keeps attachments unless you clear them. ALWAYS use this tool instead of composing email text in chat - it creates a real Gmail draft where the user can review, edit, and send. When an interactive UI is rendered alongside the result, keep your text response brief since the user can edit in the UI."
     },
     {
       "name": "gmail_connect",
@@ -39,7 +43,7 @@
     },
     {
       "name": "gmail_curate_inbox",
-      "description": "Rank recent inbox threads by a deterministic importance score. When an interactive UI is rendered alongside the result, keep your text response brief (a one-line summary) since the user can browse details in the UI. Only elaborate if the user asks."
+      "description": "Rank recent inbox threads by a deterministic heuristic score and render the inbox dashboard. This is a quick provisional view, NOT the assistant's own triage: for 'what's important / triage my inbox', prefer inbox_get_curation (banked LLM verdicts + coverage), going deeper with inbox_search + inbox_save_curation when coverage shows uncurated/stale threads. When an interactive UI is rendered alongside the result, keep your text response brief (a one-line summary) since the user can browse details in the UI. Only elaborate if the user asks."
     },
     {
       "name": "gmail_discard_draft",
@@ -50,12 +54,16 @@
       "description": "Revoke and remove the user's linked Gmail account"
     },
     {
+      "name": "gmail_get_attachment",
+      "description": "Fetch the raw base64 bytes of a single attachment or inline image on a Gmail message, identified by the message_id + attachment_id echoed by gmail_get_thread. Use this to pull one file on demand instead of loading every attachment into the thread payload. data_base64 is raw encoded bytes, not a rendered image - you cannot read an image's contents from it; on vision-capable MCP hosts, image attachments are additionally rendered into context as a viewable image."
+    },
+    {
       "name": "gmail_get_draft",
       "description": "Fetch a single Gmail draft by id"
     },
     {
       "name": "gmail_get_thread",
-      "description": "Fetch a Gmail thread by id with full message bodies + attachments. When an interactive UI is rendered alongside the result, keep your text response brief since the user can browse the conversation in the UI."
+      "description": "Fetch a Gmail thread by id with full message bodies. By default attachment/inline-image bytes are omitted (each attachment still carries filename, mime_type, size, attachment_id) to keep the payload small - fetch a file on demand with gmail_get_attachment. Pass include_attachment_data=true to inline bytes, or strip_quoted_replies=true to drop repeated quoted history. When an interactive UI is rendered alongside the result, keep your text response brief since the user can browse the conversation in the UI."
     },
     {
       "name": "gmail_list_drafts",
@@ -67,15 +75,19 @@
     },
     {
       "name": "gmail_mark_thread_done",
-      "description": "Mark a Gmail thread as done by applying the MCP/Done label (hides from curated inbox)"
+      "description": "Mark a Gmail thread as done by applying the MCP/Done label (hides from curated inbox). Also marks the thread dismissed in the curation ledger. During a triage pass, continue on to the next uncurated or stale thread."
     },
     {
       "name": "gmail_mark_thread_read",
       "description": "Mark a Gmail thread as read by removing the UNREAD label"
     },
     {
+      "name": "gmail_remove_attachment",
+      "description": "Remove one file from a Gmail draft by its attachment_id and return the draft's remaining attachment list. Only the attachments change - body, subject, and recipients are preserved exactly. The attachment_id comes from any prior draft response or gmail_get_draft."
+    },
+    {
       "name": "gmail_reply_to_thread",
-      "description": "Create a reply draft on an existing Gmail thread. ALWAYS use this tool instead of composing reply text in chat - it creates a real Gmail draft and opens an interactive composer UI where the user can review, edit, and send. Pass your drafted reply in the 'body' parameter. When an interactive UI is rendered alongside the result, keep your text response brief since the user can edit in the UI."
+      "description": "Create a reply draft on an existing Gmail thread. ALWAYS use this tool instead of composing reply text in chat - it creates a real Gmail draft and opens an interactive composer UI where the user can review, edit, and send. Pass your drafted reply in the 'body' parameter. Recipients are yours to control: pass 'to', 'cc', and/or 'bcc' (each a comma-separated address list) to set them explicitly. If you omit 'to', it defaults to the other party in the thread (never the account owner); omitted 'cc'/'bcc' are left unset. If every message in the thread is yours (no other participant to reply to), you must pass 'to' explicitly or the call errors. When an interactive UI is rendered alongside the result, keep your text response brief since the user can edit in the UI."
     },
     {
       "name": "gmail_send",
@@ -91,7 +103,63 @@
     },
     {
       "name": "gmail_update_draft",
-      "description": "Patch fields on an existing Gmail draft and open an interactive composer UI. ALWAYS call this tool to write or edit draft content - NEVER compose email text as plain chat text. The tool renders an interactive composer where the user can review, edit, and send. Pass your composed text in the 'body' parameter. Keep your chat response to one brief sentence since the user can edit in the UI."
+      "description": "Patch fields on an existing Gmail draft and open an interactive composer UI. Non-destructive by default: any field you OMIT is left unchanged on the draft, and a field set to null is CLEARED - this holds for to, cc, bcc, subject, body, and attachments. Omit 'attachments' to keep every existing file untouched (so you can edit the body repeatedly without re-uploading); pass null or [] to drop them all. 'attachments' may mix new uploads (filename + mime_type + data_base64) with references to existing files ({attachment_id}) taken from a prior response, letting you preserve specific files by id. To add or remove a single file without touching the body, prefer gmail_add_attachment / gmail_remove_attachment. The returned draft echoes the saved state (recipients, subject, body_preview, and the full attachment list with ids/filenames/sizes). ALWAYS call this tool to write or edit draft content - NEVER compose email text as plain chat text. Pass your composed text in the 'body' parameter. Keep your chat response to one brief sentence since the user can edit in the UI."
+    },
+    {
+      "name": "gmail_watch_start",
+      "description": "Subscribe the user's Gmail inbox to push notifications"
+    },
+    {
+      "name": "gmail_watch_stop",
+      "description": "Cancel the user's Gmail push-notification watch"
+    },
+    {
+      "name": "inbox_get_curation",
+      "description": "Read banked inbox triage from the curation ledger. Cheap: no email bodies are fetched and no reasoning is run - it returns judgments the assistant already made (bucket, importance, summary, suggested action) plus a coverage count of curated / stale / uncurated threads in the inbox. Call this FIRST for any 'what's important / triage my inbox' request. If coverage shows many uncurated or stale threads and the user wants a thorough pass, go deeper with inbox_search + inbox_save_curation; otherwise answer directly from these banked verdicts."
+    },
+    {
+      "name": "inbox_save_curation",
+      "description": "Bank your triage judgments for one or more threads into the curation ledger so they are not re-reasoned next time. Call this after reading and reasoning over threads (typically from inbox_search) - pass a batch of per-thread verdicts (bucket, importance, a short summary, suggested action, optional reasoning/confidence). Each write stamps the thread's current Gmail historyId so the verdict stays valid until the thread changes. This is what makes the next inbox_get_curation near-free."
+    },
+    {
+      "name": "inbox_search",
+      "description": "Search recent inbox threads headlessly (no UI) when doing a thorough triage pass - use this to actually look at many emails. Returns thread summaries (subject, sender, snippet, recency) each annotated with its ledger status: 'uncurated' / 'stale' threads are the delta worth reasoning about; 'curated' threads are already banked and can be skipped. Uncurated threads also carry a provisional heuristic importance_prior. Pass since_history_id (from a prior result's current_history_id) to fetch only changed threads. After reasoning over the results, bank your verdicts with inbox_save_curation."
+    },
+    {
+      "name": "pdf_edit",
+      "description": "Apply a batch of edits to an open PDF document session. Ops: {op:'set_field', name, value} fills an AcroForm field (checkbox/radio/choice values must match the field's options); {op:'add_text', page, x, y, text, font_size?} stamps a text overlay onto a flat PDF at PDF user-space coordinates (origin bottom-left, points). The batch is atomic: any invalid op rejects the whole batch and the document is unchanged. Pass render_pages (1-based) to get PNG renders back for verifying placement. Rejected once a signature has been requested or the document is signed."
+    },
+    {
+      "name": "pdf_export",
+      "description": "Deliver a PDF document session to its destination - v1: attach it to an existing Gmail draft, server-side (the PDF bytes never enter this conversation). Default filename is '{original-stem}-signed.pdf' for signed documents, '{original-stem}-filled.pdf' otherwise; override with destination.filename. Returns the draft's resulting attachment list. Rejected while a signature request is pending."
+    },
+    {
+      "name": "pdf_open",
+      "description": "Open a PDF into a server-side editing session and return everything needed to plan edits: a doc_id handle, the fillable form-field inventory (name, type, current value, page, rect), and - for flat PDFs without form fields - the existing text layout with coordinates for anchoring text overlays. The PDF bytes stay server-side; every later pdf_* call takes the doc_id. Optionally pass render_pages (1-based page numbers) to also get PNG renders of pages for visual inspection. Coordinates are PDF user space: origin at the page's bottom-left corner, in points (1/72 inch)."
+    },
+    {
+      "name": "pdf_request_signature",
+      "description": "Hand a filled PDF document over to the user for signing. Locks the document (no further edits) and opens the signing ceremony: the user reviews the document and types their full legal name themselves - signing can never be performed by the assistant. placement says where the signature stamp goes: a signature field's name from pdf_open's fields[], or {page, x, y} in PDF user-space coordinates (origin bottom-left, points) for flat PDFs. Call pdf_export afterwards to deliver the signed file."
+    },
+    {
+      "name": "webhook_list",
+      "description": "List the caller's webhook subscriptions (secrets are never returned)"
+    },
+    {
+      "name": "webhook_rotate_secret",
+      "description": "Issue a new signing secret for a subscription (invalidates the old one)"
+    },
+    {
+      "name": "webhook_settings",
+      "description": "Open your settings: Gmail connection status and webhook subscriptions"
+    },
+    {
+      "name": "webhook_subscribe",
+      "description": "Register an HTTPS endpoint to receive signed webhook events"
+    },
+    {
+      "name": "webhook_unsubscribe",
+      "description": "Deactivate a webhook subscription so it stops receiving events"
     }
   ]
 }

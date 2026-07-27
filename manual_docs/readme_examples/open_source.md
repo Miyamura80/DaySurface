@@ -3,7 +3,7 @@
 
 ## How to contribute
 
-1. Clone repo and create a new branch: `$ git clone https://github.com/Miyamura80/MCP-Template.git && cd MCP-Template && git checkout -b your-branch-name`
+1. Clone repo and create a new branch: `$ git clone https://github.com/Miyamura80/DaySurface.git && cd DaySurface && git checkout -b your-branch-name`
 2. Make changes and test
 3. Submit a PR (Pull Request) with comprehensive description of changes
 

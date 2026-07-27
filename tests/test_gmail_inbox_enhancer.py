@@ -66,7 +66,7 @@ class TestGmailInboxEnhancer(TestTemplate):
         assert tool.app_resource_uri == APP_URI
         meta = tool.app_meta()
         assert meta is not None
-        assert meta["ui"]["resourceUri"] == "ui://mymcp/gmail_inbox"
+        assert meta["ui"]["resourceUri"] == "ui://daysurface/gmail_inbox"
 
     def test_disabled_via_env_skips_app(self, monkeypatch):
         monkeypatch.setenv("MCP_DISABLE_APPS", "1")

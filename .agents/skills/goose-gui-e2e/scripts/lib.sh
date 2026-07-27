@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared helpers + paths for the Goose-GUI e2e harness (MCP-Template edition).
+# Shared helpers + paths for the Goose-GUI e2e harness (DaySurface edition).
 # Ported from Edison-Watch's goose-gui-e2e skill; adapted to test THIS repo's
 # MCP Apps (the ui:// iframe dashboards) rendered inside the real Goose desktop.
 #
@@ -33,7 +33,7 @@ mkdir -p "$E2E_HOME"
 : "${TOOLCALL_LOG:=$E2E_HOME/toolcalls.jsonl}"
 
 # e2e SQLite DB for the template server + the fixed user the API key belongs to
-: "${E2E_DB:=$E2E_HOME/mcp_template_e2e.db}"
+: "${E2E_DB:=$E2E_HOME/daysurface_e2e.db}"
 : "${BACKEND_DB_URI:=sqlite:///$E2E_DB}"
 : "${E2E_USER_ID:=e2e-user}"
 : "${API_KEY_FILE:=$E2E_HOME/api_key.txt}"
@@ -43,7 +43,7 @@ mkdir -p "$E2E_HOME"
 # would be misread as a config field and crash boot. Keep the SRV_ prefix.
 : "${VITE_PORT:=5173}"       # Goose desktop dev renderer (Electron loads this)
 : "${MOCK_PORT:=8410}"       # scenario-engine mock LLM (OpenAI-compatible)
-: "${SRV_PORT:=8080}"        # this template's FastAPI + /mcp mount (mymcp-serve default)
+: "${SRV_PORT:=8080}"        # this template's FastAPI + /mcp mount (daysurface-serve default)
 : "${SRV_URL:=http://127.0.0.1:$SRV_PORT}"
 : "${MCP_URL:=$SRV_URL/mcp}"
 

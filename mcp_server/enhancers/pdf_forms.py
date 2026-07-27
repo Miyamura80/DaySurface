@@ -35,7 +35,7 @@ from models.pdf_forms import (
 from services.pdf_documents_repo import load_document
 from services.pdf_signing import abort_signing, perform_signing
 
-SIGNER_APP_URI = "ui://mymcp/pdf_signer"
+SIGNER_APP_URI = "ui://daysurface/pdf_signer"
 
 
 def _move_page_images_to_content[T: PdfOpenResult | PdfEditResult](

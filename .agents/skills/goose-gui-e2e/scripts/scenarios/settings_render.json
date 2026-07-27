@@ -6,7 +6,7 @@
     }
   ],
   "final": "Opened your settings.",
-  "app_uri": "ui://mymcp/settings",
+  "app_uri": "ui://daysurface/settings",
   "expect": {
     "tool_called": "webhook_settings",
     "round_trip": true,

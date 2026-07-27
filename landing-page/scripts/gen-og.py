@@ -15,8 +15,8 @@ if cairosvg is unavailable it falls back to a plain cyan square.
 
 from __future__ import annotations
 
-import contextlib
 import io
+import re
 import urllib.request
 from pathlib import Path
 
@@ -30,30 +30,41 @@ FG_MUTED = (155, 164, 166)
 ACCENT = (195, 255, 253)  # Core Cyan 500
 
 # --- copy (keep in sync with src/config/landing.ts) -------------------------
-EYEBROW = "MCP SERVER STARTER"
-WORDMARK = "GmailMCP"
+EYEBROW = "AN MCP SERVER FOR GMAIL"
+WORDMARK = "DaySurface"
 HEADLINE = ["Give your AI agent", "real tools."]
 SUBHEAD = "One service registry, exposed identically over CLI, MCP, and HTTP."
 PILLS = ["CLI", "MCP", "HTTP"]
-REPO = "github.com/Miyamura80/MCP-Template"
+REPO = "github.com/Miyamura80/DaySurface"
 
 W, H = 1200, 630
 PAD = 80
 
-ARCHIVO_URL = (
-    "https://github.com/google/fonts/raw/main/ofl/archivo/Archivo%5Bwdth,wght%5D.ttf"
-)
-FONT_CACHE = Path("/tmp/Archivo-variable.ttf")
+FONT_API = "https://fonts.googleapis.com/css2?family=Archivo:wght@{weight}"
+FONT_CACHE = Path("/tmp/daysurface-fonts")
 
 
 def archivo(size: int, weight: int = 700) -> ImageFont.FreeTypeFont:
-    if not FONT_CACHE.exists():
-        urllib.request.urlretrieve(ARCHIVO_URL, FONT_CACHE)
-    font = ImageFont.truetype(str(FONT_CACHE), size)
-    # Archivo axes are [Weight, Width]; pin width to 100 (normal).
-    with contextlib.suppress(OSError):
-        font.set_variation_by_axes([weight, 100])
-    return font
+    """Load an Archivo weight, downloading it from Google Fonts once.
+
+    Same source the site loads at runtime (Base.astro), so the card's type
+    matches the rendered page. Kept in step with scripts/gen_brand_assets.py.
+    """
+    FONT_CACHE.mkdir(parents=True, exist_ok=True)
+    ttf = FONT_CACHE / f"Archivo-{weight}.ttf"
+    if not ttf.exists():
+        # The CSS API serves a per-weight @font-face block; pull the TTF out.
+        req = urllib.request.Request(
+            FONT_API.format(weight=weight),
+            headers={"User-Agent": "Mozilla/5.0"},  # else Google serves woff2
+        )
+        with urllib.request.urlopen(req) as resp:
+            css = resp.read().decode()
+        match = re.search(r"src: url\((https://[^)]+\.ttf)\)", css)
+        if match is None:
+            raise RuntimeError(f"no TTF in Google Fonts CSS for weight {weight}")
+        urllib.request.urlretrieve(match.group(1), ttf)
+    return ImageFont.truetype(str(ttf), size)
 
 
 def brand_mark(size: int) -> Image.Image | None:

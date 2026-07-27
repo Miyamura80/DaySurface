@@ -25,24 +25,41 @@ def _get_cli_name() -> str:
     """Derive CLI name from package console_scripts entry point."""
     eps = importlib.metadata.entry_points(group="console_scripts")
     for ep in eps:
-        if ep.dist and ep.dist.name == "mcp-template":
+        if ep.dist and ep.dist.name == "daysurface":
             return ep.name
-    return "mymcp"
+    return "daysurface"
 
 
 _SERVICE_NAME = _get_cli_name()
+# Keyring service names used before the DaySurface rename. Secrets are stored
+# per-service, so reads have to fall back to these or an existing keyring looks
+# empty after the rename. Writes only ever target _SERVICE_NAME, so the legacy
+# namespace drains as keys are re-set, and delete clears every namespace.
+_LEGACY_SERVICE_NAMES = ("mymcp",)
+_ALL_SERVICE_NAMES = (_SERVICE_NAME, *_LEGACY_SERVICE_NAMES)
 _KEYS_META = "__secret_keys__"
 
 
+def _read_password(key: str) -> str | None:
+    """Read a secret from the current service, falling back to legacy ones."""
+    for service in _ALL_SERVICE_NAMES:
+        value = keyring.get_password(service, key)
+        if value is not None:
+            return value
+    return None
+
+
 def _get_tracked_keys() -> list[str]:
-    raw = keyring.get_password(_SERVICE_NAME, _KEYS_META)
-    if raw is None:
-        return []
-    try:
-        keys = json.loads(raw)
-        return sorted(set(keys))
-    except (json.JSONDecodeError, TypeError):
-        return []
+    keys: set[str] = set()
+    for service in _ALL_SERVICE_NAMES:
+        raw = keyring.get_password(service, _KEYS_META)
+        if raw is None:
+            continue
+        try:
+            keys.update(json.loads(raw))
+        except (json.JSONDecodeError, TypeError):
+            continue
+    return sorted(keys)
 
 
 def _set_tracked_keys(keys: list[str]) -> None:
@@ -57,10 +74,38 @@ def _track_key(key: str) -> None:
 
 
 def _untrack_key(key: str) -> None:
-    keys = _get_tracked_keys()
-    if key in keys:
-        keys.remove(key)
-        _set_tracked_keys(keys)
+    """Drop a key from the tracked list in every service that still lists it.
+
+    Pruning only the current service would leave the key in a legacy index,
+    where the merged read in _get_tracked_keys would resurrect it.
+    """
+    for service in _ALL_SERVICE_NAMES:
+        raw = keyring.get_password(service, _KEYS_META)
+        if raw is None:
+            continue
+        try:
+            remaining = sorted(set(json.loads(raw)) - {key})
+        except (json.JSONDecodeError, TypeError):
+            continue
+        keyring.set_password(service, _KEYS_META, json.dumps(remaining))
+
+
+def _purge_legacy(key: str) -> bool:
+    """Delete a secret from the legacy services. True if one was removed."""
+    removed = False
+    for service in _LEGACY_SERVICE_NAMES:
+        try:
+            keyring.delete_password(service, key)
+        except keyring.errors.PasswordDeleteError:
+            # Same rule as the current service: a delete error on a key that is
+            # actually gone is the no-op case, but if the value is still there
+            # the backend failed. Swallowing that would report a successful
+            # delete while _read_password still resolves the key here.
+            if keyring.get_password(service, key) is not None:
+                raise
+            continue
+        removed = True
+    return removed
 
 
 def _mask_value(value: str) -> str:
@@ -72,9 +117,9 @@ def _mask_value(value: str) -> str:
 @app.command(
     "set",
     epilog=examples_epilog(
-        "mymcp secrets set OPENAI_API_KEY sk-...",
-        "echo sk-... | mymcp secrets set OPENAI_API_KEY --stdin",
-        "mymcp --dry-run secrets set OPENAI_API_KEY sk-...",
+        "daysurface secrets set OPENAI_API_KEY sk-...",
+        "echo sk-... | daysurface secrets set OPENAI_API_KEY --stdin",
+        "daysurface --dry-run secrets set OPENAI_API_KEY sk-...",
     ),
 )
 def set_secret(
@@ -99,8 +144,8 @@ def set_secret(
         else:
             console.print("[red]Error:[/red] no secret value specified.")
             console.print(
-                f"  mymcp secrets set {key} <value>   |   "
-                f"echo <value> | mymcp secrets set {key} --stdin"
+                f"  daysurface secrets set {key} <value>   |   "
+                f"echo <value> | daysurface secrets set {key} --stdin"
             )
             raise typer.Exit(code=1)
 
@@ -118,8 +163,8 @@ def set_secret(
 @app.command(
     "get",
     epilog=examples_epilog(
-        "mymcp secrets get OPENAI_API_KEY",
-        "mymcp secrets get OPENAI_API_KEY --reveal",
+        "daysurface secrets get OPENAI_API_KEY",
+        "daysurface secrets get OPENAI_API_KEY --reveal",
     ),
 )
 def get_secret(
@@ -130,10 +175,10 @@ def get_secret(
     ] = False,
 ) -> None:
     """Retrieve a secret from the OS keyring."""
-    value = keyring.get_password(_SERVICE_NAME, key)
+    value = _read_password(key)
     if value is None:
         console.print(f"[red]Error:[/red] secret not found: {key}")
-        console.print("  List stored secrets: [bold]mymcp secrets list[/bold]")
+        console.print("  List stored secrets: [bold]daysurface secrets list[/bold]")
         raise typer.Exit(code=1)
 
     display = value if reveal else _mask_value(value)
@@ -142,8 +187,8 @@ def get_secret(
 
 @app.command(
     epilog=examples_epilog(
-        "mymcp secrets delete OPENAI_API_KEY",
-        "mymcp --dry-run secrets delete OPENAI_API_KEY",
+        "daysurface secrets delete OPENAI_API_KEY",
+        "daysurface --dry-run secrets delete OPENAI_API_KEY",
     )
 )
 def delete(
@@ -153,6 +198,10 @@ def delete(
     if is_dry_run():
         console.print(f"[yellow][DRY RUN][/yellow] Would delete secret {key}")
         return
+
+    # Clear the pre-rename namespace too, otherwise `get` would still resolve
+    # the key through the legacy fallback after a "successful" delete.
+    legacy_removed = _purge_legacy(key)
 
     try:
         keyring.delete_password(_SERVICE_NAME, key)
@@ -164,7 +213,10 @@ def delete(
             raise
         _untrack_key(key)
         if not is_quiet():
-            console.print(f"[dim]No-op:[/dim] {key} not present")
+            if legacy_removed:
+                console.print(f"[green]Deleted[/green] {key}")
+            else:
+                console.print(f"[dim]No-op:[/dim] {key} not present")
         return
 
     _untrack_key(key)
@@ -173,7 +225,7 @@ def delete(
         console.print(f"[green]Deleted[/green] {key}")
 
 
-@app.command("list", epilog=examples_epilog("mymcp --format json secrets list"))
+@app.command("list", epilog=examples_epilog("daysurface --format json secrets list"))
 def list_secrets() -> None:
     """List stored secret key names (never values)."""
     keys = _get_tracked_keys()
@@ -184,7 +236,7 @@ def list_secrets() -> None:
 
     rows = []
     for key in keys:
-        value = keyring.get_password(_SERVICE_NAME, key)
+        value = _read_password(key)
         rows.append(
             {
                 "Key": key,
@@ -213,7 +265,7 @@ def _load_import_values(
     if sys.stdin.isatty():
         console.print(
             "[red]Error:[/red] --stdin given but stdin is a terminal; "
-            "pipe a .env in, e.g. cat .env | mymcp secrets import --stdin"
+            "pipe a .env in, e.g. cat .env | daysurface secrets import --stdin"
         )
         raise typer.Exit(code=2)
     return dotenv_values(stream=io.StringIO(sys.stdin.read())), "stdin"
@@ -222,9 +274,9 @@ def _load_import_values(
 @app.command(
     "import",
     epilog=examples_epilog(
-        "mymcp secrets import --file .env",
-        "cat .env | mymcp secrets import --stdin",
-        "mymcp --dry-run secrets import --file .env",
+        "daysurface secrets import --file .env",
+        "cat .env | daysurface secrets import --stdin",
+        "daysurface --dry-run secrets import --file .env",
     ),
 )
 def import_secrets(
@@ -286,7 +338,9 @@ def import_secrets(
 
 @app.command(
     "export",
-    epilog=examples_epilog("mymcp secrets export", "mymcp secrets export --reveal"),
+    epilog=examples_epilog(
+        "daysurface secrets export", "daysurface secrets export --reveal"
+    ),
 )
 def export_secrets(
     reveal: Annotated[
@@ -302,7 +356,7 @@ def export_secrets(
         return
 
     for key in keys:
-        value = keyring.get_password(_SERVICE_NAME, key)
+        value = _read_password(key)
         if value is None:
             continue
         display = value if reveal else _mask_value(value)

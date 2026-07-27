@@ -179,22 +179,24 @@ class TestDetectCommand(TestTemplate):
     """CLI command detection from argv."""
 
     def test_simple_command(self):
-        assert _detect_command(["mymcp", "greet", "Alice"]) == "greet"
+        assert _detect_command(["daysurface", "greet", "Alice"]) == "greet"
 
     def test_with_global_flags(self):
-        assert _detect_command(["mymcp", "--verbose", "config", "show"]) == "config"
+        assert (
+            _detect_command(["daysurface", "--verbose", "config", "show"]) == "config"
+        )
 
     def test_with_format_flag(self):
-        assert _detect_command(["mymcp", "--format", "json", "config"]) == "config"
+        assert _detect_command(["daysurface", "--format", "json", "config"]) == "config"
 
     def test_with_format_equals_syntax(self):
-        assert _detect_command(["mymcp", "--format=json", "config"]) == "config"
+        assert _detect_command(["daysurface", "--format=json", "config"]) == "config"
 
     def test_no_command(self):
-        assert _detect_command(["mymcp", "--help"]) == "<root>"
+        assert _detect_command(["daysurface", "--help"]) == "<root>"
 
     def test_root_only(self):
-        assert _detect_command(["mymcp"]) == "<root>"
+        assert _detect_command(["daysurface"]) == "<root>"
 
 
 class TestTelemetryCommands(TestTemplate):

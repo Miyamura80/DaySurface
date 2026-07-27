@@ -58,7 +58,6 @@ src/payments/
 
 ```python
 class BasePaymentProtocol(ABC):
-
     @abstractmethod
     def protocol_name(self) -> ProtocolName: ...
 
@@ -100,11 +99,13 @@ class ProtocolName(StrEnum):
     MPP = "mpp"
     ACP = "acp"
 
+
 class PaymentStatus(StrEnum):
     PENDING = "pending"
     COMPLETED = "completed"
     FAILED = "failed"
     EXPIRED = "expired"
+
 
 @dataclass(frozen=True)
 class PaymentRequest:
@@ -113,6 +114,7 @@ class PaymentRequest:
     currency: str
     description: str
     metadata: dict[str, str]
+
 
 @dataclass(frozen=True)
 class PaymentResult:
@@ -177,6 +179,7 @@ class X402Config(BaseModel):
     wallet_private_key_env: str = "X402_WALLET_PRIVATE_KEY"
     max_amount_per_request: float = 10.0
 
+
 class MppConfig(BaseModel):
     enabled: bool = False
     api_version: str = "2026-03-04.preview"
@@ -185,6 +188,7 @@ class MppConfig(BaseModel):
     wallet_private_key_env: str = "MPP_WALLET_PRIVATE_KEY"
     max_amount_per_request: float = 100.0
 
+
 class AcpConfig(BaseModel):
     enabled: bool = False
     merchant_name: str = ""
@@ -192,6 +196,7 @@ class AcpConfig(BaseModel):
     webhook_secret_env: str = "ACP_WEBHOOK_SECRET"
     supported_payment_methods: list[str] = ["card"]
     stripe_account_id_env: str = "STRIPE_ACCOUNT_ID"
+
 
 class PaymentsConfig(BaseModel):
     x402: X402Config = Field(default_factory=X402Config)

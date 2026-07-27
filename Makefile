@@ -41,26 +41,6 @@ help: ## Show this help message
 		}' $(MAKEFILE_LIST)
 
 ########################################################
-# Initialization
-########################################################
-
-### Initialization
-.PHONY: onboard banner logo
-onboard: check_uv ## Run onboarding CLI (PROFILE=cli-only, CONFIG=.onboard.yaml, ARGS="--dry-run")
-	@$(PYTHON) -m init.onboard $(if $(PROFILE),--profile $(PROFILE),) $(if $(CONFIG),--config $(CONFIG),) $(if $(DRY_RUN),--dry-run,) $(ARGS)
-
-banner: check_uv ## Generate project banner image
-	@echo "$(YELLOW)🔍Generating banner...$(RESET)"
-	@uv run python -m init.generate_banner
-	@echo "$(GREEN)✅Banner generated.$(RESET)"
-
-logo: check_uv ## Generate logo and favicon for docs
-	@echo "$(YELLOW)🔍Generating logo and favicon...$(RESET)"
-	@uv run python -m init.generate_logo
-	@echo "$(GREEN)✅Logo and favicon generated in docs/public/$(RESET)"
-
-
-########################################################
 # Check dependencies
 ########################################################
 
@@ -127,10 +107,10 @@ docs: ## Run docs with bun
 
 api: check_uv ## Run authenticated API server
 	@echo "$(GREEN)🌐 Starting API server...$(RESET)"
-	@$(PYTHON) mymcp-serve
+	@$(PYTHON) daysurface-serve
 
 mcp: check_uv ## Run MCP server locally (stdio)
-	@$(PYTHON) mymcp-mcp
+	@$(PYTHON) daysurface-mcp
 
 mcp_inspect: check_uv ## Run MCP server with inspector for debugging
 	@$(PYTHON) mcp dev mcp_server/server.py

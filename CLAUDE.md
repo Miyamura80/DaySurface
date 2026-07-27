@@ -57,9 +57,9 @@ Layering (top calls down, never the reverse):
 
 ### Top-level layout
 
-- **`src/cli/app.py`** + **`src/cli/commands/`** - Typer CLI (`mymcp`); `src/cli/commands/__init__.py` auto-discovers `src/cli/commands/*.py` and registers them.
-- **`mcp_server/`** - FastMCP server. Primary transport is **streamable HTTP**, mounted on the FastAPI app at `/mcp` from `api_server/server.py` (one process, one port, shared auth/CORS). Stdio is legacy/dev-only via `mymcp-mcp`. `mcp_server/server.py:build_mcp_server` populates a single FastMCP singleton from the service registry; `mount_on` + `lifespan` handle the streamable-HTTP wiring. See [`mcp_server/COMMON_TERMS.md`](./mcp_server/COMMON_TERMS.md).
-- **`api_server/`** - FastAPI HTTP server (`auth/`, `billing/`, `middleware/`, `routes/`). Hosts the `/mcp` mount; the primary entrypoint is `mymcp-serve`.
+- **`src/cli/app.py`** + **`src/cli/commands/`** - Typer CLI (`daysurface`); `src/cli/commands/__init__.py` auto-discovers `src/cli/commands/*.py` and registers them.
+- **`mcp_server/`** - FastMCP server. Primary transport is **streamable HTTP**, mounted on the FastAPI app at `/mcp` from `api_server/server.py` (one process, one port, shared auth/CORS). Stdio is legacy/dev-only via `daysurface-mcp`. `mcp_server/server.py:build_mcp_server` populates a single FastMCP singleton from the service registry; `mount_on` + `lifespan` handle the streamable-HTTP wiring. See [`mcp_server/COMMON_TERMS.md`](./mcp_server/COMMON_TERMS.md).
+- **`api_server/`** - FastAPI HTTP server (`auth/`, `billing/`, `middleware/`, `routes/`). Hosts the `/mcp` mount; the primary entrypoint is `daysurface-serve`.
 - **`services/`** - `@service(name=, description=, input_model=, output_model=)`-decorated pure functions (`services/__init__.py:20`).
 - **`common/`** - pydantic-settings config.
   - `global_config.yaml` - base; `<name>.yaml` - split configs loaded as root key `<name>`
@@ -108,9 +108,11 @@ global_config.OPENAI_API_KEY  # secrets from .env
 from utils.llm.dspy_inference import DSPYInference
 import dspy
 
+
 class MySignature(dspy.Signature):
     input_field: str = dspy.InputField()
     output_field: str = dspy.OutputField()
+
 
 inf_module = DSPYInference(pred_signature=MySignature, observe=True)
 result = await inf_module.run(input_field="value")
@@ -121,6 +123,7 @@ result = await inf_module.run(input_field="value")
 ```python
 from tests.test_template import TestTemplate
 from tests.conftest import slow_test, nondeterministic_test
+
 
 class TestMyFeature(TestTemplate):
     def test_something(self):
@@ -186,13 +189,14 @@ don't.
 from mcp_server.enhancers import enhance
 from mcp_server.enhancers.base import EnhancedTool
 
+
 @enhance("my_service", fallback="headless")
 async def my_enhanced(tool: EnhancedTool[MyInput, MyOutput]) -> MyOutput:
     result = tool.call()
     if tool.can_elicit:
         ...  # await tool.elicit(...)
     if tool.can_show_app:
-        tool.send_app("ui://mymcp/my_dashboard")
+        tool.send_app("ui://daysurface/my_dashboard")
     return result
 ```
 

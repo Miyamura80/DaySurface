@@ -77,7 +77,7 @@ class TestMCPServer(TestTemplate):
             meta = tools[name].meta
             assert meta is not None, f"{name} missing _meta"
             uri = meta["ui"]["resourceUri"]
-            assert uri.startswith("ui://mymcp/"), f"{name} bad resourceUri: {uri}"
+            assert uri.startswith("ui://daysurface/"), f"{name} bad resourceUri: {uri}"
             # Deprecated flat key kept for legacy host compat.
             assert meta["ui/resourceUri"] == uri
 
@@ -168,8 +168,8 @@ class TestMCPServerIntegration(TestTemplate):
         uris = {str(r.uri) for r in resources}
         # gmail_composer / gmail_inbox apps are added in later phases; here we
         # only assert that whatever ui:// resources are registered serve HTML.
-        ui_uris = [u for u in uris if u.startswith("ui://mymcp/")]
-        assert ui_uris, "expected at least one ui://mymcp/ resource registered"
+        ui_uris = [u for u in uris if u.startswith("ui://daysurface/")]
+        assert ui_uris, "expected at least one ui://daysurface/ resource registered"
         for uri in ui_uris:
             contents = list(asyncio.run(mcp.read_resource(uri)))
             assert len(contents) == 1
@@ -182,10 +182,12 @@ class TestMCPServerIntegration(TestTemplate):
         test_mcp = FastMCP("test_stub")
         missing = Path("/nonexistent/test_app/dist/mcp-app.html")
         _register_app_resource(
-            test_mcp, "ui://mymcp/test_stub_app", missing, "test_stub_app"
+            test_mcp, "ui://daysurface/test_stub_app", missing, "test_stub_app"
         )
 
-        contents = list(asyncio.run(test_mcp.read_resource("ui://mymcp/test_stub_app")))
+        contents = list(
+            asyncio.run(test_mcp.read_resource("ui://daysurface/test_stub_app"))
+        )
         assert len(contents) == 1
         text = str(contents[0].content)
         assert text.startswith("<!--")

@@ -15,7 +15,7 @@
     }
   ],
   "final": "The document is ready for your signature - please review and sign it.",
-  "app_uri": "ui://mymcp/pdf_signer",
+  "app_uri": "ui://daysurface/pdf_signer",
   "expect": {
     "tool_called": "pdf_request_signature",
     "round_trip": true,

@@ -86,7 +86,7 @@ Spec of edge cases for the MCP UI layer (enhancers, elicitation, MCP Apps, rich 
 | ID | Scenario | Expected behavior |
 |---|---|---|
 | TT1 | Unit-testing an enhancer | Use `MockContext` helper. Stub `session.check_client_capability` and `session.elicit`. Don't try to mock `RequestContext` - too deep. |
-| TT2 | E2E-testing the dashboard | Out of scope this PR. See [#37](https://github.com/Miyamura80/MCP-Template/issues/37) (Sunpeak) and the future Desktest follow-up. |
+| TT2 | E2E-testing the dashboard | Out of scope this PR. See issue #37 (Sunpeak) and the future Desktest follow-up. |
 | TT3 | Existing `tests/test_mcp_server.py` after `outputSchema` change | Registry-only assertions - no behavioral break. Add a check that enhanced tools are still listed. |
 
 ## Out of scope (intentionally)
@@ -94,6 +94,6 @@ Spec of edge cases for the MCP UI layer (enhancers, elicitation, MCP Apps, rich 
 - **Resources / Prompts** - no enhancer support; existing FastMCP primitives only
 - **Sampling** - not used by any enhancer in this PR
 - **Tasks (SEP-1686)** - long-running ops, separate work
-- **Real MCP host integration tests** - see [#37](https://github.com/Miyamura80/MCP-Template/issues/37)
+- **Real MCP host integration tests** - see issue #37
 - **Visual regression tests** - premature on a churning UI
 - **Hard LLM/app tool isolation via separate FastMCP servers** - visibility convention is good enough for now

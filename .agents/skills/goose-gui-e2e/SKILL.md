@@ -24,7 +24,7 @@ build under `$E2E_HOME/goose_src` is repo-agnostic and shared with it.
         ▼
    mock LLM ──emits webhook_settings──► Goose desktop GUI ──/mcp──► template server
    (scenario engine)                    (Electron, real)            (FastMCP + enhancer
-        ▲                                     │  renders ui://       attaches ui://mymcp/settings)
+        ▲                                     │  renders ui://       attaches ui://daysurface/settings)
         │                                     ▼
         └──────────────────────────  sandboxed iframe (Settings app)
                                              │
@@ -80,7 +80,7 @@ A scenario is JSON in `scripts/scenarios/<name>.json`:
   "prompt": "Open my settings.",
   "plan": [ { "match": "webhook_settings" } ],
   "final": "Opened your settings.",
-  "app_uri": "ui://mymcp/settings",
+  "app_uri": "ui://daysurface/settings",
   "expect": {
     "tool_called": "webhook_settings",
     "round_trip": true,
@@ -96,8 +96,8 @@ A scenario is JSON in `scripts/scenarios/<name>.json`:
   not exact). A plan step may carry `"args"` (e.g. `{"match": "gmail_get_thread",
   "args": {"thread_id": "t-1001"}}`) which the mock passes through as the tool
   call's arguments. Pick an **app-returning** tool: `webhook_settings` →
-  `ui://mymcp/settings` renders offline with zero external deps, and
-  `gmail_get_thread` → `ui://mymcp/gmail_inbox` renders offline **because the
+  `ui://daysurface/settings` renders offline with zero external deps, and
+  `gmail_get_thread` → `ui://daysurface/gmail_inbox` renders offline **because the
   stack sets `GMAIL_FAKE_BACKEND=1`** (see below).
 - `expect` - checked by `mcp_probe.py`: `tool_called` + `round_trip` (from the
   tool-call log) and `app_rendered` + `dom_contains` (from the rendered iframe).
@@ -201,7 +201,7 @@ Baked into the scripts; listed so you recognize them if something drifts:
 | `setup.sh` | one-time provisioning: build goose, Electron via mirror, pnpm install, dev bundle |
 | `seed.py` | create the e2e SQLite schema + one API key; prints the raw key |
 | `up.sh` / `down.sh` | idempotent stack bring-up / teardown |
-| `configure_goose.sh` | write Goose config for `mock`/`real`, wiring the `mymcp` extension at `/mcp` |
+| `configure_goose.sh` | write Goose config for `mock`/`real`, wiring the `daysurface` extension at `/mcp` |
 | `mock_llm.py` | scenario-engine mock LLM (follows the plan, logs tool calls) |
 | `pw_scenario.mjs` | Playwright-Electron driver + rendered-iframe DOM assertion |
 | `mcp_probe.py` | assertion oracle - rendered iframe (`pw_result`) + tool round-trip (`toolcalls.jsonl`) |

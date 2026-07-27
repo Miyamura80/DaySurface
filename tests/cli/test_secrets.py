@@ -7,7 +7,12 @@ import keyring.errors
 from typer.testing import CliRunner
 
 from src.cli.app import _register_builtin_commands, _register_user_commands, app
-from src.cli.commands.secrets import _SERVICE_NAME, _mask_value
+from src.cli.commands.secrets import (
+    _KEYS_META,
+    _LEGACY_SERVICE_NAMES,
+    _SERVICE_NAME,
+    _mask_value,
+)
 from tests.test_template import TestTemplate
 
 runner = CliRunner()
@@ -256,6 +261,95 @@ class TestSecrets(TestTemplate):
             assert result.exit_code == 0
             assert "EXP_KEY=" in result.output
             assert "exp_value_1234" not in result.output
+
+    def test_get_falls_back_to_legacy_service(self):
+        # Secrets stored under the pre-rename keyring service must stay
+        # readable, or an existing keyring looks empty after the rename.
+        fake = FakeKeyring()
+        legacy = _LEGACY_SERVICE_NAMES[0]
+        fake.store[(legacy, "OLD_KEY")] = "old_value_1234"
+        with ExitStack() as stack:
+            _apply_patches(stack, fake)
+            result = runner.invoke(app, ["secrets", "get", "OLD_KEY", "--reveal"])
+            assert result.exit_code == 0
+            assert "old_value_1234" in result.output
+
+    def test_list_and_export_include_legacy_keys(self):
+        fake = FakeKeyring()
+        legacy = _LEGACY_SERVICE_NAMES[0]
+        fake.store[(legacy, "OLD_KEY")] = "old_value_1234"
+        fake.store[(legacy, _KEYS_META)] = '["OLD_KEY"]'
+        with ExitStack() as stack:
+            _apply_patches(stack, fake)
+            listing = runner.invoke(app, ["secrets", "list"])
+            assert listing.exit_code == 0
+            assert "OLD_KEY" in listing.output
+
+            export = runner.invoke(app, ["secrets", "export", "--reveal"])
+            assert export.exit_code == 0
+            assert "OLD_KEY=old_value_1234" in export.output
+
+    def test_set_writes_only_to_current_service(self):
+        # Writes must not go back into the legacy namespace.
+        fake = FakeKeyring()
+        legacy = _LEGACY_SERVICE_NAMES[0]
+        with ExitStack() as stack:
+            _apply_patches(stack, fake)
+            runner.invoke(app, ["secrets", "set", "NEW_KEY", "v"])
+            assert (_SERVICE_NAME, "NEW_KEY") in fake.store
+            assert (legacy, "NEW_KEY") not in fake.store
+
+    def test_delete_clears_legacy_namespace(self):
+        # Deleting must clear every namespace, else the legacy read fallback
+        # would still resolve the key after a "successful" delete.
+        fake = FakeKeyring()
+        legacy = _LEGACY_SERVICE_NAMES[0]
+        fake.store[(legacy, "OLD_KEY")] = "old_value_1234"
+        fake.store[(legacy, _KEYS_META)] = '["OLD_KEY"]'
+        with ExitStack() as stack:
+            _apply_patches(stack, fake)
+            result = runner.invoke(app, ["secrets", "delete", "OLD_KEY"])
+            assert result.exit_code == 0
+            assert "Deleted" in result.output
+            assert (legacy, "OLD_KEY") not in fake.store
+
+            gone = runner.invoke(app, ["secrets", "get", "OLD_KEY"])
+            assert gone.exit_code == 1
+            listing = runner.invoke(app, ["secrets", "list"])
+            assert "OLD_KEY" not in listing.output
+
+    def test_delete_surfaces_legacy_backend_failure(self):
+        # A legacy backend that fails the delete while the value is still
+        # present must not be reported as a successful delete - the read
+        # fallback would go on resolving the key.
+        fake = FakeKeyring()
+        legacy = _LEGACY_SERVICE_NAMES[0]
+        fake.store[(legacy, "OLD_KEY")] = "old_value_1234"
+
+        def failing_delete(service: str, key: str) -> None:
+            if service == legacy:
+                raise keyring.errors.PasswordDeleteError("backend failure")
+            fake.delete_password(service, key)
+
+        with ExitStack() as stack:
+            stack.enter_context(
+                patch(
+                    "src.cli.commands.secrets.keyring.get_password", fake.get_password
+                )
+            )
+            stack.enter_context(
+                patch(
+                    "src.cli.commands.secrets.keyring.set_password", fake.set_password
+                )
+            )
+            stack.enter_context(
+                patch(
+                    "src.cli.commands.secrets.keyring.delete_password", failing_delete
+                )
+            )
+            result = runner.invoke(app, ["secrets", "delete", "OLD_KEY"])
+            assert result.exit_code != 0
+            assert fake.store[(legacy, "OLD_KEY")] == "old_value_1234"
 
     def test_mask_value_short(self):
         assert _mask_value("abc") == "***"

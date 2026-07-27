@@ -111,7 +111,7 @@ class TestSettingsAppWiring(TestTemplate):
         # Trigger tool advertises the app so hosts can pre-fetch it.
         ws = by_name["webhook_settings"]
         meta = getattr(ws, "meta", None) or getattr(ws, "_meta", None) or {}
-        assert meta.get("ui", {}).get("resourceUri") == "ui://mymcp/settings"
+        assert meta.get("ui", {}).get("resourceUri") == "ui://daysurface/settings"
 
         # Guarded app-only tools the iframe calls.
         for name in (
@@ -123,7 +123,7 @@ class TestSettingsAppWiring(TestTemplate):
             assert name in by_name, f"missing app-tool {name}"
 
         # The app resource is registered.
-        assert "ui://mymcp/settings" in {str(r.uri) for r in resources}
+        assert "ui://daysurface/settings" in {str(r.uri) for r in resources}
 
 
 class TestAppToolUserGuard(TestTemplate):

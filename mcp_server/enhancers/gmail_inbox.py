@@ -15,7 +15,7 @@ from models.gmail import (
     GmailThread,
 )
 
-APP_URI = "ui://mymcp/gmail_inbox"
+APP_URI = "ui://daysurface/gmail_inbox"
 
 
 @enhance("gmail_curate_inbox", fallback="headless", app_uri=APP_URI)

@@ -1,11 +1,11 @@
 ---
-name: gmail-mcp
-description: Triage and curate a Gmail inbox by connecting to the GmailMCP server over MCP and calling its typed tools.
+name: daysurface
+description: Triage and curate a Gmail inbox by connecting to the DaySurface server over MCP and calling its typed tools.
 ---
 
-# GmailMCP
+# DaySurface
 
-GmailMCP is a Model Context Protocol (MCP) server. Use it to rank, triage, and
+DaySurface is a Model Context Protocol (MCP) server. Use it to rank, triage, and
 draft replies for a Gmail inbox. The same tools are also reachable over a CLI
 and a plain HTTP API; behaviour is identical across all three transports.
 
@@ -13,9 +13,9 @@ and a plain HTTP API; behaviour is identical across all three transports.
 
 Add the MCP server to your client, then discover its tools.
 
-- Endpoint (streamable HTTP): `https://mcp.gmailmcp.com/mcp`
-- Server name: `gmail-mcp`
-- Discovery metadata: `https://gmailmcp.com/.well-known/mcp.json`
+- Endpoint (streamable HTTP): `https://mcp.daysurface.com/mcp`
+- Server name: `daysurface`
+- Discovery metadata: `https://daysurface.com/.well-known/mcp.json`
 
 ## Use
 
@@ -40,6 +40,6 @@ Add the MCP server to your client, then discover its tools.
 
 ## Learn more
 
-- Full description for LLMs: `https://gmailmcp.com/llms-full.txt`
-- Human documentation: `https://gmailmcp.com/docs`
-- Source code: `https://github.com/Miyamura80/MCP-Template`
+- Full description for LLMs: `https://daysurface.com/llms-full.txt`
+- Human documentation: `https://daysurface.com/docs`
+- Source code: `https://github.com/Miyamura80/DaySurface`

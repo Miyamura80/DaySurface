@@ -26,7 +26,7 @@ _register_user_commands()
 class TestSecurityURLs(TestTemplate):
     def test_snyk_advisor_url_default(self):
         url = get_snyk_advisor_url()
-        assert url == "https://snyk.io/advisor/python/mcp-template"
+        assert url == "https://snyk.io/advisor/python/daysurface"
 
     def test_snyk_advisor_url_custom(self):
         url = get_snyk_advisor_url("my-package")
@@ -34,7 +34,7 @@ class TestSecurityURLs(TestTemplate):
 
     def test_snyk_security_url_default(self):
         url = get_snyk_security_url()
-        assert url == "https://security.snyk.io/package/pip/mcp-template"
+        assert url == "https://security.snyk.io/package/pip/daysurface"
 
     def test_snyk_security_url_custom(self):
         url = get_snyk_security_url("my-package")
@@ -42,7 +42,7 @@ class TestSecurityURLs(TestTemplate):
 
     def test_socket_url_default(self):
         url = get_socket_url()
-        assert url == "https://socket.dev/pypi/package/mcp-template"
+        assert url == "https://socket.dev/pypi/package/daysurface"
 
     def test_socket_url_custom(self):
         url = get_socket_url("my-package")

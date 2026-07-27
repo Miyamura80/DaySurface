@@ -1,6 +1,6 @@
 ---
 /**
- * Reusable comparison matrix. Renders the GmailMCP column (always highlighted)
+ * Reusable comparison matrix. Renders the DaySurface column (always highlighted)
  * next to one or more competitor columns. Pass the subset of competitors to
  * show as columns - the /compare hub passes all of them, each /vs page passes
  * just one.
@@ -35,7 +35,7 @@ const MARK: Record<MatrixCell["state"], { glyph: string; cls: string; label: str
           scope="col"
           class="border-x-2 border-accent bg-accent/10 px-4 py-4 align-bottom text-sm font-bold text-fg"
         >
-          GmailMCP
+          DaySurface
         </th>
         {
           competitors.map((c) => (

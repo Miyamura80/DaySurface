@@ -1,11 +1,11 @@
-# mcp-template
+# DaySurface
 
 <p align="center">
   <img src="media/banner.png" alt="2" width="400">
 </p>
 
 <p align="center">
-<b>Batteries-included Python template. One codebase ships as a CLI, an MCP server, and an HTTP API over a shared service registry.</b>
+<b>An MCP server for Gmail. One codebase ships as a CLI, an MCP server, and an HTTP API over a shared service registry.</b>
 </p>
 
 <p align="center">
@@ -20,17 +20,17 @@
 </p>
 
 <p align="center">
-  <a href="https://railway.com/deploy/gmailmcp"><img alt="Deploy on Railway" src="https://railway.com/button.svg" height="32"></a>
+  <a href="https://railway.com/deploy/daysurface"><img alt="Deploy on Railway" src="https://railway.com/button.svg" height="32"></a>
   &nbsp;
-  <a href="https://render.com/deploy?repo=https://github.com/Miyamura80/MCP-Template"><img alt="Deploy to Render" src="https://render.com/images/deploy-to-render-button.svg" height="32"></a>
+  <a href="https://render.com/deploy?repo=https://github.com/Miyamura80/DaySurface"><img alt="Deploy to Render" src="https://render.com/images/deploy-to-render-button.svg" height="32"></a>
 </p>
 
 <p align="center">
-  <img alt="Project Version" src="https://img.shields.io/badge/dynamic/toml?url=https%3A%2F%2Fraw.githubusercontent.com%2FMiyamura80%2FMCP-Template%2Fmain%2Fpyproject.toml&query=%24.project.version&label=version&color=blue">
-  <img alt="Python Version" src="https://img.shields.io/badge/dynamic/toml?url=https%3A%2F%2Fraw.githubusercontent.com%2FMiyamura80%2FMCP-Template%2Fmain%2Fpyproject.toml&query=%24.project['requires-python']&label=python&logo=python&color=blue">
-  <img alt="GitHub repo size" src="https://img.shields.io/github/repo-size/Miyamura80/MCP-Template">
-  <img alt="GitHub Actions Workflow Status" src="https://img.shields.io/github/actions/workflow/status/Miyamura80/MCP-Template/a_test_target_tests.yml?branch=main">
-  <a href="https://skills.sh/Miyamura80/MCP-Template"><img alt="skills.sh" src="https://skills.sh/b/Miyamura80/MCP-Template"></a>
+  <img alt="Project Version" src="https://img.shields.io/badge/dynamic/toml?url=https%3A%2F%2Fraw.githubusercontent.com%2FMiyamura80%2FDaySurface%2Fmain%2Fpyproject.toml&query=%24.project.version&label=version&color=blue">
+  <img alt="Python Version" src="https://img.shields.io/badge/dynamic/toml?url=https%3A%2F%2Fraw.githubusercontent.com%2FMiyamura80%2FDaySurface%2Fmain%2Fpyproject.toml&query=%24.project['requires-python']&label=python&logo=python&color=blue">
+  <img alt="GitHub repo size" src="https://img.shields.io/github/repo-size/Miyamura80/DaySurface">
+  <img alt="GitHub Actions Workflow Status" src="https://img.shields.io/github/actions/workflow/status/Miyamura80/DaySurface/a_test_target_tests.yml?branch=main">
+  <a href="https://skills.sh/Miyamura80/DaySurface"><img alt="skills.sh" src="https://skills.sh/b/Miyamura80/DaySurface"></a>
 
 </p>
 
@@ -41,22 +41,22 @@
 > Copy and paste this into your AI coding agent (Claude Code, Cursor, Copilot, etc.) to install:
 
 ```text
-Install the CLI and download the gmail-mcp skill:
+Install the CLI and download the daysurface skill:
 
-pip install mcp-template
+pip install daysurface
 
-curl -fsSL https://raw.githubusercontent.com/Miyamura80/MCP-Template/main/scripts/install-skills.sh -o install-skills.sh
+curl -fsSL https://raw.githubusercontent.com/Miyamura80/DaySurface/main/scripts/install-skills.sh -o install-skills.sh
 bash install-skills.sh && rm install-skills.sh
 ```
 
-The official **gmail-mcp** agent skill is self-published on
-[skills.sh](https://skills.sh/Miyamura80/MCP-Template). Install it directly with:
+The official **daysurface** agent skill is self-published on
+[skills.sh](https://skills.sh/Miyamura80/DaySurface). Install it directly with:
 
 ```bash
-npx skills add Miyamura80/MCP-Template
+npx skills add Miyamura80/DaySurface
 ```
 
-The skill's source of truth lives in [`skills/gmail-mcp/SKILL.md`](skills/gmail-mcp/SKILL.md);
+The skill's source of truth lives in [`skills/daysurface/SKILL.md`](skills/daysurface/SKILL.md);
 `make sync-skills` mirrors it to the landing page's
 `/.well-known/agent-skills/` discovery tree (digest-pinned in `index.json`).
 
@@ -122,14 +122,12 @@ See [`mcp_server/MCP_UI_ARCHITECTURE.md`](mcp_server/MCP_UI_ARCHITECTURE.md) for
 ## Quick Start
 
 ```bash
-make onboard              # interactive setup (rename, deps, env, hooks)
-uv sync                   # install deps
-uv run mymcp --help       # see all CLI commands
-uv run mymcp greet Alice  # run a command
-uv run mymcp init my_command  # scaffold a new command
+uv sync                        # install deps
+uv run daysurface --help       # see all CLI commands
+uv run daysurface greet Alice  # run a command
 
-uv run mymcp-serve        # start the server (HTTP API + MCP at /mcp on one port)
-uv run mymcp-mcp          # legacy: stdio MCP only, for local Claude Desktop / dev
+uv run daysurface-serve   # start the server (HTTP API + MCP at /mcp on one port)
+uv run daysurface-mcp     # legacy: stdio MCP only, for local Claude Desktop / dev
 ```
 
 ## Deploy
@@ -150,9 +148,9 @@ Global flags go **before** the subcommand:
 | `--version` | `-V` | Print version and exit |
 
 ```bash
-uv run mymcp --format json config show     # JSON output
-uv run mymcp --dry-run greet Bob           # preview without executing
-uv run mymcp --verbose greet Alice         # detailed output
+uv run daysurface --format json config show     # JSON output
+uv run daysurface --dry-run greet Bob           # preview without executing
+uv run daysurface --verbose greet Alice         # detailed output
 ```
 
 ## Adding Commands
@@ -166,13 +164,14 @@ Drop a Python file in `src/cli/commands/` and it is auto-discovered.
 from typing import Annotated
 import typer
 
+
 def main(name: Annotated[str, typer.Argument(help="Who to greet.")]) -> None:
     """Say hello."""
     typer.echo(f"Hello, {name}!")
 ```
 
 ```bash
-uv run mymcp hello World   # Hello, World!
+uv run daysurface hello World   # Hello, World!
 ```
 
 **Subcommand group** - export `app = typer.Typer()`:
@@ -183,6 +182,7 @@ import typer
 
 app = typer.Typer()
 
+
 @app.command()
 def migrate() -> None:
     """Run migrations."""
@@ -190,10 +190,8 @@ def migrate() -> None:
 ```
 
 ```bash
-uv run mymcp db migrate
+uv run daysurface db migrate
 ```
-
-Or scaffold with: `uv run mymcp init my_command --desc "Does something"`.
 
 ## Configuration
 
@@ -210,9 +208,9 @@ global_config.OPENAI_API_KEY
 CLI config inspection:
 
 ```bash
-uv run mymcp config show                           # full config
-uv run mymcp config get llm_config.cache_enabled   # single value
-uv run mymcp config set logging.verbose false      # write override
+uv run daysurface config show                           # full config
+uv run daysurface config get llm_config.cache_enabled   # single value
+uv run daysurface config set logging.verbose false      # write override
 ```
 
 [Full configuration docs](manual_docs/configuration.md)
@@ -230,8 +228,8 @@ This software uses the following tools:
 
 ## About the Core Contributors
 
-<a href="https://github.com/Miyamura80/MCP-Template/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=Miyamura80/MCP-Template" />
+<a href="https://github.com/Miyamura80/DaySurface/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=Miyamura80/DaySurface" />
 </a>
 
 Made with [contrib.rocks](https://contrib.rocks).

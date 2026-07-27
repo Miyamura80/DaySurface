@@ -26,7 +26,7 @@ llm_config:
 ask:
   enabled: false
   corpus_path: docs/content/docs
-  docs_base_url: https://docs.gmailmcp.com
+  docs_base_url: https://docs.daysurface.com
   top_k: 5
   rate_limit_per_minute: 20
 
@@ -125,14 +125,14 @@ server:
 # deployed endpoint URL is NOT set here - it comes from MCP_PUBLIC_URL so the
 # card and OAuth resource metadata stay in lockstep.
 branding:
-  name: "io.github.Miyamura80/MCP-Template"   # reverse-DNS registry id (one slash)
-  title: "GmailMCP"                            # human-readable display name
-  description: "Give your AI agent real tools - one service registry over CLI, MCP, and HTTP."
-  website_url: "https://gmailmcp.com"
-  repository_url: "https://github.com/Miyamura80/MCP-Template"
+  name: "io.github.Miyamura80/DaySurface"   # reverse-DNS registry id (one slash)
+  title: "DaySurface"                            # human-readable display name
+  description: "Rank, triage, and draft replies for a Gmail inbox - over MCP, CLI, and HTTP."
+  website_url: "https://daysurface.com"
+  repository_url: "https://github.com/Miyamura80/DaySurface"
   repository_source: "github"
   icons:
-    - src: "https://gmailmcp.com/favicon.svg"
+    - src: "https://daysurface.com/favicon.svg"
       mime_type: "image/svg+xml"
       sizes: ["any"]
 

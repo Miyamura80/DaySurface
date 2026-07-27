@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Scenario-driven OpenAI-compatible mock LLM for Goose e2e tests (MCP-Template).
+"""Scenario-driven OpenAI-compatible mock LLM for Goose e2e tests (DaySurface).
 
 Ported from Edison-Watch's harness and simplified: this template's /mcp mount has
 no session-token handshake, so the mock just follows a declared tool-call plan.
