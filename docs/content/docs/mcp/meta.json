@@ -1,0 +1,13 @@
+{
+  "title": "MCP Server",
+  "pages": [
+    "index",
+    "setup",
+    "claude-web-cowork",
+    "chatgpt",
+    "oauth",
+    "tools",
+    "pdf-forms",
+    "debugging"
+  ]
+}

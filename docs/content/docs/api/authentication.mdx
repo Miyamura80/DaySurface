@@ -1,0 +1,105 @@
+---
+title: Authentication
+description: API keys, scopes, and access control
+---
+
+## API Key Authentication
+
+Include your API key in the `Authorization` header:
+
+```bash
+curl -H "Authorization: Bearer sk_live_..." \
+  http://localhost:8000/api/v1/auth/me
+```
+
+```json
+{
+  "user_id": "user_01abc",
+  "email": "user@example.com",
+  "auth_method": "api_key"
+}
+```
+
+Enterprise SSO via WorkOS is also supported.
+
+## Managing API Keys
+
+### Create a key
+
+```bash
+curl -X POST http://localhost:8000/api/v1/auth/api-keys \
+  -H "Authorization: Bearer sk_live_..." \
+  -H "Content-Type: application/json" \
+  -d '{"name": "my-integration", "scope_template": "standard", "expires_in_days": 90}'
+```
+
+Use a scope template for common permission sets:
+
+| Template | What it allows |
+|----------|---------------|
+| `read_only` | Read config and billing info |
+| `standard` | Read + execute tools + manage billing |
+| `admin` | Everything |
+
+Or provide explicit scopes:
+
+```json
+{ "name": "limited-key", "scopes": ["services:read", "services:execute"] }
+```
+
+### List your keys
+
+The endpoint is cursor-paginated. Pass `limit` (1-100, default 20) and follow
+`next_cursor` until `has_more` is `false`:
+
+```bash
+curl -H "Authorization: Bearer sk_live_..." \
+  "http://localhost:8000/api/v1/auth/api-keys?limit=20"
+```
+
+```json
+{
+  "items": [
+    { "id": 42, "key_prefix": "sk_live_ab", "name": "my-integration", "revoked": false }
+  ],
+  "next_cursor": "eyJjIjoiMjAyNS0wMS0xNVQxMDozMDowMCswMDowMCIsImkiOjQyfQ",
+  "has_more": true
+}
+```
+
+Fetch the next page by passing the cursor back verbatim (treat it as opaque):
+
+```bash
+curl -H "Authorization: Bearer sk_live_..." \
+  "http://localhost:8000/api/v1/auth/api-keys?cursor=eyJjIjoiMjAyNS0wMS0xNVQxMDozMDowMCswMDowMCIsImkiOjQyfQ"
+```
+
+Cursor pagination (rather than `offset`/`page`) avoids duplicate rows under
+concurrent writes and offset drift. It does not provide a point-in-time
+snapshot, so keys created after the walk starts can still be missed by a later
+page fetch. Pass the same `limit` value on each request until `has_more` is
+`false`.
+
+### Revoke a key
+
+```bash
+curl -X DELETE -H "Authorization: Bearer sk_live_..." \
+  http://localhost:8000/api/v1/auth/api-keys/{key_id}
+```
+
+## Scopes
+
+Each API key has scopes that control what it can do:
+
+| Scope | Description |
+|-------|-------------|
+| `services:read` | Read tool metadata |
+| `services:execute` | Call tool endpoints |
+| `billing:read` | View usage and subscription info |
+| `billing:write` | Report usage |
+| `admin:read` | Read admin data |
+| `admin:write` | Admin operations |
+
+Wildcards: `*` grants all scopes, `services:*` grants all service scopes.
+
+A new key's scopes cannot exceed the creating key's scopes (no privilege escalation).

@@ -1,0 +1,59 @@
+---
+title: MCP Template
+description: One codebase, three interfaces - CLI, MCP server, and REST API over a shared service registry.
+---
+
+import { Terminal, Bot, Globe, Rocket, Ship } from 'lucide-react';
+
+Write your logic once as a pure service, and MCP Template exposes it everywhere -
+a terminal command, an MCP connection for AI assistants like Claude, and an
+authenticated HTTP API. Same behavior, three transports, no duplication.
+
+<Cards>
+  <Card
+    icon={<Rocket />}
+    title="Quick Start"
+    href="/docs/quickstart"
+    description="Install the template and run your first command in under a minute."
+  />
+</Cards>
+
+## Choose your interface
+
+<Cards>
+  <Card
+    icon={<Terminal />}
+    title="CLI"
+    href="/docs/cli"
+    description="Run commands in your terminal with the mymcp binary."
+  />
+  <Card
+    icon={<Bot />}
+    title="MCP Server"
+    href="/docs/mcp"
+    description="Connect AI assistants like Claude directly over MCP."
+  />
+  <Card
+    icon={<Globe />}
+    title="REST API"
+    href="/docs/api"
+    description="Call authenticated HTTP endpoints from any client."
+  />
+</Cards>
+
+## Deploy it
+
+<Cards>
+  <Card
+    icon={<Ship />}
+    title="Deployment"
+    href="/docs/deployment"
+    description="Run the full server on your own infrastructure."
+  />
+</Cards>
+
+## Licensing & pricing
+
+MCP Template is open source under the [MIT license](https://github.com/Miyamura80/MCP-Template/blob/main/LICENSE) - free to use, modify, and self-host forever, with **no setup fee and no license cost**. The full server runs on your own infrastructure.
+
+Optional managed hosting and team support are available as paid tiers (hosted deployment, monitoring, SSO/audit logs, SLA, and commercial/OEM licensing). The full breakdown lives on the product landing page, with a machine-readable manifest at `/pricing.md` for agents comparing options.

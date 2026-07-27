@@ -1,0 +1,106 @@
+---
+import { faq } from "../config/landing";
+
+const VISIBLE = 5;
+const extraCount = Math.max(0, faq.items.length - VISIBLE);
+---
+
+<section id="faq" class="scroll-mt-20 border-t border-border/60 py-24">
+  <div class="mx-auto max-w-3xl px-6">
+    <h2 class="text-center text-3xl font-bold tracking-tight sm:text-4xl">
+      {faq.heading}
+    </h2>
+
+    <div class="mt-12 divide-y divide-border border-2 border-border bg-surface-1" data-faq-list>
+      {
+        faq.items.map((item, i) => (
+          <details class="group px-6" data-faq-extra={i >= VISIBLE ? "true" : undefined}>
+            <summary
+              class="flex cursor-pointer list-none items-center justify-between py-5 font-medium"
+            >
+              {item.q}
+              <svg
+                class="size-5 shrink-0 text-fg-muted transition-transform group-open:rotate-45"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                aria-hidden="true"
+              >
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+            </summary>
+            <p class="pb-5 text-pretty leading-relaxed text-fg-muted">
+              {item.a}
+            </p>
+          </details>
+        ))
+      }
+    </div>
+
+    {
+      extraCount > 0 && (
+        <div class="mt-6 text-center">
+          <button
+            type="button"
+            data-faq-toggle
+            data-extra-count={extraCount}
+            hidden
+            class="inline-flex items-center gap-2 border border-accent/40 px-5 py-2.5 font-medium text-fg-muted transition hover:border-accent hover:bg-surface-1 hover:text-fg"
+          >
+            <span data-faq-toggle-label>Load {extraCount} more FAQ</span>
+            <svg
+              class="size-4 text-fg-muted transition-transform"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+              data-faq-toggle-chevron
+            >
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+          </button>
+        </div>
+      )
+    }
+  </div>
+</section>
+
+<script>
+  function initFaq() {
+    document.querySelectorAll<HTMLElement>("[data-faq-list]").forEach((list) => {
+      const extras = list.querySelectorAll<HTMLElement>("[data-faq-extra]");
+      const section = list.closest("section");
+      const toggle = section?.querySelector<HTMLButtonElement>("[data-faq-toggle]");
+      const label = toggle?.querySelector<HTMLElement>("[data-faq-toggle-label]");
+      const chevron = toggle?.querySelector<HTMLElement>("[data-faq-toggle-chevron]");
+      if (!extras.length || !toggle || !label) return;
+
+      const count = toggle.dataset.extraCount ?? String(extras.length);
+      let expanded = false;
+
+      // Enhance: hide the overflow questions and reveal the toggle.
+      const apply = () => {
+        extras.forEach((el) => {
+          el.hidden = !expanded;
+        });
+        label.textContent = expanded ? "Show fewer FAQ" : `Load ${count} more FAQ`;
+        chevron?.classList.toggle("rotate-180", expanded);
+      };
+      toggle.hidden = false;
+      apply();
+
+      toggle.addEventListener("click", () => {
+        expanded = !expanded;
+        apply();
+      });
+    });
+  }
+
+  initFaq();
+  document.addEventListener("astro:page-load", initFaq);
+</script>

@@ -1,0 +1,23 @@
+# Auto-loaded by the split YAML loader in global_config.py as the "pdf_forms" key.
+# PDF form-filling + user-gated digital signing (see tasks/prd-pdf-forms-digital-signatures.md).
+
+# Max size (decoded bytes) of a PDF accepted into a document session.
+max_document_bytes: 20971520 # 20 MB
+
+# Cap on extracted text-layout lines returned by pdf_open for flat PDFs.
+text_layout_max_lines: 400
+
+# Rasterization settings for render_pages page images.
+render_dpi: 110
+render_max_pages: 4
+
+# Age (hours) after which unexported document sessions may be swept.
+session_ttl_hours: 72
+
+# Server-held sealing certificate (platform seal, DocuSign-style).
+# Leave paths null in dev: a self-signed cert is generated once and cached
+# under dev_cert_dir. Production should point these at a real key pair.
+signing:
+  cert_path: null
+  key_path: null
+  dev_cert_dir: ".pdf_signing"

@@ -1,0 +1,80 @@
+---
+title: Overview
+description: REST API overview, base URL, and quick start
+---
+
+The REST API exposes the same tools available in the CLI and MCP server as authenticated HTTP endpoints.
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+<Callout type="info">
+The API server is available on the `saas` branch. The `main` branch includes the CLI and MCP server only.
+</Callout>
+
+## Base URL
+
+Production:
+
+```
+https://api.gmailmcp.com
+```
+
+Local development:
+
+```
+http://localhost:8000
+```
+
+The API shares one process with the MCP server, so the production host also
+answers at `gmailmcp.com` / `mcp.gmailmcp.com`; `api.gmailmcp.com` is the
+canonical vanity host for REST traffic. The examples below use `localhost`;
+swap in the production base URL to call the deployed API.
+
+## Quick Example
+
+```bash
+curl -X POST http://localhost:8000/api/v1/services/greet \
+  -H "Authorization: Bearer sk_live_..." \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Alice", "shout": true}'
+```
+
+```json
+{ "message": "HELLO, ALICE!", "times": 1 }
+```
+
+## Health Check
+
+No authentication required.
+
+```bash
+curl http://localhost:8000/health
+```
+
+```json
+{
+  "status": "ok",
+  "version": "0.1.1",
+  "commit": "a1b2c3d",
+  "timestamp": "2025-01-15T10:30:00+00:00",
+  "components": {
+    "api": { "status": "ok" },
+    "database": { "status": "ok" },
+    "redis": { "status": "not_configured" },
+    "stripe": { "status": "ok" }
+  }
+}
+```
+
+Status is `"ok"` when all components are healthy, `"degraded"` if any have errors.
+
+## Next Steps
+
+<Cards>
+  <Card title="Tools" href="/docs/api/tools" />
+  <Card title="Authentication" href="/docs/api/authentication" />
+  <Card title="Billing" href="/docs/api/billing" />
+  <Card title="Rate Limits" href="/docs/api/rate-limits" />
+  <Card title="Errors" href="/docs/api/errors" />
+  <Card title="Versioning & Deprecation" href="/docs/api/deprecation" />
+</Cards>

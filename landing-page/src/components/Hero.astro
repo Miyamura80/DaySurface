@@ -1,0 +1,46 @@
+---
+import { hero, site } from "../config/landing";
+import CtaButtons from "./CtaButtons.astro";
+import ChatMock from "./ChatMock.astro";
+---
+
+<section id="top" class="relative overflow-hidden">
+  <div class="grid-bg pointer-events-none absolute inset-0"></div>
+  <div class="glow pointer-events-none absolute inset-x-0 top-0 h-[600px]"></div>
+
+  <div
+    class="relative mx-auto grid max-w-6xl items-center gap-12 px-6 pt-20 pb-20 sm:pt-28 lg:grid-cols-2 lg:gap-10"
+  >
+    <!-- Left: copy -->
+    <div class="text-center lg:text-left">
+      {
+        hero.eyebrow && (
+          <a
+            href={site.githubUrl}
+            class="mb-6 inline-flex items-center gap-2 border border-accent/50 bg-surface-1 px-4 py-1.5 font-mono text-xs font-medium uppercase tracking-widest text-fg-muted transition hover:bg-surface-2 hover:text-accent"
+          >
+            <span class="size-1.5 bg-accent" />
+            {hero.eyebrow}
+          </a>
+        )
+      }
+
+      <h1 class="text-balance text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
+        {hero.headline}
+      </h1>
+
+      <p
+        class="mx-auto mt-6 max-w-xl text-pretty text-lg leading-relaxed text-fg-muted lg:mx-0"
+      >
+        {hero.subhead}
+      </p>
+
+      <CtaButtons class="mt-9 justify-center lg:justify-start" />
+    </div>
+
+    <!-- Right: chat UI mock rendering the MCP App -->
+    <div class="lg:pl-4">
+      <ChatMock />
+    </div>
+  </div>
+</section>

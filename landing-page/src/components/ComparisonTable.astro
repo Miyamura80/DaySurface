@@ -1,0 +1,89 @@
+---
+/**
+ * Reusable comparison matrix. Renders the GmailMCP column (always highlighted)
+ * next to one or more competitor columns. Pass the subset of competitors to
+ * show as columns - the /compare hub passes all of them, each /vs page passes
+ * just one.
+ */
+import type { Competitor, MatrixRow, MatrixCell } from "../config/landing";
+import { comparison } from "../config/landing";
+
+interface Props {
+  competitors: Competitor[];
+  matrix?: MatrixRow[];
+}
+
+const { competitors, matrix = comparison.matrix } = Astro.props;
+
+// Visual treatment per state. "yes" is the brand cyan win; "partial" is a
+// muted tilde; "no" is a subdued dash so the table reads at a glance.
+const MARK: Record<MatrixCell["state"], { glyph: string; cls: string; label: string }> = {
+  yes: { glyph: "✓", cls: "text-accent", label: "Yes" },
+  partial: { glyph: "~", cls: "text-fg-muted", label: "Partial" },
+  no: { glyph: "–", cls: "text-fg-subtle", label: "No" },
+};
+---
+
+<div class="overflow-x-auto">
+  <table class="w-full min-w-[640px] border-collapse text-left">
+    <thead>
+      <tr class="border-b-2 border-border">
+        <th scope="col" class="py-4 pr-4 align-bottom text-sm font-medium text-fg-muted">
+          Capability
+        </th>
+        <th
+          scope="col"
+          class="border-x-2 border-accent bg-accent/10 px-4 py-4 align-bottom text-sm font-bold text-fg"
+        >
+          GmailMCP
+        </th>
+        {
+          competitors.map((c) => (
+            <th scope="col" class="px-4 py-4 align-bottom text-sm font-semibold text-fg-muted">
+              <a href={`/vs/${c.id}`} class="transition hover:text-fg">
+                {c.name}
+              </a>
+            </th>
+          ))
+        }
+      </tr>
+    </thead>
+    <tbody>
+      {
+        matrix.map((row) => (
+          <tr class="border-b border-border/60 align-top">
+            <th scope="row" class="py-4 pr-4 text-left font-normal">
+              <div class="font-medium text-fg">{row.capability}</div>
+              {row.detail && (
+                <div class="mt-1 text-sm text-fg-muted">{row.detail}</div>
+              )}
+            </th>
+            <td class="border-x-2 border-accent bg-accent/10 px-4 py-4">
+              <span class={`text-lg font-bold ${MARK[row.us.state].cls}`} aria-label={MARK[row.us.state].label}>
+                {MARK[row.us.state].glyph}
+              </span>
+              {row.us.note && (
+                <span class="ml-2 text-sm text-fg-muted">{row.us.note}</span>
+              )}
+            </td>
+            {competitors.map((c) => {
+              const cell = row.cells[c.id] ?? { state: "no" as const };
+              return (
+                <td class="px-4 py-4">
+                  <span class={`text-lg font-bold ${MARK[cell.state].cls}`} aria-label={MARK[cell.state].label}>
+                    {MARK[cell.state].glyph}
+                  </span>
+                  {cell.note && (
+                    <span class="ml-2 text-sm text-fg-subtle">{cell.note}</span>
+                  )}
+                </td>
+              );
+            })}
+          </tr>
+        ))
+      }
+    </tbody>
+  </table>
+</div>
+
+<p class="mt-4 text-xs text-fg-subtle">{comparison.disclaimer}</p>

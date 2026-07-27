@@ -1,0 +1,74 @@
+# Render Blueprint (Infrastructure-as-Code) for the MCP-Template backend.
+# One-click deploy: https://render.com/deploy?repo=https://github.com/Miyamura80/MCP-Template
+# Spec: https://render.com/docs/blueprint-spec
+#
+# Provisions the FastAPI + MCP backend (Docker) plus a managed Postgres DB.
+# The landing page (landing-page/) is deployed separately and is not included.
+#
+# After the first deploy, set MCP_PUBLIC_URL and GOOGLE_REDIRECT_URI to your
+# real Render URL (Render assigns it on first deploy; it can't be known ahead
+# of time), then redeploy. See README "One-click deploy".
+
+databases:
+  - name: mcp-template-db
+    # `free` Postgres expires ~30 days after creation; upgrade to a paid plan
+    # (e.g. basic-256mb) in the dashboard for anything long-lived.
+    plan: free
+    postgresMajorVersion: "17"
+
+services:
+  - type: web
+    name: mcp-template
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free # free web services spin down when idle; upgrade for always-on.
+    region: oregon
+    healthCheckPath: /health
+    # Don't auto-redeploy clones from upstream pushes (recommended for
+    # deploy-button blueprints).
+    autoDeployTrigger: off
+    # Run Alembic migrations, then start uvicorn. Render's preDeployCommand is
+    # not available for Docker services, so migrations run here at startup.
+    dockerCommand: sh -c "uv run -m alembic upgrade head && exec uv run uvicorn api_server.server:app --host 0.0.0.0 --port ${PORT}"
+    envVars:
+      - key: DEV_ENV
+        value: prod
+
+      # --- Wired automatically ---
+      - key: BACKEND_DB_URI
+        fromDatabase:
+          name: mcp-template-db
+          property: connectionString
+      - key: SESSION_SECRET_KEY
+        generateValue: true # strong random value, generated once
+
+      # --- You must provide these at deploy time (sync: false = prompt) ---
+      # WorkOS AuthKit (OAuth 2.1 for the /mcp transport)
+      - key: WORKOS_CLIENT_ID
+        sync: false
+      - key: WORKOS_API_KEY
+        sync: false
+      - key: WORKOS_AUTHKIT_DOMAIN # https://<env>.authkit.app
+        sync: false
+      # Canonical public URL of the /mcp endpoint (RFC 8707 resource id).
+      # Set to https://<your-render-host>/mcp after the first deploy.
+      - key: MCP_PUBLIC_URL
+        sync: false
+
+      # Google OAuth (Gmail)
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      # Set to https://<your-render-host>/api/v1/auth/google/callback after the
+      # first deploy, and add the same URL to your Google OAuth client.
+      - key: GOOGLE_REDIRECT_URI
+        sync: false
+      # Fernet key (url-safe base64, 32 bytes) for refresh-token encryption.
+      # Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+      - key: GOOGLE_TOKEN_ENC_KEY
+        sync: false
+
+      # Optional integrations (LLM keys, Stripe, LangFuse, Telegram, …) are
+      # omitted here to keep the template minimal. Add any you need from the
+      # dashboard; see .env.example for the full list.

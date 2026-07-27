@@ -1,0 +1,40 @@
+---
+/*
+ * "Ask AI about this" - opens an assistant with a pre-filled prompt about the
+ * project. The prompt is URL-encoded into each provider's {q} placeholder at
+ * build time.
+ */
+import { askAi } from "../config/landing";
+
+const links = askAi.providers.map((p) => ({
+  ...p,
+  href: p.url.replace("{q}", encodeURIComponent(askAi.prompt)),
+}));
+---
+
+<section class="border-t border-border/60 py-24">
+  <div class="mx-auto max-w-3xl px-6 text-center">
+    <h2 class="text-3xl font-bold tracking-tight sm:text-4xl">{askAi.heading}</h2>
+    <p class="mx-auto mt-4 max-w-xl text-lg text-fg-muted">{askAi.subhead}</p>
+
+    <div class="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
+      {
+        links.map((p) => (
+          <a
+            href={p.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="group inline-flex w-full items-center justify-center gap-2.5 border border-accent/40 px-5 py-3 font-medium text-fg-muted transition hover:border-accent hover:bg-surface-1 hover:text-fg sm:w-auto"
+          >
+            <span
+              class="size-5 shrink-0 bg-fg-muted transition group-hover:bg-accent"
+              style={`-webkit-mask:url('${p.logo}') center/contain no-repeat;mask:url('${p.logo}') center/contain no-repeat;`}
+              aria-hidden="true"
+            />
+            Ask in {p.name}
+          </a>
+        ))
+      }
+    </div>
+  </div>
+</section>

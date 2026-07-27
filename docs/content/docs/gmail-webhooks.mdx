@@ -1,0 +1,155 @@
+---
+title: Gmail Webhooks
+description: Turn new Gmail messages into signed outbound webhooks via Pub/Sub push
+---
+
+The server can watch a connected Gmail inbox and, when new mail arrives,
+re-emit a **signed outbound webhook** to any endpoints your users subscribe.
+The whole pipeline is **optional and off by default** - it stays dormant until
+you configure a Pub/Sub topic.
+
+## Architecture
+
+```
+      HOP 1 (inbound, optional)                     HOP 2 (outbound, durable)
+ ┌───────────────────────────────────┐      ┌────────────────────────────────────┐
+
+ Gmail ──push──▶ Pub/Sub ──OIDC POST──▶  /api/v1/google/webhook/gmail
+                                             │ 1. verify OIDC JWT (aud + SA email)
+                                             │ 2. dedup on Pub/Sub messageId
+                                             │ 3. to_thread → process_notification
+                                             ▼
+                                    users.history.list (messageAdded)
+                                        │  404 (expired) → messages.list resync
+                                        │  advance forward-only historyId
+                                        ▼
+                              enqueue_event ──▶ webhook_events
+                                                     │  fan-out per active sub
+                                                     ▼
+                                            webhook_deliveries (outbox)
+                                                     │
+        periodic runner (loop or /renew) ───────────┤ drain_due_deliveries
+                                                     │  HMAC sign + POST
+                                                     ▼
+                                    2xx → succeeded   else → backoff retry → failed
+```
+
+The inbound and outbound halves are decoupled by the `webhook_deliveries`
+outbox, so a slow or failing subscriber never blocks Gmail processing.
+
+## Configuration
+
+All keys are optional; leaving `GMAIL_PUBSUB_TOPIC` unset disables the feature.
+
+| Key | Purpose |
+| --- | --- |
+| `GMAIL_PUBSUB_TOPIC` | Fully-qualified Pub/Sub topic, `projects/<p>/topics/<t>` |
+| `GMAIL_PUSH_AUDIENCE` | OIDC `aud` claim required on the push JWT |
+| `GMAIL_PUSH_SA_EMAIL` | Push subscription's service-account email (checked against the token's `email`) |
+| `WEBHOOK_RUNNER_MODE` | `off` (default), `loop` (in-process), or `endpoint` (external cron) |
+| `WEBHOOK_RUNNER_INTERVAL_S` | Seconds between in-process runner ticks (default 30) |
+| `WEBHOOK_RUNNER_TOKEN` | Shared bearer for the internal `/renew` endpoint |
+| `WEBHOOK_MAX_ATTEMPTS` | Delivery attempts before a row is marked `failed` (default 6) |
+
+## GCP setup
+
+These steps happen once in the Google Cloud console and cannot be codified:
+
+1. Create a Pub/Sub **topic**.
+2. Grant `gmail-api-push@system.gserviceaccount.com` the **Pub/Sub Publisher**
+   role on that topic (this is what lets Gmail publish).
+3. Create a **push subscription** whose endpoint is
+   `https://<your-host>/api/v1/google/webhook/gmail`, with **OIDC
+   authentication** enabled using a service account you control.
+4. Set `GMAIL_PUBSUB_TOPIC`, `GMAIL_PUSH_AUDIENCE` (the endpoint URL you
+   configured as the audience), and `GMAIL_PUSH_SA_EMAIL` (that service
+   account).
+
+The Gmail `gmail.modify` scope already granted during OAuth covers
+`users.watch` and `users.history.list` - no re-consent is needed. When push is
+configured, a watch is auto-started (fire-and-forget) as soon as a user
+connects Gmail, and renewed automatically before its ~7-day expiry.
+
+## Self-service: the Settings app
+
+Clients that support MCP Apps get a **Settings panel** (an iframe dashboard) so
+a user can manage everything themselves - no operator, no `curl`. Ask the
+assistant to *"open my settings"* and it calls the `webhook_settings` tool,
+which renders `ui://mymcp/settings`. From there the user can:
+
+- see their Gmail connection + watch status,
+- add an HTTPS endpoint and copy the **one-time signing secret**,
+- rotate a secret or remove an endpoint.
+
+The panel talks to guarded app-only tools (`settings.get` / `settings.subscribe`
+/ `settings.rotate_secret` / `settings.unsubscribe`); each ignores any
+`user_id` on the wire and acts only on the authenticated principal, so the
+iframe can never touch another user's settings. The signing secret is shown
+**once** at create/rotate time and is never retrievable again - lost secrets
+are replaced by rotating.
+
+Non-App clients fall back to the headless `webhook_settings` result and the
+plain subscription services below.
+
+## Subscribing to events
+
+Subscriptions are managed through the shared service registry, so they work
+identically over CLI, MCP, and HTTP:
+
+- `webhook_subscribe` - register an **https** endpoint; returns a one-time
+  signing `secret` (store it - it is never shown again). You may pass
+  `event_types` to filter; omit for all events.
+- `webhook_list` - list your subscriptions (secrets are never returned).
+- `webhook_unsubscribe` - deactivate a subscription.
+- `webhook_rotate_secret` - issue a fresh signing secret.
+
+Subscriber URLs are validated: private, loopback, link-local, and reserved
+addresses are rejected to prevent SSRF, and plaintext `http://` is refused for
+public hosts.
+
+## Verifying deliveries
+
+Each POST carries these headers:
+
+| Header | Meaning |
+| --- | --- |
+| `X-Webhook-Signature` | `sha256=<hex>` HMAC over `{timestamp}.{body}` |
+| `X-Webhook-Timestamp` | Unix seconds; reject if too old to stop replays |
+| `X-Webhook-Event-Id` / `X-Webhook-Event-Type` / `X-Webhook-Delivery-Id` | Event/delivery identifiers |
+
+Recompute the HMAC with your stored secret over the raw request body prefixed
+by `"{timestamp}."` and compare in constant time. The JSON body is the event
+envelope:
+
+```json
+{
+  "id": "<event id>",
+  "type": "gmail.message.new",
+  "created_at": "2026-07-04T12:00:00+00:00",
+  "data": {
+    "message_id": "...",
+    "thread_id": "...",
+    "label_ids": ["INBOX"],
+    "snippet": "first ~200 chars of the message",
+    "from": "sender@example.com",
+    "subject": "...",
+    "date": "..."
+  }
+}
+```
+
+The payload is intentionally **metadata + snippet only** - never the full
+message body.
+
+## Driving the runner
+
+- **`loop`** - an in-process asyncio task drains the outbox every
+  `WEBHOOK_RUNNER_INTERVAL_S` and renews watches / prunes old rows hourly.
+  Simplest for single-instance deployments.
+- **`endpoint`** - point a scheduler (cron, Cloud Scheduler) at
+  `POST /api/v1/google/internal/renew` with header `X-Runner-Token:
+  <WEBHOOK_RUNNER_TOKEN>`. Each call renews due watches and drains the outbox.
+  Preferred when you run multiple replicas or serverless.
+
+Delivery claiming is dialect-aware: on PostgreSQL rows are claimed with
+`FOR UPDATE SKIP LOCKED`, so multiple runners never double-send.

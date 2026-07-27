@@ -1,0 +1,132 @@
+---
+title: Tools
+description: Available MCP tools and how to use them
+---
+
+Once connected, your AI assistant has access to these tools:
+
+| Tool | Description |
+|------|-------------|
+| `greet` | Greet a user by name |
+| `config_show` | Show the full configuration |
+| `config_get` | Get a single config value |
+| `config_set` | Set a config override |
+| `doctor` | Run project health checks |
+
+## greet
+
+Greet a user by name, optionally shouting.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `name` | string | _(required)_ | Name to greet |
+| `shout` | boolean | `false` | Uppercase the greeting |
+| `times` | integer | `1` | Repetition count |
+
+**Example:**
+
+**Input:**
+```json
+{ "name": "Alice", "shout": true, "times": 1 }
+```
+
+**Result:**
+```json
+{ "message": "HELLO, ALICE!", "times": 1 }
+```
+
+## config_show
+
+Show the full project configuration. No parameters.
+
+**Example:**
+
+**Input:**
+```json
+{}
+```
+
+**Result:**
+```json
+{
+  "config": {
+    "llm_config": { "cache_enabled": true },
+    "logging": { "verbose": false, "level": "INFO" }
+  }
+}
+```
+
+## config_get
+
+Get a single configuration value by dot-separated key.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `key` | string | Dot-separated config path |
+
+**Example:**
+
+**Input:**
+```json
+{ "key": "llm_config.cache_enabled" }
+```
+
+**Result:**
+```json
+{ "key": "llm_config.cache_enabled", "value": true }
+```
+
+## config_set
+
+Set a configuration override. The value is auto-coerced to the appropriate type.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `key` | string | Dot-separated config path |
+| `value` | string | New value (auto-coerced to bool/int/float/string) |
+
+**Example:**
+
+**Input:**
+```json
+{ "key": "logging.verbose", "value": "true" }
+```
+
+**Result:**
+```json
+{ "key": "logging.verbose", "coerced_value": true }
+```
+
+## doctor
+
+Run project health checks. Optionally auto-fix fixable issues.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `fix` | boolean | `false` | Auto-fix fixable issues |
+
+**Example:**
+
+**Input:**
+```json
+{ "fix": false }
+```
+
+**Result:**
+```json
+{
+  "checks": [
+    { "name": "Python version", "status": "pass", "message": "3.12.0" },
+    { "name": "Deps synced", "status": "warn", "message": "dependencies out of sync", "fixable": true }
+  ],
+  "has_failures": false
+}
+```
+
+## Error Handling
+
+If a tool call fails, the AI client receives an error message and can adjust:
+
+```json
+{ "error": "Key not found: nonexistent.key" }
+```

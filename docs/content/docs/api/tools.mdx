@@ -1,0 +1,136 @@
+---
+title: Tools
+description: Call tools via the REST API
+---
+
+All tools are available as POST endpoints. Requires the `services:execute` scope.
+
+```
+POST /api/v1/services/{tool_name}
+```
+
+## greet
+
+Greet a user by name.
+
+```bash
+curl -X POST http://localhost:8000/api/v1/services/greet \
+  -H "Authorization: Bearer sk_live_..." \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Alice", "shout": true, "times": 1}'
+```
+
+**Request body:**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `name` | string | _(required)_ | Name to greet |
+| `shout` | boolean | `false` | Uppercase the greeting |
+| `times` | integer | `1` | Repetition count |
+
+**Response:**
+
+```json
+{ "message": "HELLO, ALICE!", "times": 1 }
+```
+
+## config_show
+
+Show the full project configuration.
+
+```bash
+curl -X POST http://localhost:8000/api/v1/services/config_show \
+  -H "Authorization: Bearer sk_live_..." \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+**Request body:** empty `{}`
+
+**Response:**
+
+```json
+{
+  "config": {
+    "llm_config": { "cache_enabled": true },
+    "logging": { "verbose": false, "level": "INFO" },
+    "server": { "host": "0.0.0.0", "port": 8000 }
+  }
+}
+```
+
+## config_get
+
+Get a single configuration value by dot-separated key.
+
+```bash
+curl -X POST http://localhost:8000/api/v1/services/config_get \
+  -H "Authorization: Bearer sk_live_..." \
+  -H "Content-Type: application/json" \
+  -d '{"key": "llm_config.cache_enabled"}'
+```
+
+**Request body:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `key` | string | Dot-separated config path |
+
+**Response:**
+
+```json
+{ "key": "llm_config.cache_enabled", "value": true }
+```
+
+## config_set
+
+Set a configuration override. The value is coerced to the appropriate type (bool, int, float, or string).
+
+```bash
+curl -X POST http://localhost:8000/api/v1/services/config_set \
+  -H "Authorization: Bearer sk_live_..." \
+  -H "Content-Type: application/json" \
+  -d '{"key": "logging.verbose", "value": "true"}'
+```
+
+**Request body:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `key` | string | Dot-separated config path |
+| `value` | string | New value (auto-coerced) |
+
+**Response:**
+
+```json
+{ "key": "logging.verbose", "coerced_value": true }
+```
+
+## doctor
+
+Run project health checks. Optionally auto-fix issues.
+
+```bash
+curl -X POST http://localhost:8000/api/v1/services/doctor \
+  -H "Authorization: Bearer sk_live_..." \
+  -H "Content-Type: application/json" \
+  -d '{"fix": false}'
+```
+
+**Request body:**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `fix` | boolean | `false` | Auto-fix fixable issues |
+
+**Response:**
+
+```json
+{
+  "checks": [
+    { "name": "Python version", "status": "pass", "message": "3.12.0" },
+    { "name": "Deps synced", "status": "warn", "message": "dependencies out of sync", "fixable": true }
+  ],
+  "has_failures": false
+}
+```

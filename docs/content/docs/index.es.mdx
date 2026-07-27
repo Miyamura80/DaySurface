@@ -1,0 +1,58 @@
+---
+title: Inicio Rapido
+description: Comienza con MCP Template
+---
+
+MCP Template te ofrece tres formas de interactuar con el mismo conjunto de herramientas:
+
+- **CLI** - Ejecuta comandos en tu terminal
+- **MCP** - Conecta asistentes de IA como Claude directamente
+- **REST API** - Llama a endpoints por HTTP con autenticacion
+
+Elige la interfaz que mejor se adapte a tu flujo de trabajo, o usa las tres.
+
+## Instalacion
+
+import { Step, Steps } from 'fumadocs-ui/components/steps';
+
+<Steps>
+<Step>
+
+### Instalar desde el codigo fuente
+
+```bash
+git clone https://github.com/Miyamura80/MCP-Template.git
+cd MCP-Template
+uv sync
+```
+
+</Step>
+<Step>
+
+### Verificar la instalacion
+
+```bash
+uv run mymcp --version
+uv run mymcp --help
+```
+
+</Step>
+<Step>
+
+### Probar un comando
+
+```bash
+uv run mymcp greet Alice
+# Hello, Alice!
+```
+
+</Step>
+</Steps>
+
+## Elige tu interfaz
+
+<Cards>
+  <Card title="CLI" href="/docs/cli" />
+  <Card title="MCP Server" href="/docs/mcp" />
+  <Card title="REST API" href="/docs/api" />
+</Cards>

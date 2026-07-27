@@ -1,0 +1,44 @@
+name: Lint
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches:
+      - '**'
+    paths-ignore:
+      - '.github/workflows/**'
+
+jobs:
+  lint:
+    if: github.event_name == 'pull_request' || github.event.pull_request == null
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Read Python version
+        run: echo "PYTHON_VERSION=$(cat .python-version | tr -d '\n')" >> $GITHUB_ENV
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+      - name: Add uv to path
+        run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+      - name: Setup
+        run: uv sync && make install_tools
+      - name: Run ruff
+        run: make ruff
+      - name: Run complexity check
+        run: make complexity
+      - name: Run tech debt check
+        run: make tech_debt
+      - name: Run duplicate code check
+        run: make duplicate_code
+      - name: Run AI writing check
+        run: uv run python scripts/check_ai_writing.py
+      - name: Run import-linter
+        run: make import_lint
+      - name: Run file length check
+        run: uv run python scripts/check_file_length.py
+      - name: Run blind-except justification check
+        run: uv run python scripts/check_blind_except_justification.py

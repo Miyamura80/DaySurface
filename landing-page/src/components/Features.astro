@@ -1,0 +1,170 @@
+---
+import { features } from "../config/landing";
+import FeatureVisual from "./FeatureVisual.astro";
+---
+
+<section id="features" class="scroll-mt-20 border-t border-border/60 py-24">
+  <div class="mx-auto max-w-6xl px-6">
+    <div class="mx-auto max-w-2xl text-center">
+      <h2 class="text-3xl font-bold tracking-tight sm:text-4xl">
+        {features.heading}
+      </h2>
+      <p class="mt-4 text-lg text-fg-muted">{features.subhead}</p>
+    </div>
+
+    <div
+      class="mt-16 lg:grid lg:grid-cols-2 lg:gap-16"
+      data-feature-scroll
+    >
+      <!-- LEFT: sticky visual panel (desktop only) -->
+      <div class="hidden lg:block">
+        <div class="sticky top-28">
+          <div
+            class="relative aspect-square w-full border-2 border-accent bg-surface-1"
+          >
+            <!-- Edison corner tag: live step index, updated on scroll -->
+            <span
+              class="absolute top-[-2px] left-[-2px] z-10 flex h-7 w-[40%] items-center gap-1.5 bg-accent px-3 font-mono text-xs font-bold tracking-widest text-accent-fg"
+            >
+              <span data-visual-tag>01</span>
+              <span class="text-accent-fg/50">/ {String(features.items.length).padStart(2, "0")}</span>
+            </span>
+
+            {
+              features.items.map((feature, i) => (
+                <div
+                  class="absolute inset-0"
+                  data-visual={i}
+                  data-active={i === 0 ? "true" : "false"}
+                >
+                  <FeatureVisual name={feature.visual} />
+                </div>
+              ))
+            }
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: scrolling steps -->
+      <ol class="lg:py-[18vh]">
+        {
+          features.items.map((feature, i) => (
+            <li
+              data-step={i}
+              data-active={i === 0 ? "true" : "false"}
+              class="feature-step border-l-2 border-border py-10 pl-6 first:pt-0 lg:py-[16vh]"
+            >
+              {/* inline visual on mobile only */}
+              <div class="mb-6 aspect-square w-full border-2 border-accent bg-surface-1 lg:hidden">
+                <FeatureVisual name={feature.visual} />
+              </div>
+
+              <div class="flex items-center gap-3">
+                <span class="font-mono text-sm font-bold text-accent">
+                  {String(i + 1).padStart(2, "0")}
+                </span>
+                <h3 class="text-xl font-semibold sm:text-2xl">{feature.title}</h3>
+              </div>
+              <p class="mt-3 text-pretty text-lg leading-relaxed text-fg-muted">
+                {feature.body}
+              </p>
+            </li>
+          ))
+        }
+      </ol>
+    </div>
+  </div>
+</section>
+
+<style>
+  /* No-JS / pre-enhancement default: everything legible, nothing dimmed. */
+  .feature-step {
+    transition:
+      opacity 0.35s ease,
+      border-color 0.35s ease;
+  }
+
+  /* Once enhanced, dim inactive steps and highlight the active one. */
+  [data-feature-scroll][data-enhanced] .feature-step {
+    opacity: 0.35;
+  }
+  [data-feature-scroll][data-enhanced] .feature-step[data-active="true"] {
+    opacity: 1;
+    border-color: var(--color-accent);
+  }
+
+  /* Sticky visuals cross-fade; only the active one is shown. */
+  [data-visual] {
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.4s ease;
+  }
+  [data-visual][data-active="true"] {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [data-feature-scroll][data-enhanced] .feature-step {
+      opacity: 1;
+    }
+  }
+</style>
+
+<script>
+  function initFeatureScroll() {
+    const root = document.querySelector<HTMLElement>("[data-feature-scroll]");
+    if (!root) return;
+    // Idempotent: bail if already wired (data-enhanced is set below), so a
+    // repeat call (e.g. astro:page-load after a client navigation) doesn't
+    // attach a second IntersectionObserver.
+    if (root.dataset.enhanced === "true") return;
+
+    const steps = Array.from(
+      root.querySelectorAll<HTMLElement>("[data-step]"),
+    );
+    const visuals = Array.from(
+      root.querySelectorAll<HTMLElement>("[data-visual]"),
+    );
+    const tag = root.querySelector<HTMLElement>("[data-visual-tag]");
+    if (steps.length === 0) return;
+
+    // Enables the dim/highlight styling (kept off for no-JS legibility).
+    root.setAttribute("data-enhanced", "true");
+
+    const setActive = (index: number) => {
+      steps.forEach((s) =>
+        s.setAttribute(
+          "data-active",
+          s.dataset.step === String(index) ? "true" : "false",
+        ),
+      );
+      visuals.forEach((v) =>
+        v.setAttribute(
+          "data-active",
+          v.dataset.visual === String(index) ? "true" : "false",
+        ),
+      );
+      if (tag) tag.textContent = String(index + 1).padStart(2, "0");
+    };
+
+    // A step becomes active when it crosses the vertical center of the viewport.
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            const idx = Number((entry.target as HTMLElement).dataset.step);
+            setActive(idx);
+          }
+        }
+      },
+      { rootMargin: "-50% 0px -50% 0px", threshold: 0 },
+    );
+
+    steps.forEach((s) => observer.observe(s));
+  }
+
+  initFeatureScroll();
+  // Re-run on Astro client-side navigations.
+  document.addEventListener("astro:page-load", initFeatureScroll);
+</script>

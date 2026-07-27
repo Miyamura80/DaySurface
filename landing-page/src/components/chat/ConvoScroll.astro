@@ -1,0 +1,76 @@
+---
+/*
+ * Fixed-height chat "viewport" that wraps the <InboxApp /> MCP-app card, the
+ * host-chat turn it summons, and the <ComposerApp /> UI served in that new turn.
+ *
+ * Why this exists: clicking "AI reply" inside the app calls
+ * mcpApp.sendMessage({role:"user", …}) (Inbox.tsx:296-309), which posts a NEW
+ * user turn into the HOST chat - Claude/ChatGPT/Goose/VS Code - and the model
+ * replies. We depict the full round-trip by scrolling DOWN through it:
+ *
+ *   - 0%:   the inbox card (InboxApp) on top; below it the summoned turn + the
+ *           served composer, off the bottom of the clip.
+ *   - ~42%: just after the app's "AI reply" tap, scroll down to reveal the
+ *           summoned user turn + the agent's gmail_reply_to_thread reply.
+ *   - ~62%: keep scrolling down to the served composer (ComposerApp) - a FRESH
+ *           editable draft UI rendered in the new turn, below the reply. The
+ *           loop closes there, then resets to the top.
+ *
+ * The new draft is NOT the inbox card mutating in place; it's a new UI served
+ * in the next conversation turn, which is why we keep scrolling down to it
+ * rather than scrolling back up.
+ *
+ * The outer box stays a FIXED height so the hero's two-column grid never reflows
+ * as the conversation "grows" - the content scrolls within the clip instead.
+ *
+ * The shell passes its own client-styled summoned turns via the default slot
+ * (user bubble + assistant tool-call reply); ComposerApp is appended uniformly
+ * (it's the host-neutral served UI, identical across shells). The InboxApp /
+ * ComposerApp loops and this scroll are all 15s and start together (same shell
+ * subtree, revealed together), so they stay phase-locked - including when a
+ * hidden tab is first shown.
+ */
+import InboxApp from "./InboxApp.astro";
+import ComposerApp from "./ComposerApp.astro";
+---
+
+<div class="convo-viewport relative h-[316px] overflow-hidden">
+  <div class="convo-scroll">
+    <InboxApp />
+    <div class="convo-followup space-y-3 pt-3">
+      <slot />
+      <ComposerApp />
+    </div>
+  </div>
+</div>
+
+<style>
+  .convo-scroll {
+    animation: convo-scroll 15s ease-in-out infinite;
+  }
+  /* two-stage downward scroll: hold on the inbox card through the "AI reply"
+     tap, drop to the summoned turn + agent reply (~42%), then continue down to
+     the served composer UI (~62%), hold, and reset to the top for the loop.
+     The translateY stops are tuned to the followup content heights and are the
+     main knob if the framing drifts per shell. */
+  @keyframes convo-scroll {
+    0%, 36% { transform: translateY(0); }
+    42%, 54% { transform: translateY(-188px); }
+    62%, 90% { transform: translateY(-484px); }
+    95%, 100% { transform: translateY(0); }
+  }
+
+  /* INTERACTIVE: pause the whole attract loop (this scroll + every InboxApp /
+     ComposerApp animation in the subtree) while the user is hovering or has
+     focused something inside - so the served draft holds still to be edited /
+     scrolled instead of being yanked under the cursor. */
+  .convo-viewport:hover :global(*),
+  .convo-viewport:focus-within :global(*) {
+    animation-play-state: paused !important;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .convo-scroll { animation: none; transform: none; }
+    .convo-followup { display: none; }
+  }
+</style>

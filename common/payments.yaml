@@ -1,0 +1,19 @@
+########################################################
+# Agentic Payments
+########################################################
+
+x402:
+  enabled: false
+  facilitator_url: "https://x402.org/facilitator"
+  network: "base-sepolia"
+  wallet_address_env: "X402_WALLET_ADDRESS"
+  private_key_env: "X402_PRIVATE_KEY"
+  default_amount: "0.001"
+  default_asset: "USDC"
+  testnet: true
+
+mpp:
+  enabled: false
+
+acp:
+  enabled: false

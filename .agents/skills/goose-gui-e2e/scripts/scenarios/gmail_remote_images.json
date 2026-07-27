@@ -1,0 +1,32 @@
+{
+  "comment": "Verifies the remote-image pipeline inside a real host: the fixture thread's <img src=https://img.invalid/...> must render as the blocked-by-default 'Show images' banner (strict-CSP hosts like claude.ai block remote img-src; we normalize all hosts to click-to-show). The interact step clicks the banner; .invalid never resolves, so the fetch fails identically offline and in open-egress CI and the banner deterministically re-renders as 'Retry'. Known limitation: 'Retry' also appears if the HOST rejects the app->server call before it reaches gmail_inbox.fetch_image, so this asserts the UI state machine, not the server fetch itself - the successful-fetch round-trip is pinned by HtmlEmailBody.test.tsx (mocked tool) and tests/test_image_proxy.py (server), and was verified live via expect_selectors with an allowlisted image host.",
+  "prompt": "Open the Series A term sheet email thread.",
+  "plan": [
+    {
+      "match": "gmail_get_thread",
+      "args": {
+        "thread_id": "t-1001"
+      }
+    }
+  ],
+  "final": "Opened the thread.",
+  "app_uri": "ui://mymcp/gmail_inbox",
+  "expect": {
+    "tool_called": "gmail_get_thread",
+    "round_trip": true,
+    "app_rendered": true,
+    "dom_contains": [
+      "liquidation preference",
+      "Remote images are hidden (1)"
+    ],
+    "interaction_rendered": true
+  },
+  "interact": {
+    "click": {
+      "text": "Show images"
+    },
+    "expect_dom_contains": [
+      "Retry"
+    ]
+  }
+}

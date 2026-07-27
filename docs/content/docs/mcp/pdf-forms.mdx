@@ -1,0 +1,176 @@
+---
+title: PDF Forms & Signing
+description: Fill PDF forms with the model, sign them yourself - never the other way around
+---
+
+The PDF tools let the host LLM do the drudgery of form filling - open a PDF
+email attachment, fill its fields (or overlay text on flat PDFs), and attach
+the result to a reply draft - while **signing remains a human-only ceremony**:
+you type your full legal name yourself, in a dedicated signing UI or your
+client's native dialog. The model cannot produce a signature.
+
+## The four LLM-visible tools
+
+```
+                     LLM-visible (autonomous use OK)
+              ┌───────────────────────────────────────────┐
+ Gmail        │ pdf_open(source)                          │
+ attachment ─►│   → doc_id + field inventory              │
+              │     + text layout w/ coords (flat PDFs)   │
+              │ pdf_edit(doc_id, ops[], render_pages?)    │
+              │   ops: set_field | add_text  (atomic)     │
+              │ pdf_request_signature(doc_id, placement)  │─── attaches the
+              │   → "awaiting_user_signature"             │    signing app
+              │ pdf_export(doc_id, destination)           │        │
+              │   → attach to Gmail draft, server-side    │        ▼
+              └───────────────────────────────────────────┘ ┌─────────────┐
+              ┌───────────────────────────────────────────┐ │ pdf_signer  │
+  App-only    │ pdf_signer.get_document(doc_id)           │◄┤ app: review │
+  (iframe,    │ pdf_signer.sign(doc_id, typed_name,       │◄┤ all pages,  │
+  never for   │                 consent)                  │ │ type your   │
+  the LLM)    │ pdf_signer.cancel(doc_id)                 │◄┤ name, sign  │
+              └───────────────────────────────────────────┘ └─────────────┘
+```
+
+The PDF bytes never enter the model's context: all state lives server-side in
+a document session keyed by `doc_id`, the iframe fetches bytes through
+app-only tools, and export attaches server-to-server. Page renders
+(`render_pages`) travel as PNG images so vision-capable hosts can verify
+placement visually.
+
+Coordinates everywhere are **PDF user space**: origin at the page's
+bottom-left corner, units in points (1/72 inch).
+
+## Document lifecycle
+
+```
+ open ──pdf_edit──► open ──pdf_request_signature──► awaiting_signature
+                                                       │           │
+                                             user signs│           │user cancels
+                                                       ▼           ▼
+                                                    signed        open
+                                                  (immutable)  (editable again)
+```
+
+- `pdf_edit` is rejected once a document is `awaiting_signature` or
+  `signed`. `pdf_request_signature` is rejected on `signed` documents, but
+  retrying it while `awaiting_signature` is **idempotent**: the recorded
+  placement stands and the signing handoff is re-emitted (re-opening the
+  signing app).
+- `pdf_export` is rejected while `awaiting_signature` (finish or cancel
+  signing first) and defaults the filename to `{stem}-signed.pdf` /
+  `{stem}-filled.pdf`.
+- Sessions are swept after `pdf_forms.session_ttl_hours` (config) of
+  inactivity.
+
+## The signing ceremony
+
+Signing runs through layered guarantees, strongest first:
+
+1. **Server state machine.** No LLM-visible tool produces a signature.
+   `pdf_signer.sign` refuses any document that is not `awaiting_signature`,
+   a state only `pdf_request_signature` can enter - and only a human ceremony
+   can leave.
+2. **Host-native confirmation.** On clients that support MCP elicitation,
+   the server asks the host to render a confirmation dialog naming the
+   document and the typed name *outside the iframe*. The model cannot answer
+   it; a spoofed iframe cannot fake it. **Transport caveat:** this layer
+   requires a *stateful* MCP session (stdio, or
+   `server.mcp_stateless_http: false` on a single replica). Under the
+   production default `stateless_http=true`, in-band elicitation cannot
+   complete (the client's response cannot be correlated back to the
+   per-request session), so the capability check correctly reports
+   unsupported, the dialog is skipped, and the audit records
+   `confirmed_via_elicitation: false`. Layers 1 and 3 do not depend on the
+   transport.
+3. **Visibility hint.** The `pdf_signer.*` tools carry
+   `_meta.ui.visibility = ["app"]` so well-behaved hosts hide them from the
+   LLM. This layer is convention, not spec - see edge case A8 in
+   `MCP_UI_EDGE_CASES.md` for the residual risk analysis.
+
+Every signature embeds a visible stamp (typed name in an italic face, printed
+name, UTC date, document hash prefix), an audit trail in the PDF's Info
+dictionary and the session record (typed name, timestamp, SHA-256 of the
+pre-signature bytes, consent, channel, whether a host dialog confirmed), and
+a **PAdES B-B cryptographic seal** from a server-held certificate (pyHanko).
+Any post-signature modification is detectable by standard PDF validators.
+
+### Hosts without iframe support
+
+If the client cannot render MCP Apps but supports elicitation (and the
+session is stateful - see the transport caveat above), the ceremony falls
+back to a host-native typed-name prompt (`full_name` + `consent`) with
+`channel: "elicitation"` recorded in the audit trail. With neither
+capability, `pdf_request_signature` returns `signing_unavailable`, the
+document unlocks, and form filling keeps working everywhere.
+
+### Document caveats surfaced at open
+
+`pdf_open` refuses password-protected PDFs outright (owner-only encryption
+with an empty user password still opens), and returns `warnings` +
+`existing_signatures` for two cases the model must relay before editing:
+
+- **Already-signed documents.** Editing (or counter-signing) a PDF that
+  carries digital signatures cryptographically invalidates them - pypdf
+  rewrites the file rather than appending an incremental update. `pdf_edit`
+  refuses such documents unless `acknowledge_signature_invalidation: true`,
+  and `pdf_request_signature`'s guidance repeats the warning before the user
+  signs.
+- **XFA (LiveCycle) forms.** The reported field inventory is the AcroForm
+  view, which may be incomplete; edits may not display in XFA-only viewers.
+  Verify with `render_pages` before exporting.
+
+Overlay text and the signature stamp draw with standard-14 (Latin-1) fonts:
+`add_text` ops and typed signer names containing characters outside Latin-1
+(e.g. CJK) are rejected with a clear error instead of silently rendering
+`?` - romanized input works today; embedded Unicode fonts are a tracked
+follow-up.
+
+### The sealing certificate
+
+Configure `pdf_forms.signing.cert_path` / `key_path` (PEM) with a real key
+pair in production. In dev, a self-signed certificate is generated once and
+cached under `pdf_forms.signing.dev_cert_dir` (default `.pdf_signing/`,
+git-ignored). The seal is a platform seal (like DocuSign's), not a per-user
+identity: attribution of *who* signed comes from the audit trail, integrity
+of *what* was signed comes from the seal.
+
+## Extractable by design
+
+The PDF domain never imports Gmail. `pdf_open` sources and `pdf_export`
+destinations are discriminated unions resolved through adapter ports, and
+`services/pdf_gmail_bridge.py` is the only module that knows both sides:
+
+```
+ PDF core (no Gmail imports)          Bridge                Gmail domain
+ ┌──────────────────────────┐  ┌───────────────────┐  ┌──────────────────┐
+ │ models/pdf_forms.py      │  │ services/         │  │ services/        │
+ │ services/pdf_*.py        │◄─┤ pdf_gmail_bridge  ├─►│ gmail_*.py       │
+ │ mcp_server/apps/         │  │ (registers the    │  │ models/gmail.py  │
+ │   pdf_signer/            │  │  gmail_attachment │  └──────────────────┘
+ │ mcp_server/app_tools/    │  │  + gmail_draft    │
+ │   pdf_signer.py          │  │  adapters)        │
+ │ db: pdf_documents        │  └───────────────────┘
+ └──────────────────────────┘
+```
+
+An import-linter contract (`pdf_core_isolated_from_gmail` in `.importlinter`,
+enforced by `make import_lint` in CI) makes the seam mechanical. Extracting
+the PDF tools as a standalone add-on later means moving the core modules,
+replacing that one bridge file, and excising the Gmail-shaped locator
+variants (`GmailAttachmentSource` / `GmailDraftDestination`) that live in
+`models/pdf_forms.py` as pure data contracts.
+
+## Configuration
+
+All knobs live in `common/pdf_forms.yaml`:
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `max_document_bytes` | 20 MB | Max PDF size accepted into a session |
+| `text_layout_max_lines` | 400 | Cap on flat-PDF layout lines in `pdf_open` |
+| `render_dpi` | 110 | Rasterization DPI for `render_pages` |
+| `render_max_pages` | 4 | Max pages per `render_pages` request |
+| `session_ttl_hours` | 72 | Idle sweep for document sessions |
+| `signing.cert_path` / `signing.key_path` | unset | Production sealing key pair (PEM) |
+| `signing.dev_cert_dir` | `.pdf_signing` | Dev self-signed cert cache |

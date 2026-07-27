@@ -1,0 +1,61 @@
+---
+title: Billing
+description: Usage tracking, quotas, and subscription management
+---
+
+## Check Your Usage
+
+```bash
+curl -H "Authorization: Bearer sk_live_..." \
+  http://localhost:8000/api/v1/billing/usage/current
+```
+
+Returns usage stats for the current billing period.
+
+## Upgrade Your Plan
+
+```bash
+curl -X POST -H "Authorization: Bearer sk_live_..." \
+  http://localhost:8000/api/v1/billing/checkout
+```
+
+Returns a Stripe checkout URL to complete the upgrade.
+
+## Check Subscription Status
+
+```bash
+curl -H "Authorization: Bearer sk_live_..." \
+  http://localhost:8000/api/v1/billing/subscriptions/{subscription_id}
+```
+
+## Report Usage
+
+```bash
+curl -X POST http://localhost:8000/api/v1/billing/usage/report \
+  -H "Authorization: Bearer sk_live_..." \
+  -H "Idempotency-Key: unique-request-id"
+```
+
+The `Idempotency-Key` header prevents duplicate charges. Each call reports one unit of usage.
+
+## Rate Limits & Quotas
+
+Two independent throttles apply:
+
+- **Per-client rate limits** (sliding second/minute/hour/day windows) return
+  `429` when exceeded - back off and retry.
+- **Daily quota** per subscription tier returns `402 quota_exceeded` when your
+  plan's daily allowance is used up. The response includes a `Retry-After`
+  header and a `quota_reset_at` timestamp (next UTC day).
+
+Each subscription tier has a daily request quota:
+
+| Tier   | Daily requests |
+|--------|----------------|
+| `free_tier` | 10,000 |
+| `plus_tier` | 10,000 |
+
+Tier limits are configurable in `common/global_config.yaml` and
+`common/subscription_config.yaml`. See [Rate Limits](/docs/api/rate-limits) for
+the full window/header reference and [Errors](/docs/api/errors#retry-guidance)
+for retry guidance.

@@ -1,0 +1,97 @@
+---
+title: Commands
+description: All available CLI commands
+---
+
+## greet
+
+Greet someone by name.
+
+```bash
+mymcp greet Alice
+# Hello, Alice!
+
+mymcp greet Alice --shout
+# HELLO, ALICE!
+
+mymcp greet Bob --shout --times 3
+```
+
+| Option | Short | Default | Description |
+|--------|-------|---------|-------------|
+| `--shout` | `-s` | `false` | Uppercase the greeting |
+| `--times` | `-t` | `1` | Repetition count |
+
+## config
+
+Inspect and modify configuration.
+
+```bash
+mymcp config show                           # view full config
+mymcp config get llm_config.cache_enabled   # get a single value
+mymcp config set logging.verbose false      # set an override
+```
+
+| Subcommand | Description |
+|------------|-------------|
+| `show` | Display the full configuration |
+| `get <key>` | Get a single value by dot-separated key |
+| `set <key> <value>` | Write an override to `.global_config.yaml` |
+
+## doctor
+
+Run health checks on the project environment.
+
+```bash
+mymcp doctor          # check everything
+mymcp doctor --fix    # auto-fix what it can
+```
+
+Checks Python version, `uv` installation, dependency sync, config validity, `.env` file, pre-commit hooks, and git status.
+
+## init
+
+Scaffold a new command from a built-in template.
+
+```bash
+mymcp init my_command --desc "Does something useful"
+# Creates commands/my_command.py
+# Run it: mymcp my-command
+```
+
+| Option | Description |
+|--------|-------------|
+| `--desc` | Description for the new command |
+
+The name must be `snake_case`. Underscores are converted to hyphens for the CLI command name.
+
+## completions
+
+Install shell tab-completions for faster usage.
+
+```bash
+mymcp completions install bash    # append to ~/.bashrc
+mymcp completions install zsh     # append to ~/.zshrc
+mymcp completions install fish    # append to config.fish
+mymcp completions show bash       # print script to stdout
+```
+
+## update
+
+Check for a newer version and upgrade.
+
+```bash
+mymcp update
+```
+
+## telemetry
+
+Manage anonymous usage telemetry.
+
+```bash
+mymcp telemetry status     # show enabled/disabled
+mymcp telemetry disable    # opt out
+mymcp telemetry enable     # opt back in
+```
+
+You can also set `CLI_TELEMETRY_DISABLED=1` to disable.

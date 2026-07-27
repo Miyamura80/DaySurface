@@ -1,0 +1,14 @@
+{
+  "title": "REST API",
+  "pages": [
+    "index",
+    "tools",
+    "ask",
+    "authentication",
+    "billing",
+    "rate-limits",
+    "idempotency",
+    "errors",
+    "deprecation"
+  ]
+}

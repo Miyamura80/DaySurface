@@ -1,0 +1,1 @@
+"""Agentic payment protocol abstractions."""

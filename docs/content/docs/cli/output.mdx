@@ -1,0 +1,58 @@
+---
+title: Output & Errors
+description: Output formats, error handling, and dry run mode
+---
+
+## Output Formats
+
+The `--format` flag controls how data is rendered:
+
+```bash
+mymcp config show                    # table (default)
+mymcp --format json config show      # machine-readable JSON
+mymcp --format plain config show     # simple key: value lines
+```
+
+### Table (default)
+
+Rich formatted tables with colors and borders. Best for interactive use.
+
+### JSON
+
+Machine-readable output, useful for piping into other tools:
+
+```bash
+mymcp --format json config show | jq '.llm_config'
+```
+
+### Plain
+
+Simple `key: value` lines with no formatting. Good for scripting.
+
+## Error Handling
+
+By default, errors show a concise message. Use `--debug` for full tracebacks with local variables:
+
+```bash
+mymcp --debug config get nonexistent.key
+```
+
+## Dry Run
+
+Preview what a command would do without executing it:
+
+```bash
+mymcp --dry-run greet Alice
+# [DRY RUN] Would greet Alice
+```
+
+Useful for verifying destructive operations before running them for real.
+
+## Verbosity
+
+Control how much output you see:
+
+```bash
+mymcp --verbose greet Alice    # extra details
+mymcp --quiet greet Alice      # minimal output
+```

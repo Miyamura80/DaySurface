@@ -1,0 +1,227 @@
+---
+/*
+ * WebMCP - make this marketing site navigable by in-browser AI agents.
+ *
+ * WebMCP (W3C Web Machine Learning CG) lets a *page* declare its own actions
+ * as callable tools via `navigator.modelContext`, so an agent browsing the
+ * site calls structured tools instead of scraping the DOM. This is the one
+ * surface in the repo where WebMCP fits: a real website (the Python server and
+ * docs site are not). It's progressive enhancement - feature-detected and a
+ * no-op in browsers without the API (everything except Edge 147+ / Chrome's
+ * origin trial as of mid-2026), so it never affects normal visitors.
+ *
+ * Spec status (verified mid-2026): still a W3C Draft Community Group Report and
+ * actively churning. The shipped API is `navigator.modelContext`; the spec
+ * draft writes `document.modelContext`; registration is either batch
+ * `provideContext({ tools })` or incremental `registerTool(tool, { signal })`.
+ * The client script below detects whichever object/method exists rather than
+ * assuming one shape. Re-verify against the current spec before extending.
+ *
+ * Every tool is sourced from `src/config/landing.ts` (the same single source of
+ * truth the visible UI uses), so there's no duplicated copy to drift. Install
+ * deep links are rebuilt here at build time, mirroring ConnectWidget.astro.
+ */
+import { site, connect, faq } from "../config/landing";
+// Shared with ConnectWidget.astro so install URL formats can't drift.
+import { deepLink } from "../utils/deeplink";
+
+// Build-time payload the client script reads to register tools. Sourced
+// entirely from config so the agent-facing tools and the visible UI never drift.
+const payload = {
+  mcpUrl: site.mcpUrl,
+  serverName: site.serverName,
+  docsUrl: site.docsUrl,
+  githubUrl: site.githubUrl,
+  description: site.description,
+  clients: connect.targets.map((t) => ({
+    id: t.id,
+    name: t.name,
+    method: t.method,
+    install_url: t.method === "deeplink" ? deepLink(t.id, site.mcpUrl, site.serverName) : null,
+    steps: t.steps ?? null,
+    note: t.note ?? null,
+  })),
+  faqs: faq.items.map((f) => ({ q: f.q, a: f.a })),
+};
+
+// JSON.stringify can't produce a literal `</script>`, but escape `<` defensively
+// so the embedded JSON can never break out of the data block.
+const payloadJson = JSON.stringify(payload).replace(/</g, "\\u003c");
+---
+
+<script type="application/json" id="webmcp-data" is:inline set:html={payloadJson} />
+
+<script>
+  interface WebMcpTool {
+    name: string;
+    description: string;
+    inputSchema: Record<string, unknown>;
+    execute: (args: Record<string, unknown>) => Promise<{
+      content: { type: "text"; text: string }[];
+      structuredContent?: unknown;
+    }>;
+  }
+
+  // The API object: shipped browsers expose navigator.modelContext; the spec
+  // draft uses document.modelContext. Accept either, or bail (no-op) if neither.
+  type ModelContext = {
+    provideContext?: (init: { tools: WebMcpTool[] }) => unknown;
+    registerTool?: (tool: WebMcpTool, options?: { signal?: AbortSignal }) => unknown;
+  };
+
+  function getModelContext(): ModelContext | null {
+    const nav = (navigator as unknown as { modelContext?: ModelContext }).modelContext;
+    const doc = (document as unknown as { modelContext?: ModelContext }).modelContext;
+    return nav ?? doc ?? null;
+  }
+
+  function textResult(text: string, structuredContent?: unknown) {
+    return { content: [{ type: "text" as const, text }], structuredContent };
+  }
+
+  // The module script is evaluated once and persists across Astro client-side
+  // navigations, so the astro:page-load listener fires init repeatedly. Guard
+  // against re-registering: provideContext would redundantly replace the set,
+  // and registerTool throws on a duplicate tool name. The tools never change.
+  let registered = false;
+
+  function initWebMcp() {
+    if (registered) return;
+    const mc = getModelContext();
+    if (!mc) return; // No WebMCP support in this browser - nothing to do.
+
+    const dataEl = document.getElementById("webmcp-data");
+    if (!dataEl?.textContent) return;
+    const data = JSON.parse(dataEl.textContent) as {
+      mcpUrl: string;
+      serverName: string;
+      docsUrl: string;
+      githubUrl: string;
+      description: string;
+      clients: {
+        id: string;
+        name: string;
+        method: "deeplink" | "manual";
+        install_url: string | null;
+        steps: string[] | null;
+        note: string | null;
+      }[];
+      faqs: { q: string; a: string }[];
+    };
+
+    const tools: WebMcpTool[] = [
+      {
+        name: "get_mcp_endpoint",
+        description:
+          "Get the streamable-HTTP MCP server URL and server name for this product, so it can be added to an MCP-capable agent client.",
+        inputSchema: { type: "object", properties: {} },
+        async execute() {
+          const text = `MCP server URL: ${data.mcpUrl}\nServer name: ${data.serverName}\nDocs: ${data.docsUrl}\nSource: ${data.githubUrl}`;
+          return textResult(text, {
+            mcp_url: data.mcpUrl,
+            server_name: data.serverName,
+            docs_url: data.docsUrl,
+            github_url: data.githubUrl,
+          });
+        },
+      },
+      {
+        name: "list_supported_clients",
+        description:
+          "List the AI agent clients this MCP server can be installed into, and whether each supports one-click install or manual setup.",
+        inputSchema: { type: "object", properties: {} },
+        async execute() {
+          const lines = data.clients.map(
+            (c) => `- ${c.name} (${c.id}): ${c.method === "deeplink" ? "one-click install" : "manual setup"}`,
+          );
+          return textResult(
+            `Supported clients:\n${lines.join("\n")}`,
+            { clients: data.clients.map((c) => ({ id: c.id, name: c.name, method: c.method })) },
+          );
+        },
+      },
+      {
+        name: "get_install_instructions",
+        description:
+          "Get install instructions for a specific AI agent client: a one-click install URL where supported, otherwise the step-by-step paste-the-URL flow.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            client_id: {
+              type: "string",
+              description: "Client identifier",
+              enum: data.clients.map((c) => c.id),
+            },
+          },
+          required: ["client_id"],
+        },
+        async execute({ client_id }) {
+          const client = data.clients.find((c) => c.id === client_id);
+          if (!client) {
+            const valid = data.clients.map((c) => c.id).join(", ");
+            return textResult(`Unknown client "${String(client_id)}". Valid clients: ${valid}.`);
+          }
+          if (client.method === "deeplink" && client.install_url) {
+            const note = client.note ? `\nNote: ${client.note}` : "";
+            return textResult(
+              `One-click install for ${client.name}: ${client.install_url}${note}`,
+              { client_id: client.id, install_url: client.install_url, mcp_url: data.mcpUrl },
+            );
+          }
+          const steps = (client.steps ?? []).map((s, i) => `${i + 1}. ${s}`).join("\n");
+          return textResult(
+            `Add ${data.serverName} to ${client.name}:\nMCP server URL: ${data.mcpUrl}\n${steps}`,
+            { client_id: client.id, mcp_url: data.mcpUrl, steps: client.steps },
+          );
+        },
+      },
+      {
+        name: "answer_faq",
+        description:
+          "Answer a question about this MCP server template using its FAQ (clients, transports, auth, self-hosting, mobile).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: "The visitor's question" },
+          },
+          required: ["query"],
+        },
+        async execute({ query }) {
+          const q = String(query ?? "").toLowerCase();
+          const terms = q.split(/\W+/).filter((t) => t.length > 2);
+          // Simple word-overlap scoring across each FAQ's question + answer.
+          let best: { item: { q: string; a: string }; score: number } | null = null;
+          for (const item of data.faqs) {
+            const hay = `${item.q} ${item.a}`.toLowerCase();
+            const score = terms.reduce((n, t) => (hay.includes(t) ? n + 1 : n), 0);
+            if (score > 0 && (!best || score > best.score)) best = { item, score };
+          }
+          if (!best) {
+            return textResult(
+              `No FAQ match. ${data.description} See the docs: ${data.docsUrl}`,
+            );
+          }
+          return textResult(`Q: ${best.item.q}\nA: ${best.item.a}`, {
+            question: best.item.q,
+            answer: best.item.a,
+          });
+        },
+      },
+    ];
+
+    // Prefer batch registration (replaces the toolset atomically); fall back to
+    // per-tool registerTool. An AbortController lets a future SPA navigation
+    // tear the tools down, though this static site never unmounts them.
+    const controller = new AbortController();
+    if (typeof mc.provideContext === "function") {
+      mc.provideContext({ tools });
+    } else if (typeof mc.registerTool === "function") {
+      for (const tool of tools) mc.registerTool(tool, { signal: controller.signal });
+    }
+    registered = true;
+  }
+
+  initWebMcp();
+  // Re-run after Astro client-side navigations (no-op if already supported/registered).
+  document.addEventListener("astro:page-load", initWebMcp);
+</script>

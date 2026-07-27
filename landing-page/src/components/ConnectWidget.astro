@@ -1,0 +1,189 @@
+---
+/*
+ * Interactive client picker for the "Add it to your client" step.
+ * A dropdown selects the target app; the panel below shows either a one-click
+ * install deep link (Cursor / VS Code / Goose) or the copy-the-URL + paste
+ * steps (Claude / ChatGPT). Deep links are built here at build time so no
+ * client JS has to know the encoding rules.
+ */
+import { connect } from "../config/landing";
+import { deepLink } from "../utils/deeplink";
+
+const { mcpUrl, serverName, defaultId, targets } = connect;
+
+const enriched = targets.map((t) => ({ ...t, href: deepLink(t.id, mcpUrl, serverName) }));
+const selected = enriched.find((t) => t.id === defaultId) ?? enriched[0];
+---
+
+<div
+  class="w-full border-2 border-accent bg-surface-1 p-4 text-left shadow-2xl shadow-black/40"
+  data-connect
+>
+  <!-- Shared: the MCP server URL, copyable -->
+  <label class="font-mono text-[11px] uppercase tracking-widest text-fg-subtle">
+    MCP server URL
+  </label>
+  <div class="mt-1.5 flex items-stretch border border-border bg-bg">
+    <code class="flex-1 truncate px-3 py-2.5 font-mono text-sm text-accent" title={mcpUrl}>
+      {mcpUrl}
+    </code>
+    <button
+      type="button"
+      class="copy-btn grid shrink-0 place-items-center border-l border-border px-3 text-fg-muted transition hover:bg-surface-2 hover:text-accent"
+      data-code={mcpUrl}
+      aria-label="Copy"
+    >
+      <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+    </button>
+  </div>
+
+  <!-- App picker (custom dropdown so we can show logos) -->
+  <div class="relative mt-4" data-dropdown>
+    <button
+      type="button"
+      class="flex w-full items-center gap-2.5 border border-border bg-bg px-3 py-2.5 text-left transition hover:border-accent/60"
+      aria-haspopup="listbox"
+      aria-expanded="false"
+      data-dropdown-toggle
+    >
+      <span
+        class="size-5 shrink-0 bg-fg"
+        style={`-webkit-mask:url('${selected.logo}') center/contain no-repeat;mask:url('${selected.logo}') center/contain no-repeat;`}
+        data-selected-logo
+        aria-hidden="true"></span>
+      <span class="flex-1 text-sm font-medium text-fg" data-selected-name>{selected.name}</span>
+      <svg class="size-4 text-fg-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+
+    <ul
+      class="absolute z-20 mt-1 hidden w-full border border-accent/50 bg-surface-2 shadow-2xl shadow-black/60"
+      role="listbox"
+      data-dropdown-menu
+    >
+      {
+        enriched.map((t) => (
+          <li role="option" aria-selected={t.id === selected.id ? "true" : "false"}>
+            <button
+              type="button"
+              class="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-fg-muted transition hover:bg-bg hover:text-fg"
+              data-option={t.id}
+              data-logo={t.logo}
+              data-name={t.name}
+            >
+              <span
+                class="size-5 shrink-0 bg-current"
+                style={`-webkit-mask:url('${t.logo}') center/contain no-repeat;mask:url('${t.logo}') center/contain no-repeat;`}
+                aria-hidden="true"></span>
+              <span class="flex-1">{t.name}</span>
+              {t.method === "deeplink" && (
+                <span class="font-mono text-[10px] uppercase tracking-wider text-accent">1-click</span>
+              )}
+            </button>
+          </li>
+        ))
+      }
+    </ul>
+  </div>
+
+  <!-- One panel per target; only the selected one is shown -->
+  <div class="mt-4">
+    {
+      enriched.map((t) => (
+        <div data-panel={t.id} hidden={t.id !== selected.id}>
+          {t.method === "deeplink" && t.href ? (
+            <>
+              <a
+                href={t.href}
+                class="flex w-full items-center justify-center gap-2.5 bg-accent px-4 py-3 font-semibold text-accent-fg transition hover:bg-accent-strong"
+              >
+                <span
+                  class="size-5 shrink-0 bg-accent-fg"
+                  style={`-webkit-mask:url('${t.logo}') center/contain no-repeat;mask:url('${t.logo}') center/contain no-repeat;`}
+                  aria-hidden="true"
+                />
+                Add to {t.name}
+              </a>
+              {t.note && <p class="mt-2.5 text-xs leading-relaxed text-fg-subtle">{t.note}</p>}
+            </>
+          ) : (
+            <ol class="space-y-2.5">
+              {(t.steps ?? []).map((step, i) => (
+                <li class="flex gap-3 text-sm text-fg-muted">
+                  <span class="grid size-5 shrink-0 place-items-center border border-accent/50 font-mono text-[11px] text-accent">
+                    {i + 1}
+                  </span>
+                  <span class="leading-relaxed">{step}</span>
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      ))
+    }
+  </div>
+</div>
+
+<script>
+  function initConnect() {
+    document.querySelectorAll<HTMLElement>("[data-connect]").forEach((root) => {
+      // Idempotent: skip roots already wired so a repeat call (e.g.
+      // astro:page-load after a client navigation) doesn't attach duplicate
+      // toggle/document/root listeners.
+      if (root.dataset.connectReady === "true") return;
+      root.dataset.connectReady = "true";
+      const dd = root.querySelector<HTMLElement>("[data-dropdown]");
+      const toggle = root.querySelector<HTMLButtonElement>("[data-dropdown-toggle]");
+      const menu = root.querySelector<HTMLElement>("[data-dropdown-menu]");
+      const selLogo = root.querySelector<HTMLElement>("[data-selected-logo]");
+      const selName = root.querySelector<HTMLElement>("[data-selected-name]");
+      if (!dd || !toggle || !menu || !selLogo || !selName) return;
+
+      const close = () => {
+        menu.classList.add("hidden");
+        toggle.setAttribute("aria-expanded", "false");
+      };
+      const open = () => {
+        menu.classList.remove("hidden");
+        toggle.setAttribute("aria-expanded", "true");
+      };
+
+      toggle.addEventListener("click", (e) => {
+        e.stopPropagation();
+        menu.classList.contains("hidden") ? open() : close();
+      });
+
+      root.querySelectorAll<HTMLButtonElement>("[data-option]").forEach((opt) => {
+        opt.addEventListener("click", () => {
+          const id = opt.dataset.option!;
+          // Update the trigger label + logo.
+          selName.textContent = opt.dataset.name ?? "";
+          const mask = `url('${opt.dataset.logo}') center/contain no-repeat`;
+          selLogo.style.setProperty("-webkit-mask", mask);
+          selLogo.style.setProperty("mask", mask);
+          // Swap visible panel + selected state.
+          root.querySelectorAll<HTMLElement>("[data-panel]").forEach((p) => {
+            p.hidden = p.dataset.panel !== id;
+          });
+          menu.querySelectorAll<HTMLElement>("[role=option]").forEach((li) => {
+            li.setAttribute(
+              "aria-selected",
+              li.querySelector("[data-option]") === opt ? "true" : "false",
+            );
+          });
+          close();
+        });
+      });
+
+      // Close on outside click / Escape.
+      document.addEventListener("click", (e) => {
+        if (!dd.contains(e.target as Node)) close();
+      });
+      root.addEventListener("keydown", (e) => {
+        if ((e as KeyboardEvent).key === "Escape") close();
+      });
+    });
+  }
+
+  initConnect();
+  document.addEventListener("astro:page-load", initConnect);
+</script>

@@ -1,0 +1,72 @@
+---
+/*
+ * ChatGPT shell - signature dark grey (#212121) canvas, model switcher at top,
+ * user bubble right (#303030, rounded-3xl), assistant plain text with the OpenAI
+ * blossom mark, and the "Ask anything" capsule composer. Neutral/monochrome accent
+ * (the current OpenAI mark is near-white, not the legacy teal). Card stays cyan.
+ */
+import ConvoScroll from "./ConvoScroll.astro";
+---
+
+<div class="overflow-hidden rounded-xl border border-white/10 bg-[#212121] text-[#ececec] shadow-2xl shadow-black/50">
+  <!-- header: model switcher + share -->
+  <div class="flex items-center justify-between px-4 py-2.5">
+    <span class="inline-flex items-center gap-1.5 text-sm font-medium text-[#ececec]">
+      ChatGPT
+      <svg class="size-3.5 text-[#a8a8a8]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+    </span>
+    <span class="rounded-full border border-white/15 px-3 py-1 text-xs text-[#a8a8a8]">Share</span>
+  </div>
+
+  <div class="space-y-4 px-4 py-2">
+    <!-- user bubble (right) -->
+    <div class="flex justify-end">
+      <p class="max-w-[75%] rounded-3xl bg-[#303030] px-4 py-2.5 text-sm text-[#ececec]">
+        Triage my inbox and draft replies.
+      </p>
+    </div>
+
+    <!-- assistant: OpenAI blossom + plain text, no bubble -->
+    <div class="flex gap-3">
+      <span class="mt-0.5 grid size-6 shrink-0 place-items-center rounded-full border border-white/15">
+        <img src="/logos/chatgpt.svg" alt="" class="size-3.5" aria-hidden="true" />
+      </span>
+      <div class="min-w-0 flex-1 space-y-2.5">
+        <p class="text-sm leading-relaxed text-[#ececec]">Here's your inbox, triaged by priority.</p>
+        <div class="inline-flex items-center gap-1.5 font-mono text-[11px] text-[#a8a8a8]">
+          <svg class="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 8l4 4-4 4m6 0h6"></path></svg>
+          Used gmail_curate_inbox
+        </div>
+        <ConvoScroll>
+          <!-- summoned host-chat turn: the app posted this user message -->
+          <div class="flex justify-end">
+            <p class="max-w-[80%] rounded-3xl bg-[#303030] px-4 py-2.5 text-sm text-[#ececec]">
+              Draft a researched reply to the Q3 contract thread from Dana.
+            </p>
+          </div>
+          <!-- assistant continues: tool use + result -->
+          <div class="space-y-2.5">
+            <div class="inline-flex items-center gap-1.5 font-mono text-[11px] text-[#a8a8a8]">
+              <svg class="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 8l4 4-4 4m6 0h6"></path></svg>
+              Used gmail_reply_to_thread
+            </div>
+            <p class="text-sm leading-relaxed text-[#ececec]">
+              Researched the thread and drafted a reply, saved to your inbox.
+            </p>
+          </div>
+        </ConvoScroll>
+      </div>
+    </div>
+  </div>
+
+  <!-- composer -->
+  <div class="px-4 py-4">
+    <div class="flex items-center gap-3 rounded-[28px] bg-[#303030] px-4 py-3">
+      <svg class="size-5 shrink-0 text-[#a8a8a8]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke-linecap="round"></path></svg>
+      <span class="flex-1 text-sm text-[#a8a8a8]">Ask anything</span>
+      <span class="grid size-7 place-items-center rounded-full bg-[#ececec] text-[#212121]">
+        <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"></path></svg>
+      </span>
+    </div>
+  </div>
+</div>

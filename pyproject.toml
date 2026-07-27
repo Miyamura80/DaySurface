@@ -1,0 +1,277 @@
+[project]
+name = "mcp-template"
+version = "0.1.1"
+description = "🪛 CLI tool template (python) with batteries included. Auto-install, updates, linting, dead code analysis, and a whole lot more."
+authors = [
+    { name = "Miyamura80", email = "eitomiyamura@gmail.com" }
+]
+license = { file = "LICENSE" }
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Utilities",
+]
+keywords = ["cli", "template", "typer", "uv", "tooling"]
+dependencies = [
+    "pyyaml>=6.0.3",
+    "python-dotenv>=1.2.1",
+    "human-id>=0.2.0",
+    "import-linter>=2.1.1",
+    "pytest>=9.0.3",
+    "pytest-xdist>=3.6.1",
+    "termcolor>=2.5.0",
+    "loguru>=0.7.3",
+    "vulture>=2.14",
+    "dspy>=3.1.2",
+    "langfuse>=4.7.1",
+    "litellm>=1.59.8,!=1.82.*",
+    "tenacity>=9.0.0",
+    "pillow>=12.3.0",
+    "google-genai>=2.3.0",
+    "ty>=0.0.14",
+    "pytest-env>=1.2.0",
+    "pydantic-settings>=2.14.2",
+    "pytest-cov>=7.0.0",
+    "pytest-repeat>=0.9.3",
+    "pylint>=4.0.6",
+    "deptry>=0.23.0",
+    "openfeature-sdk>=0.10.0",
+    "scrubadub>=2.0.1",
+    "pydantic>=2.13.4",
+    "numpy>=2.4.6",
+    "typer",
+    "questionary",
+    "rich>=15.0.0",
+    "packaging>=26.2",
+    "keyring>=25.0.0",
+    "mcp[cli]>=1.10.0,<2.0.0",
+    "fastapi>=0.115.0",
+    "httpx>=0.28.0",
+    "anyio>=4.14.1",
+    "uvicorn[standard]>=0.51.0",
+    "sqlalchemy>=2.0.51",
+    "alembic>=1.15.0",
+    "PyJWT[crypto]>=2.10.0",
+    "cryptography>=49.0.0",
+    "itsdangerous>=2.2.0",
+    "stripe>=15.3.1",
+    "limits>=5.8.0",
+    "redis>=8.0.1",
+    "x402[fastapi,httpx]>=2.12.0",
+    "starlette>=0.40.0",
+    "google-api-python-client>=2.198.0",
+    "google-auth>=2.53.0",
+    "psycopg2-binary>=2.9.12",
+    "rank-bm25>=0.2.2",
+    "sse-starlette>=3.4.5",
+    "pypdf>=6.14.2",
+    "pyhanko>=0.35.2",
+    "pypdfium2>=5.12.1",
+]
+readme = "README.md"
+requires-python = ">= 3.12"
+
+[project.urls]
+Homepage = "https://github.com/Miyamura80/MCP-Template"
+Repository = "https://github.com/Miyamura80/MCP-Template"
+Issues = "https://github.com/Miyamura80/MCP-Template/issues"
+
+[project.scripts]
+mymcp = "src.cli.app:main_cli"
+# Primary remote-MCP entrypoint: HTTP API + MCP (streamable HTTP) on one port.
+mymcp-serve = "api_server:main"
+# Legacy stdio transport, kept for local Claude Desktop / dev only.
+mymcp-mcp = "mcp_server:main"
+# Deprecated alias for mymcp-serve; prefer the new name.
+mymcp-api = "api_server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src", "common", "utils", "services", "models", "mcp_server", "db", "api_server"]
+force-include = {"mcp_server/apps/gmail_composer/dist/mcp-app.html" = "mcp_server/apps/gmail_composer/dist/mcp-app.html", "mcp_server/apps/gmail_inbox/dist/mcp-app.html" = "mcp_server/apps/gmail_inbox/dist/mcp-app.html", "mcp_server/apps/settings/dist/mcp-app.html" = "mcp_server/apps/settings/dist/mcp-app.html", "mcp_server/apps/pdf_signer/dist/mcp-app.html" = "mcp_server/apps/pdf_signer/dist/mcp-app.html", "docs/content/docs" = "docs/content/docs"}
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+# E402 (module-level import not at top of file) comes with "E"; PLC0415 bans
+# imports inside functions - keep all imports at the top of the file, or
+# `# noqa: PLC0415` with a justification comment for deliberate lazy imports.
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM", "C901", "FIX", "BLE", "TID", "PLC0415"]
+ignore = ["E501", "UP015", "B008"]
+
+[tool.ruff.lint.per-file-ignores]
+# getProfile mirrors googleapiclient's camelCase Gmail Resource method name, which
+# the Gmail services call verbatim, so the fake cannot rename it to snake_case.
+"services/_gmail_fake_backend.py" = ["N802"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"importlib.import_module".msg = "Dynamic imports are banned. If genuinely needed (e.g. plugin auto-discovery), add `# noqa: TID251` with a one-line justification."
+"importlib.reload".msg = "importlib.reload is for narrow test-fixture use only. Add `# noqa: TID251` with justification."
+"importlib.util.spec_from_file_location".msg = "Loading modules from arbitrary file paths is banned. Add `# noqa: TID251` with justification."
+
+[tool.ty]
+
+[tool.ty.src]
+# Standalone, dev-only helper scripts run outside the app venv (optional deps
+# like cairosvg) - not part of the typed app surface. The goose-gui-e2e harness
+# scripts import app modules but only ever run under the e2e stack, not the app.
+exclude = [
+    "scripts/sync_agent_config.py",
+    "landing-page/scripts/gen-og.py",
+    ".agents/skills/goose-gui-e2e/scripts/",
+]
+
+[tool.ty.rules]
+possibly-unresolved-reference = "error"
+
+[tool.ty.terminal]
+error-on-warning = true
+
+[tool.ty.environment]
+python-version = "3.12"
+
+[tool.deptry]
+ignore = ["DEP002"]
+extend_exclude = ["scripts/sync_agent_config.py", "landing-page/scripts/gen-og.py", ".agents/skills/goose-gui-e2e/scripts/"]
+package_module_name_map = { "PyJWT" = "jwt", "google-api-python-client" = "googleapiclient", "google-auth" = "google", "google-genai" = "google", "openfeature-sdk" = "openfeature", "pillow" = "PIL", "pyyaml" = "yaml", "python-dotenv" = "dotenv" }
+
+[tool.vulture]
+exclude = [
+    ".venv-test/",
+    ".venv/",
+    ".uv-cache/",
+    ".uv_cache/",
+    ".uv_tools/",
+    ".uv-tools/",
+    "docs/",
+    "node_modules/",
+    ".agents/skills/goose-gui-e2e/scripts/",
+    "tests/test_logging_security.py",
+    "tests/test_logging_thread_safety.py",
+    "tests/test_template.py",
+    "tests/test_api_key_auth.py",
+    "tests/test_api_server.py",
+    "tests/test_deprecation.py",
+    "tests/test_pagination.py",
+    "tests/test_unified_auth.py",
+    "tests/test_workos_auth.py",
+    "tests/test_error_handler.py",
+    "tests/cli/test_stdin.py",
+    "tests/test_rate_limit.py",
+    "tests/test_health_enhanced.py",
+    "tests/test_billing.py",
+    "tests/test_idempotency.py",
+    "tests/test_enhancer_fallback.py",
+    "tests/test_image_proxy.py",
+    "tests/test_scopes.py",
+    "utils/llm/",
+    "common/",
+    "src/utils/logging_config.py",
+    "src/utils/cli_help.py",
+    "src/utils/stdin.py",
+    "src/utils/context.py",
+    "src/utils/current_user.py",
+    "src/utils/interactive.py",
+    "src/utils/progress.py",
+    "src/utils/output.py",
+    "src/utils/errors.py",
+    "src/utils/theme.py",
+    "tests/conftest.py",
+    "init/",
+    "init/onboard.py",
+    "src/cli/",
+    "templates/",
+    "services/",
+    "models/",
+    "mcp_server/",
+    "db/",
+    "api_server/",
+    "src/payments/",
+    "tests/test_agentic_payments.py",
+    "tests/test_agentic_payments_api.py",
+    "tests/test_enhancers.py",
+    "tests/test_mcp_server.py",
+    "tests/test_mcp_remote.py",
+    "tests/test_gmail_services.py",
+    "tests/test_inbox_curation.py",
+    "tests/test_mcp_oauth.py",
+    "tests/test_mcp_e2e.py",
+    "tests/test_apps_e2e.py",
+    "tests/test_pdf_documents_repo.py",
+    "tests/test_pdf_gmail_bridge.py",
+    "tests/test_pdf_forms_svc.py",
+    "tests/test_pdf_signing.py",
+    "tests/test_pdf_signer_flows.py",
+    "tests/pdf_fixtures.py",
+    "tests/pdf_harness.py",
+]
+
+[tool.file_length]
+max_lines = 500
+exclude = [
+    "init/onboard.py",
+    "api_server/routes/payments/webhooks.py",
+    "api_server/middleware/rate_limit.py",
+    "tests/test_gmail_services.py",
+    "tests/test_inbox_curation.py",
+    "services/gmail_messages_svc.py",
+    "services/gmail_svc.py",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["src", "common", "utils", "services", "models", "db", "api_server"]
+omit = [
+    "tests/*",
+    "docs/*",
+    "init/*",
+    "alembic/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+
+[tool.uv]
+# Relative `exclude-newer` durations (below) are only understood by uv >= 0.9.17.
+# WARNING: this `required-version` guard does NOT protect older uv here. An old
+# uv can't parse `exclude-newer = "7 days"`, so it warns and discards the WHOLE
+# `[tool.uv]` table - required-version included - then resolves without the
+# cooldown and silently rewrites uv.lock (exit 0). The guard only fires when the
+# table parses, i.e. on uv that's already new enough. The real guarantee that a
+# new-enough uv is present comes from the SessionStart hook
+# (.claude/hooks/session-start.sh), which upgrades uv before any sync.
+required-version = ">=0.9.17"
+# 7-day quarantine on freshly-published packages (supply-chain defense).
+exclude-newer = "7 days"
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.6.0",
+    # NOTE: pytest-check-links is deliberately NOT a project dependency. It still
+    # declares the pytest `path` collect hook removed in pytest 9.1, so having it
+    # in this venv would make pytest 9.1+ abort at plugin load. The link checker
+    # instead runs it in a throwaway env that never installs this project (so it
+    # can pin pytest<9.1 independently of the project's own pytest, which is a
+    # runtime dep): see the `make lint_links` target and the prek `lint-links`
+    # hook - both `uv run --no-project --with 'pytest<9.1' --with pytest-check-links`.
+    # Validates the served A2A Agent Card against the vendored AgentCard schema
+    # in tests/data/ (test-only; the app builds the card from typed models).
+    "jsonschema>=4.26.0",
+]

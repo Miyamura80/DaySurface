@@ -1,0 +1,91 @@
+---
+title: OAuth 2.1
+description: Spec-compliant OAuth for remote MCP clients via WorkOS AuthKit
+---
+
+## Overview
+
+The `/mcp` endpoint supports the MCP authorization spec (2025-11-25): this
+server acts as an OAuth 2.1 **resource server**, and [WorkOS
+AuthKit](https://workos.com/docs/authkit/mcp) acts as the **authorization
+server**. AuthKit handles client registration (Client ID Metadata Documents
+and Dynamic Client Registration), PKCE, and user consent, then issues access
+tokens audience-bound to this server. Clients like Claude (web and Desktop)
+connect with zero manual provisioning: no client IDs, no pasted keys.
+
+API keys (`X-API-KEY`) and WorkOS session JWTs keep working as parallel auth
+paths for machine and internal clients.
+
+## What the server implements
+
+- **Protected Resource Metadata (RFC 9728)** at
+  `/.well-known/oauth-protected-resource/mcp` (path form, tried first by
+  clients) and `/.well-known/oauth-protected-resource`. It names the canonical
+  resource URI and points at your AuthKit instance.
+- **Authorization Server Metadata (RFC 8414)** at
+  `/.well-known/oauth-authorization-server` (and the `/mcp` path form). AuthKit
+  is the authorization server and publishes its own RFC 8414 document; the
+  spec-correct discovery path is PRM → AuthKit. But many MCP clients and
+  registry crawlers probe this well-known against the *resource server* origin
+  directly, so the server redirects (`307`) those requests to AuthKit's
+  authoritative metadata. Both endpoints return `404` when OAuth is unconfigured.
+- **Discovery hint on 401**: unauthenticated `/mcp` requests get
+  `WWW-Authenticate: Bearer realm="mcp", resource_metadata="..."`, which is
+  how clients bootstrap the flow.
+- **Audience-bound token validation (RFC 8707)**: AuthKit access tokens are
+  verified against the AuthKit JWKS, with the issuer pinned to your AuthKit
+  domain and the audience pinned to `MCP_PUBLIC_URL`. Tokens minted for any
+  other resource are rejected. The token's `sub` becomes the `user_id` seen by
+  tools (same `current_user()` plumbing as the other auth methods), and a
+  `scope` claim maps onto the server's scope checks.
+
+## Setup
+
+1. In the WorkOS dashboard, enable AuthKit and go to **Connect →
+   Configuration**. Enable **Client ID Metadata Documents** (and optionally
+   **Dynamic Client Registration** for older clients), and register your MCP
+   server's public URL as a **resource indicator**, e.g.
+   `https://your-deployment.example.com/mcp`.
+2. Set the two environment variables in `.env`:
+
+```bash
+WORKOS_AUTHKIT_DOMAIN=https://your-env.authkit.app
+MCP_PUBLIC_URL=https://your-deployment.example.com/mcp
+```
+
+`MCP_PUBLIC_URL` must match the resource indicator exactly (no trailing
+slash); tokens are audience-bound to this string, so a mismatch yields silent
+401s.
+
+3. Restart `mymcp-serve`. Verify discovery:
+
+```bash
+curl https://your-deployment.example.com/.well-known/oauth-protected-resource/mcp
+```
+
+```json
+{
+  "resource": "https://your-deployment.example.com/mcp",
+  "authorization_servers": ["https://your-env.authkit.app"],
+  "bearer_methods_supported": ["header"]
+}
+```
+
+4. Add the server to an MCP client by URL alone (no headers). The client
+   discovers AuthKit, registers itself, and opens the consent screen.
+
+## Conformance testing
+
+[MCPJam](https://github.com/MCPJam/inspector) ships an OAuth conformance
+suite. It drives a real browser consent flow, so it is a manual check rather
+than part of CI:
+
+```bash
+npx -y @mcpjam/cli@latest oauth conformance \
+  --url https://your-deployment.example.com/mcp \
+  --protocol-version 2025-11-25 \
+  --conformance-checks
+```
+
+Protocol and apps conformance run in CI against the API-key path (see
+`make mcp_conformance`).

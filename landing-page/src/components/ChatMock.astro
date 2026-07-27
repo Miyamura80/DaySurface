@@ -1,0 +1,108 @@
+---
+/*
+ * Hero chat mock. A toggle swaps between four client shells (Claude / ChatGPT /
+ * Goose / VS Code), each a stylized-but-recognizable reproduction of that client's
+ * real chat UI (theme, chrome, bubbles, avatars sourced from per-client research).
+ * Every shell embeds the SAME <InboxApp /> MCP-app card - a sandboxed MCP App
+ * renders its own UI regardless of host, so the card stays brand-cyan everywhere.
+ *
+ * The toggle itself stays in the site's Hackbox style (it's our control, not a
+ * client's). Each shell is full, separate markup; the toggle only flips visibility.
+ */
+import { heroChat } from "../config/landing";
+import ClaudeShell from "./chat/ClaudeShell.astro";
+import ChatGptShell from "./chat/ChatGptShell.astro";
+import GooseShell from "./chat/GooseShell.astro";
+import VsCodeShell from "./chat/VsCodeShell.astro";
+
+const { clients, defaultId } = heroChat;
+
+const maskStyle = (logo: string) =>
+  `-webkit-mask:url('${logo}') center/contain no-repeat;mask:url('${logo}') center/contain no-repeat;`;
+---
+
+<div class="mx-auto w-full max-w-md" data-chatmock>
+  <!-- Client toggle (Hackbox style) -->
+  <div
+    class="mb-3 grid grid-cols-4 border-2 border-border bg-surface-1"
+    role="tablist"
+    aria-label="Preview client"
+  >
+    {
+      clients.map((c) => (
+        <button
+          type="button"
+          role="tab"
+          id={`tab-${c.id}`}
+          aria-controls={`panel-${c.id}`}
+          aria-selected={c.id === defaultId ? "true" : "false"}
+          tabindex={c.id === defaultId ? 0 : -1}
+          data-client-tab={c.id}
+          class="client-tab flex items-center justify-center gap-1.5 border-r-2 border-border px-2 py-2 text-xs font-medium text-fg-muted transition last:border-r-0 hover:text-fg aria-selected:bg-accent aria-selected:text-accent-fg"
+        >
+          <span class="size-4 shrink-0 bg-current" style={maskStyle(c.logo)} aria-hidden="true" />
+          <span class="hidden sm:inline">{c.name}</span>
+        </button>
+      ))
+    }
+  </div>
+
+  <!-- Shells; only the active one is shown. Each is the tabpanel for its toggle
+       tab (role/aria-labelledby), so the active panel is exposed to assistive
+       tech rather than hidden. -->
+  <div>
+    <div role="tabpanel" id="panel-claude" aria-labelledby="tab-claude" tabindex="0" data-shell="claude" hidden={defaultId !== "claude"}><ClaudeShell /></div>
+    <div role="tabpanel" id="panel-chatgpt" aria-labelledby="tab-chatgpt" tabindex="0" data-shell="chatgpt" hidden={defaultId !== "chatgpt"}><ChatGptShell /></div>
+    <div role="tabpanel" id="panel-goose" aria-labelledby="tab-goose" tabindex="0" data-shell="goose" hidden={defaultId !== "goose"}><GooseShell /></div>
+    <div role="tabpanel" id="panel-vscode" aria-labelledby="tab-vscode" tabindex="0" data-shell="vscode" hidden={defaultId !== "vscode"}><VsCodeShell /></div>
+  </div>
+</div>
+
+<script>
+  function initChatMock() {
+    document.querySelectorAll<HTMLElement>("[data-chatmock]").forEach((root) => {
+      // Idempotent: skip roots already wired (e.g. a repeat astro:page-load).
+      if (root.dataset.chatmockReady === "true") return;
+      root.dataset.chatmockReady = "true";
+
+      const tabs = Array.from(
+        root.querySelectorAll<HTMLButtonElement>(".client-tab"),
+      );
+      const shells = root.querySelectorAll<HTMLElement>("[data-shell]");
+
+      // Activate a tab: roving tabindex (only the selected tab is in the tab
+      // order) + aria-selected + show the matching panel.
+      const select = (tab: HTMLButtonElement) => {
+        const id = tab.dataset.clientTab;
+        tabs.forEach((t) => {
+          const on = t === tab;
+          t.setAttribute("aria-selected", String(on));
+          t.tabIndex = on ? 0 : -1;
+        });
+        shells.forEach((s) => {
+          s.hidden = s.dataset.shell !== id;
+        });
+      };
+
+      tabs.forEach((tab, i) => {
+        tab.addEventListener("click", () => select(tab));
+        // WAI-ARIA tabs keyboard pattern: Left/Right move (and activate) the
+        // adjacent tab; Home/End jump to the first/last.
+        tab.addEventListener("keydown", (e) => {
+          let next = -1;
+          if (e.key === "ArrowRight") next = (i + 1) % tabs.length;
+          else if (e.key === "ArrowLeft") next = (i - 1 + tabs.length) % tabs.length;
+          else if (e.key === "Home") next = 0;
+          else if (e.key === "End") next = tabs.length - 1;
+          else return;
+          e.preventDefault();
+          select(tabs[next]);
+          tabs[next].focus();
+        });
+      });
+    });
+  }
+
+  initChatMock();
+  document.addEventListener("astro:page-load", initChatMock);
+</script>

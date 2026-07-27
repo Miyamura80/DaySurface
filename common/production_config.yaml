@@ -1,0 +1,9 @@
+example_parent:
+  example_child: "prod_value"
+
+# Overrides applied when DEV_ENV=prod. Replace the placeholder origin with the
+# deployed dashboard / MCP host domain before going live.
+server:
+  host: "0.0.0.0"
+  allowed_origins:
+    - "https://YOUR-DASHBOARD-DOMAIN.example.com"

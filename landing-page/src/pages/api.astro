@@ -1,0 +1,39 @@
+---
+/**
+ * Branded API reference (Scalar) rendered from the build-time OpenAPI snapshot.
+ *
+ * The spec is served same-origin at /openapi.json (written by
+ * scripts/gen-openapi.ts), so this page has no runtime CORS dependency on the
+ * API host. Only the Scalar renderer loads from CDN; the spec is local.
+ */
+import Base from "../layouts/Base.astro";
+import Nav from "../components/Nav.astro";
+import { site } from "../config/landing";
+
+const title = `${site.name} API Reference`;
+const description = `Interactive REST API reference for ${site.name}, served at ${site.apiUrl}.`;
+
+// Dark theme to match the site. The spec is loaded same-origin via data-url.
+const scalarConfig = JSON.stringify({
+  theme: "default",
+  darkMode: true,
+  hideDarkModeToggle: true,
+  metaData: { title },
+});
+---
+
+<Base title={title} description={description}>
+  <Nav />
+  <!--
+    Scalar's canonical auto-init: it reads the #api-reference script's data-url
+    + data-configuration when the standalone bundle loads, then mounts itself.
+    The bundle is pinned to major v1 to avoid silent breakage.
+  -->
+  <script
+    id="api-reference"
+    type="application/json"
+    data-url="/openapi.json"
+    data-configuration={scalarConfig}
+    is:inline></script>
+  <script is:inline src="https://cdn.jsdelivr.net/npm/@scalar/api-reference@1"></script>
+</Base>

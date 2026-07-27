@@ -1,0 +1,23 @@
+{
+  "comment": "'liquidation preference' is in the message BODY, which renders only in the thread READER, not the curated-inbox list (whose snippet lacks it). Asserting it proves the reader rendered - i.e. the ontoolresult buffer (helpers.bufferToolResults) delivered the thread result even when the host raced it ahead of mount, instead of the app falling back to a curated-inbox refresh.",
+  "prompt": "Open the Series A term sheet email thread.",
+  "plan": [
+    {
+      "match": "gmail_get_thread",
+      "args": {
+        "thread_id": "t-1001"
+      }
+    }
+  ],
+  "final": "Opened the thread.",
+  "app_uri": "ui://mymcp/gmail_inbox",
+  "expect": {
+    "tool_called": "gmail_get_thread",
+    "round_trip": true,
+    "app_rendered": true,
+    "dom_contains": [
+      "Series A term sheet",
+      "liquidation preference"
+    ]
+  }
+}

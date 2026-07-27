@@ -1,0 +1,57 @@
+---
+import { site, nav } from "../config/landing";
+---
+
+<header
+  class="sticky top-0 z-50 border-b border-border/60 bg-bg/80 backdrop-blur-md"
+>
+  <nav
+    class="mx-auto flex h-16 max-w-6xl items-center justify-between px-6"
+    aria-label="Primary"
+  >
+    <a href="#top" class="flex items-center gap-2 font-semibold tracking-tight">
+      <span
+        class="grid size-7 place-items-center bg-accent font-mono text-sm font-bold text-accent-fg"
+        >{site.name.charAt(0)}</span
+      >
+      <span>{site.name}</span>
+    </a>
+
+    <div class="hidden items-center gap-7 md:flex">
+      {
+        nav.links.map((link) => (
+          <a
+            href={link.href}
+            class="text-sm text-fg-muted transition hover:text-fg"
+          >
+            {link.label}
+          </a>
+        ))
+      }
+    </div>
+
+    <div class="flex items-center gap-3">
+      <a
+        href={nav.github.href}
+        target="_blank"
+        rel="noopener noreferrer"
+        title={nav.github.title}
+        class="group inline-flex items-center gap-2 border border-accent/40 px-3 py-2 text-sm font-medium text-fg-muted transition hover:border-accent hover:bg-surface-1 hover:text-fg"
+      >
+        <span
+          class="size-[18px] shrink-0 bg-fg-muted transition group-hover:bg-accent"
+          style="-webkit-mask:url('/logos/github.svg') center/contain no-repeat;mask:url('/logos/github.svg') center/contain no-repeat;"
+          aria-hidden="true"
+        ></span>
+        <span class="hidden sm:inline">{nav.github.label}</span>
+      </a>
+
+      <a
+        href={nav.cta.href}
+        class="bg-accent px-4 py-2 text-sm font-semibold text-accent-fg transition hover:bg-accent-strong"
+      >
+        {nav.cta.label}
+      </a>
+    </div>
+  </nav>
+</header>

@@ -1,0 +1,52 @@
+name: MCP Conformance
+
+on:
+  push:
+    branches:
+      - '**'
+    paths-ignore:
+      - '.github/workflows/**'
+      - 'docs/**'
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+jobs:
+  mcp_conformance:
+    if: github.event_name == 'pull_request' || github.event.pull_request == null
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Read Python version
+        run: echo "PYTHON_VERSION=$(cat .python-version | tr -d '\n')" >> $GITHUB_ENV
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+      - name: Install dependencies
+        run: uv sync
+
+      # Auth uses a seeded API key against a throwaway SQLite DB (see the
+      # script); no WorkOS/Stripe/Redis secrets are required for conformance.
+      - name: Run MCPJam conformance
+        run: uv run python scripts/mcp_conformance.py
+
+      - name: Upload conformance reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: mcp-conformance-reports
+          path: mcp_conformance_results/
+          if-no-files-found: ignore

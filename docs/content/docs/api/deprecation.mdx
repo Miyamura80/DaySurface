@@ -1,0 +1,95 @@
+---
+title: Versioning & Deprecation
+description: How the REST API is versioned, how endpoints are deprecated, and the headers clients should watch
+---
+
+The REST API makes a forward-compatibility promise: **we will not silently
+break a client.** This page is the published policy that the `Link;
+rel="deprecation"` response header points to.
+
+## Versioning
+
+Endpoints are **URL-versioned** under a major-version path prefix:
+
+```
+/api/v1/...
+```
+
+- **Additive changes** (new endpoints, new optional fields, new response
+  headers) ship within the current version. Clients must tolerate unknown
+  fields.
+- **Breaking changes** (removing or renaming a field, changing a type,
+  tightening validation) ship under a **new** prefix, e.g. `/api/v2`. The
+  previous version keeps serving until its sunset date.
+
+The version and policy are also advertised in the OpenAPI `info.description`
+(served at `/openapi.json`) so codegen and agents discover them programmatically.
+
+## Deprecation lifecycle
+
+```
+   active  ──────────▶  deprecated  ──────────▶  sunset (removed)
+              announce              >= 90 days
+            (Deprecation)            (Sunset)
+```
+
+1. **Announce.** The endpoint starts returning a `Deprecation` header. It keeps
+   working exactly as before.
+2. **Sunset window.** A `Sunset` header announces the removal date, **at least
+   90 days** out. The OpenAPI operation is also marked `deprecated: true`.
+3. **Removal.** After the sunset date the endpoint returns `410 Gone` (or moves
+   to the next major version).
+
+## Headers to watch
+
+Deprecated endpoints emit these on **every** response. They are safe to ignore
+but you should log and alert on them.
+
+| Header | Spec | Example | Meaning |
+|--------|------|---------|---------|
+| `Deprecation` | [RFC 9745](https://www.rfc-editor.org/rfc/rfc9745) | `@1767139199` | sf-date when the endpoint was deprecated (or `true`) |
+| `Sunset` | [RFC 8594](https://www.rfc-editor.org/rfc/rfc8594) | `Wed, 31 Dec 2025 23:59:59 GMT` | When it stops working |
+| `Link` | [RFC 8288](https://www.rfc-editor.org/rfc/rfc8288) | `<https://gmailmcp.com/docs/api/deprecation>; rel="deprecation"` | This policy page |
+
+```bash
+curl -sI -H "Authorization: Bearer sk_live_..." \
+  http://localhost:8000/api/v1/some-deprecated-endpoint | grep -iE 'deprecation|sunset|link'
+```
+
+```
+deprecation: @1767139199
+sunset: Wed, 31 Dec 2025 23:59:59 GMT
+link: <https://gmailmcp.com/docs/api/deprecation>; rel="deprecation"
+```
+
+## Recommendations for agents and clients
+
+- Treat a `Sunset` date as a hard deadline to migrate.
+- Surface a `Deprecation` header in your logs so an operator notices early.
+- Pin to a major version (`/api/v1`) and only move to the next prefix
+  deliberately, after testing.
+
+## Marking an endpoint deprecated (maintainers)
+
+Attach the `deprecate` dependency and set `deprecated=True` so the runtime
+headers and the OpenAPI schema stay in agreement:
+
+```python
+from datetime import datetime, timezone
+from fastapi import Depends
+from api_server.deprecation import deprecate
+
+@router.get(
+    "/legacy",
+    dependencies=[
+        Depends(
+            deprecate(
+                since=datetime(2025, 10, 1, tzinfo=timezone.utc),
+                sunset=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            )
+        )
+    ],
+    deprecated=True,
+)
+def legacy_endpoint(): ...
+```

@@ -1,0 +1,49 @@
+---
+import { finalCta } from "../config/landing";
+import CtaButtons from "./CtaButtons.astro";
+---
+
+<section class="relative overflow-hidden border-t border-border/60 py-24">
+  <div class="glow pointer-events-none absolute inset-x-0 bottom-0 h-96"></div>
+
+  <div
+    class="relative mx-auto grid max-w-5xl items-center gap-12 px-6 lg:grid-cols-2 lg:gap-16"
+  >
+    <!-- Left: pitch + CTA -->
+    <div class="text-center lg:text-left">
+      <h2 class="text-balance text-3xl font-bold tracking-tight sm:text-4xl">
+        {finalCta.heading}
+      </h2>
+      <p class="mx-auto mt-4 max-w-xl text-lg text-fg-muted lg:mx-0">
+        {finalCta.subhead}
+      </p>
+
+      <CtaButtons class="mt-9 justify-center lg:justify-start" />
+    </div>
+
+    <!-- Right: flagship features -->
+    <ul class="mx-auto w-full max-w-sm border-2 border-border bg-surface-1 lg:mx-0">
+      {
+        finalCta.features.map((feature) => (
+          <li class="flex items-center gap-3 border-b border-border px-5 py-4 last:border-b-0">
+            <span class="grid size-5 shrink-0 place-items-center border border-accent/50 text-accent">
+              <svg
+                class="size-3"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="3"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M20 6L9 17l-5-5" />
+              </svg>
+            </span>
+            <span class="font-medium">{feature}</span>
+          </li>
+        ))
+      }
+    </ul>
+  </div>
+</section>

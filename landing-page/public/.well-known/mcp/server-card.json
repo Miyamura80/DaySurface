@@ -1,0 +1,97 @@
+{
+  "name": "io.github.Miyamura80/MCP-Template",
+  "version": "0.1.1",
+  "title": "GmailMCP",
+  "description": "Give your AI agent real tools - one service registry over CLI, MCP, and HTTP.",
+  "websiteUrl": "https://gmailmcp.com",
+  "serverUrl": "https://mcp.gmailmcp.com/mcp",
+  "repository": {
+    "url": "https://github.com/Miyamura80/MCP-Template",
+    "source": "github"
+  },
+  "icons": [
+    {
+      "src": "https://gmailmcp.com/favicon.svg",
+      "mimeType": "image/svg+xml",
+      "sizes": [
+        "any"
+      ]
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://mcp.gmailmcp.com/mcp"
+    }
+  ],
+  "tools": [
+    {
+      "name": "gmail_archive_thread",
+      "description": "Archive a Gmail thread by removing the INBOX label"
+    },
+    {
+      "name": "gmail_compose",
+      "description": "Create a new Gmail draft from the given fields. ALWAYS use this tool instead of composing email text in chat - it creates a real Gmail draft and opens an interactive composer UI where the user can review, edit, and send. When an interactive UI is rendered alongside the result, keep your text response brief since the user can edit in the UI."
+    },
+    {
+      "name": "gmail_connect",
+      "description": "Begin the Google OAuth flow to link a Gmail account"
+    },
+    {
+      "name": "gmail_curate_inbox",
+      "description": "Rank recent inbox threads by a deterministic importance score. When an interactive UI is rendered alongside the result, keep your text response brief (a one-line summary) since the user can browse details in the UI. Only elaborate if the user asks."
+    },
+    {
+      "name": "gmail_discard_draft",
+      "description": "Delete a Gmail draft by id"
+    },
+    {
+      "name": "gmail_disconnect",
+      "description": "Revoke and remove the user's linked Gmail account"
+    },
+    {
+      "name": "gmail_get_draft",
+      "description": "Fetch a single Gmail draft by id"
+    },
+    {
+      "name": "gmail_get_thread",
+      "description": "Fetch a Gmail thread by id with full message bodies + attachments. When an interactive UI is rendered alongside the result, keep your text response brief since the user can browse the conversation in the UI."
+    },
+    {
+      "name": "gmail_list_drafts",
+      "description": "List the user's Gmail drafts"
+    },
+    {
+      "name": "gmail_list_inbox",
+      "description": "List recent inbox messages, optionally filtered by a Gmail search query. When the user asks to find or open a specific email, ALWAYS follow up by calling gmail_get_thread with the thread_id to render the full conversation in an interactive UI."
+    },
+    {
+      "name": "gmail_mark_thread_done",
+      "description": "Mark a Gmail thread as done by applying the MCP/Done label (hides from curated inbox)"
+    },
+    {
+      "name": "gmail_mark_thread_read",
+      "description": "Mark a Gmail thread as read by removing the UNREAD label"
+    },
+    {
+      "name": "gmail_reply_to_thread",
+      "description": "Create a reply draft on an existing Gmail thread. ALWAYS use this tool instead of composing reply text in chat - it creates a real Gmail draft and opens an interactive composer UI where the user can review, edit, and send. Pass your drafted reply in the 'body' parameter. When an interactive UI is rendered alongside the result, keep your text response brief since the user can edit in the UI."
+    },
+    {
+      "name": "gmail_send",
+      "description": "Send a previously-composed Gmail draft"
+    },
+    {
+      "name": "gmail_status",
+      "description": "Return whether the user has a linked Gmail account"
+    },
+    {
+      "name": "gmail_unmark_thread_done",
+      "description": "Remove the MCP/Done label from a thread (undo mark-done)"
+    },
+    {
+      "name": "gmail_update_draft",
+      "description": "Patch fields on an existing Gmail draft and open an interactive composer UI. ALWAYS call this tool to write or edit draft content - NEVER compose email text as plain chat text. The tool renders an interactive composer where the user can review, edit, and send. Pass your composed text in the 'body' parameter. Keep your chat response to one brief sentence since the user can edit in the UI."
+    }
+  ]
+}

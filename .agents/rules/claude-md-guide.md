@@ -1,0 +1,1 @@
+../../.claude/rules/claude-md-guide.md

@@ -1,0 +1,49 @@
+---
+import { compatibility } from "../config/landing";
+---
+
+<section class="border-y border-border/60 bg-surface-1/40 py-12">
+  <div class="mx-auto max-w-6xl px-6 text-center">
+    <p class="font-mono text-xs font-medium uppercase tracking-[0.2em] text-fg-subtle">
+      {compatibility.heading}
+    </p>
+    <ul
+      class="mt-8 flex flex-wrap items-center justify-center gap-x-10 gap-y-7"
+    >
+      {
+        compatibility.clients.map((client) => (
+          <li class="client group flex items-center gap-2.5">
+            {client.logo ? (
+              <span class="relative grid size-6 shrink-0 place-items-center">
+                {/* Resting: monochrome grey mark (keeps the strip calm). */}
+                <span
+                  class="absolute inset-0 bg-fg-muted transition-opacity duration-200 group-hover:opacity-0"
+                  style={`-webkit-mask:url('${client.logo}') center/contain no-repeat;mask:url('${client.logo}') center/contain no-repeat;`}
+                  aria-hidden="true"
+                />
+                {/* Hover: the real, full-color icon. */}
+                <img
+                  src={client.logo}
+                  alt=""
+                  loading="lazy"
+                  class="absolute inset-0 size-full object-contain opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+                  aria-hidden="true"
+                />
+              </span>
+            ) : (
+              <span
+                class="grid size-6 shrink-0 place-items-center border border-fg-subtle font-mono text-[11px] font-bold text-fg-muted transition group-hover:border-accent group-hover:text-accent"
+                aria-hidden="true"
+              >
+                {client.name.charAt(0)}
+              </span>
+            )}
+            <span class="text-base font-medium text-fg-muted transition group-hover:text-fg">
+              {client.name}
+            </span>
+          </li>
+        ))
+      }
+    </ul>
+  </div>
+</section>

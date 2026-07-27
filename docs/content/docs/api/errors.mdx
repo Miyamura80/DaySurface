@@ -1,0 +1,187 @@
+---
+title: Errors
+description: Structured error envelope, error codes, and retry guidance for agents
+---
+
+Every non-2xx response uses the **same JSON envelope** and carries a request ID,
+so agents and SDKs can branch on a stable machine-readable `code` instead of
+parsing prose. The envelope and `X-Request-ID` header are applied by the
+server's error middleware to *all* error responses - including 4xx/5xx raised
+deep inside a handler.
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+## Error Envelope
+
+```json
+{
+  "error": {
+    "code": "rate_limited",
+    "message": "Rate limit exceeded (minute window). Retry after 12s.",
+    "request_id": "8f14e45fceea167a5a36dedd4bea2543",
+    "details": { "...": "optional, present on validation and quota errors" }
+  }
+}
+```
+
+| Field | Always present | Description |
+|-------|----------------|-------------|
+| `error.code` | yes | Stable string for programmatic branching (table below) |
+| `error.message` | yes | Human-readable description; **do not** match on this |
+| `error.request_id` | yes | Correlates with the `X-Request-ID` response header and server logs - include it in support requests |
+| `error.details` | no | Structured context (validation errors, quota numbers, tier) |
+
+The same `request_id` is also returned in the `X-Request-ID` response header on
+**every** request (success or failure). Pass your own `X-Request-ID` on the
+request to thread your trace ID through the server logs.
+
+## Status Codes
+
+| HTTP | `error.code` | Retryable? | What to do |
+|------|--------------|------------|------------|
+| `400` | `bad_request` | No | Fix the request before retrying |
+| `401` | `unauthorized` | No | Verify the `Authorization: Bearer` header / API key |
+| `402` | `payment_required` / `quota_exceeded` | After daily reset | Daily quota exhausted - the `Retry-After` can be hours away, so handle it separately from the [retry loop](#reference-retry-loop-python): wait for the reset or upgrade the plan |
+| `403` | `forbidden` | No | The key lacks the required [scope](/docs/api/authentication#scopes) |
+| `404` | `not_found` | No | Check the endpoint URL or resource ID |
+| `405` | `method_not_allowed` | No | Use the correct HTTP method |
+| `409` | `conflict` | Maybe | A request with the same `Idempotency-Key` is still in progress - retry with backoff; a key left in-flight by a crashed request clears after the 24h retention window |
+| `422` | `validation_error` | No | Inspect `details.errors` and fix the body; also returned when an `Idempotency-Key` is reused with a different payload |
+| `429` | `rate_limited` | Yes | Back off and retry - honor `Retry-After`. See [Rate Limits](/docs/api/rate-limits) |
+| `500` | `internal_error` | Yes | Transient - retry with backoff; report the `request_id` if it persists |
+| `502` | `bad_gateway` | Yes | Upstream (e.g. payment provider) hiccup - retry with backoff |
+| `503` | `service_unavailable` | Yes | Retry with backoff; check `/health` |
+
+<Callout type="info">
+`/health` is the canonical status probe (no auth required). It reports
+per-component health (`api`, `database`, `redis`, `stripe`) and returns
+`"degraded"` when any component is unhealthy - see the
+[API overview](/docs/api#health-check). Poll it to distinguish a server-side
+incident from a client-side error before retrying.
+</Callout>
+
+## Retry Guidance
+
+Retry **only** the codes marked retryable above. For everything else a retry
+will fail identically - fix the request instead.
+
+1. **Honor `Retry-After` first.** On `429` the server tells you exactly how
+   many seconds to wait. Sleep at least that long before retrying.
+2. **Exponential backoff with jitter** for `5xx` (no `Retry-After`): wait
+   `min(cap, base * 2^attempt)` plus random jitter (e.g. `base=1s`, `cap=30s`).
+   Jitter prevents synchronized retry storms across agents.
+3. **Don't auto-retry `402`.** Its `Retry-After` points at the next daily reset,
+   which can be hours away - blocking a request loop that long is wrong. Treat a
+   `402` as a stop condition: surface it, wait for the reset, or upgrade. See
+   [Handling a 402](/docs/api/rate-limits#handling-a-402-daily-quota).
+4. **Cap attempts** (e.g. 5) and surface the final `request_id` to the user.
+5. **Idempotency:** writes that must not double-apply accept an
+   `Idempotency-Key` header (see [Billing](/docs/api/billing#report-usage)), so a
+   retried request is de-duplicated server-side.
+
+### Reference retry loop (Python)
+
+```python
+import random
+import time
+
+import httpx
+
+# 402 is intentionally excluded: its Retry-After is the next daily reset
+# (possibly hours out), so it's handled as a stop condition, not a retry.
+RETRYABLE = {429, 500, 502, 503}
+
+def call_with_retry(client: httpx.Client, request: httpx.Request, max_attempts: int = 5):
+    for attempt in range(max_attempts):
+        resp = client.send(request)
+        if resp.status_code < 400 or resp.status_code not in RETRYABLE:
+            return resp
+        # Server-directed wait (429) takes priority over computed backoff.
+        retry_after = resp.headers.get("Retry-After")
+        if retry_after is not None:
+            delay = float(retry_after)
+        else:
+            delay = min(30.0, 2**attempt) + random.uniform(0, 1)
+        if attempt < max_attempts - 1:
+            time.sleep(delay)
+    return resp  # caller inspects resp.json()["error"]["request_id"]
+```
+
+## Example Error Responses
+
+**Missing authentication (401):**
+
+```bash
+curl http://localhost:8000/api/v1/auth/me
+```
+
+```json
+{
+  "error": {
+    "code": "unauthorized",
+    "message": "Not authenticated",
+    "request_id": "8f14e45fceea167a"
+  }
+}
+```
+
+**Validation error (422):**
+
+```json
+{
+  "error": {
+    "code": "validation_error",
+    "message": "Validation error",
+    "request_id": "a1b2c3d4e5f60718",
+    "details": {
+      "errors": [
+        { "type": "missing", "loc": ["body", "key"], "msg": "Field required" }
+      ]
+    }
+  }
+}
+```
+
+**Insufficient scope (403):**
+
+```json
+{
+  "error": {
+    "code": "forbidden",
+    "message": "Insufficient permissions for this operation.",
+    "request_id": "c3d4e5f607182939"
+  }
+}
+```
+
+**Daily quota exceeded (402):** carries a `Retry-After` header (seconds until
+the daily reset):
+
+```json
+{
+  "error": {
+    "code": "quota_exceeded",
+    "message": "Daily request limit (10000) exceeded for free_tier tier.",
+    "request_id": "d4e5f60718293a4b",
+    "details": {
+      "current_usage": 10000,
+      "daily_limit": 10000,
+      "tier": "free_tier",
+      "quota_reset_at": "2026-06-21T00:00:00+00:00"
+    }
+  }
+}
+```
+
+**Rate limited (429):** see [Rate Limits](/docs/api/rate-limits) for the full
+header set.
+
+```json
+{
+  "error": {
+    "code": "rate_limited",
+    "message": "Rate limit exceeded (minute window). Retry after 12s.",
+    "request_id": "e5f60718293a4b5c"
+  }
+}
+```

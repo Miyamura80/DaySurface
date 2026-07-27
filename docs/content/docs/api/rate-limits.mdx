@@ -1,0 +1,99 @@
+---
+title: Rate Limits
+description: Rate-limit windows, response headers, and how 429 differs from 402
+---
+
+The API enforces two independent throttles. Both are designed to be
+**self-describing on every response** so an agent never has to guess how much
+headroom it has left.
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+| Throttle | Status when exceeded | Scope | Resets |
+|----------|---------------------|-------|--------|
+| Rate limit | `429 rate_limited` | Sliding windows per second/minute/hour/day | Continuously (sliding window) |
+| Daily quota | `402 quota_exceeded` | Total requests per UTC day, per tier | At `00:00 UTC` |
+
+A `429` means "slow down" (you may retry shortly); a `402` means "you've used
+your plan's daily allowance" (retry after the daily reset or upgrade). See
+[Errors](/docs/api/errors) for the shared envelope.
+
+## Windows
+
+Rate limits are checked across four sliding windows simultaneously; the
+*most constrained* window wins. Defaults ship in
+[`common/global_config.yaml`](https://github.com/Miyamura80/MCP-Template/blob/main/common/global_config.yaml)
+under `rate_limit.tiers` and are configurable per tier:
+
+| Window | Header policy token | Default (`default` tier) |
+|--------|---------------------|--------------------------|
+| Per second (`rps`) | `;w=1` | 5 |
+| Per minute (`rpm`) | `;w=60` | 60 |
+| Per hour (`rph`) | `;w=3600` | 1000 |
+| Per day (`rpd`) | `;w=86400` | 5000 |
+
+Authenticated tiers (`free_tier`, `plus_tier`) ship with higher defaults
+(`10 rps / 120 rpm / 5000 rph / 10000 rpd`). The values are illustrative
+template defaults - **read the headers at runtime; don't hard-code limits.**
+
+<Callout type="warn">
+If the rate-limiter's storage backend (e.g. Redis) is unavailable, the
+middleware **fails open** - requests pass through without limiting rather than
+returning errors. Don't rely on the limiter as a hard security boundary.
+</Callout>
+
+## Response Headers
+
+Responses from rate-limited endpoints carry these headers (not just on `429`),
+so you can proactively throttle before hitting a limit. Skipped paths (e.g.
+`/health`) and fail-open responses may omit them:
+
+| Header | Example | Meaning |
+|--------|---------|---------|
+| `X-RateLimit-Limit` | `120` | Limit for the most constrained window |
+| `X-RateLimit-Remaining` | `118` | Requests left in that window |
+| `X-RateLimit-Reset` | `1750377600` | Unix timestamp when that window resets |
+| `RateLimit` | `limit=120, remaining=118, reset=1750377600` | [IETF draft](https://datatracker.ietf.org/doc/draft-ietf-httpapi-ratelimit-headers/) combined form |
+| `RateLimit-Policy` | `5;w=1, 60;w=60, 1000;w=3600, 5000;w=86400` | All window policies |
+| `Retry-After` | `12` | **On `429`/`402` only** - seconds to wait before retrying |
+
+## Handling a 429
+
+1. Read `Retry-After` and sleep at least that many seconds.
+2. Retry the identical request - `429` is safe to retry.
+3. Use `X-RateLimit-Remaining` on successful responses to pace yourself and
+   avoid hitting the limit in the first place.
+
+```python
+resp = client.send(request)
+if resp.status_code == 429:
+    time.sleep(float(resp.headers.get("Retry-After", "1")))
+    resp = client.send(request)
+```
+
+See the [full retry loop](/docs/api/errors#reference-retry-loop-python) in the
+Errors guide for backoff that also covers `5xx`.
+
+## Handling a 402 (daily quota)
+
+A `402` will keep failing until the daily reset, so backoff won't help within
+the same day. Inspect `error.details` for the exact reset time and tier:
+
+```json
+{
+  "error": {
+    "code": "quota_exceeded",
+    "message": "Daily request limit (10000) exceeded for free_tier tier.",
+    "request_id": "d4e5f60718293a4b",
+    "details": {
+      "current_usage": 10000,
+      "daily_limit": 10000,
+      "tier": "free_tier",
+      "quota_reset_at": "2026-06-21T00:00:00+00:00"
+    }
+  }
+}
+```
+
+To raise the ceiling instead of waiting, upgrade via
+[Billing](/docs/api/billing#upgrade-your-plan).

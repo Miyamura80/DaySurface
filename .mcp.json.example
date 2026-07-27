@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "mymcp": {
+      "command": "uvx",
+      "args": [
+        "mymcp-mcp"
+      ],
+      "env": {}
+    }
+  }
+}

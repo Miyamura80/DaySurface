@@ -1,0 +1,19 @@
+# Railway config-as-code for the landing page.
+# Deploy this folder as its own Railway service with Root Directory = landing-page.
+# Docs: https://docs.railway.com/reference/config-as-code
+#
+# Builder defaults to RAILPACK (Railway auto-detects the bun/Node project).
+# Set builder = "DOCKERFILE" only if you want a pinned nginx/caddy static serve.
+
+[build]
+builder = "RAILPACK"
+buildCommand = "bun run build"
+
+[deploy]
+# Serve the static `dist/` output via server.ts (sirv + `Accept: text/markdown`
+# content negotiation on the canonical URL). Unknown paths fall back to index.html.
+startCommand = "bun run start"
+healthcheckPath = "/"
+healthcheckTimeout = 30
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5

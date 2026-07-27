@@ -1,0 +1,27 @@
+{
+  "name": "gmail-mcp",
+  "description": "GmailMCP is a Model Context Protocol server: one shared service registry exposed identically over CLI, MCP, and HTTP.",
+  "servers": [
+    {
+      "name": "gmail-mcp",
+      "url": "https://mcp.gmailmcp.com/mcp",
+      "transport": "streamable-http",
+      "authentication": {
+        "type": "oauth2",
+        "description": "OAuth 2.1 bearer token. The server can also run unauthenticated for local development."
+      }
+    }
+  ],
+  "ask": {
+    "url": "https://gmailmcp.com/ask",
+    "protocol": "nlweb",
+    "methods": [
+      "POST",
+      "GET"
+    ],
+    "streaming": "sse"
+  },
+  "documentation": "https://gmailmcp.com/llms-full.txt",
+  "website": "https://gmailmcp.com",
+  "repository": "https://github.com/Miyamura80/MCP-Template"
+}

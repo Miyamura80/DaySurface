@@ -1,0 +1,29 @@
+{
+  "seed": "seed_pdf_doc.py",
+  "prompt": "The NDA is filled in. Please set it up for me to sign.",
+  "plan": [
+    {
+      "match": "pdf_request_signature",
+      "args": {
+        "doc_id": "e2e-nda-doc",
+        "placement": {
+          "page": 1,
+          "x": 140.0,
+          "y": 545.0
+        }
+      }
+    }
+  ],
+  "final": "The document is ready for your signature - please review and sign it.",
+  "app_uri": "ui://mymcp/pdf_signer",
+  "expect": {
+    "tool_called": "pdf_request_signature",
+    "round_trip": true,
+    "app_rendered": true,
+    "dom_contains": [
+      "nda.pdf",
+      "Awaiting your signature",
+      "Sign as (full legal name)"
+    ]
+  }
+}

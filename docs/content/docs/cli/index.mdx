@@ -1,0 +1,71 @@
+---
+title: Overview
+description: Install and run CLI commands from your terminal
+---
+
+## Installation
+
+After installing the package, the `mymcp` command is available:
+
+```bash
+mymcp --help
+```
+
+If you installed from source, prefix with `uv run`:
+
+```bash
+uv run mymcp --help
+```
+
+## Global Flags
+
+Flags go **before** the subcommand:
+
+```bash
+mymcp [flags] <command> [args]
+```
+
+| Flag | Short | Description |
+|---|---|---|
+| `--verbose` | `-v` | Increase output verbosity |
+| `--quiet` | `-q` | Suppress non-essential output |
+| `--debug` | | Show full tracebacks on error |
+| `--format` | `-f` | Output format: `table` (default), `json`, `plain` |
+| `--dry-run` | | Preview actions without executing |
+| `--version` | `-V` | Print version and exit |
+
+**Examples:**
+
+```bash
+mymcp --format json config show      # JSON output
+mymcp --dry-run greet Alice          # preview without executing
+mymcp --debug config get bad.key     # full tracebacks on error
+```
+
+## Scripting & agents
+
+The CLI is built to be driven non-interactively (by scripts and AI agents):
+
+- **Non-interactive by default.** Prompts only appear on an interactive
+  terminal. When stdin is not a TTY, missing required values fail fast with an
+  actionable error instead of hanging on a prompt.
+- **Values accept stdin.** Anywhere a value is taken, pass `-` as the value or
+  add `--stdin` to read it from stdin - handy for piping:
+
+  ```bash
+  echo true | mycli config set llm_config.cache_enabled --stdin
+  echo "$API_KEY" | mycli secrets set OPENAI_API_KEY --stdin
+  cat .env | mycli secrets import --stdin
+  ```
+
+- **`--dry-run` previews destructive actions** (`config set`, `secrets set`,
+  `secrets delete`, `secrets import`) without writing anything.
+- **Idempotent where it counts.** Deleting an absent secret is a no-op success,
+  so retries are safe.
+- **Examples in every `--help`.** Run `mycli <command> --help` to see concrete
+  invocations to pattern-match off.
+
+<Cards>
+  <Card title="Commands" href="/docs/cli/commands" />
+  <Card title="Output & Errors" href="/docs/cli/output" />
+</Cards>

@@ -1,0 +1,58 @@
+---
+title: Quick Start
+description: Install MCP Template and run your first command
+---
+
+MCP Template gives you three ways to interact with the same set of tools:
+
+- **CLI** - Run commands in your terminal
+- **MCP** - Connect AI assistants like Claude directly
+- **REST API** - Call endpoints over HTTP with authentication
+
+Pick the interface that fits your workflow, or use all three.
+
+## Installation
+
+import { Step, Steps } from 'fumadocs-ui/components/steps';
+
+<Steps>
+<Step>
+
+### Install from source
+
+```bash
+git clone https://github.com/Miyamura80/MCP-Template.git
+cd MCP-Template
+uv sync
+```
+
+</Step>
+<Step>
+
+### Verify the installation
+
+```bash
+uv run mymcp --version
+uv run mymcp --help
+```
+
+</Step>
+<Step>
+
+### Try a command
+
+```bash
+uv run mymcp greet Alice
+# Hello, Alice!
+```
+
+</Step>
+</Steps>
+
+## Next steps
+
+<Cards>
+  <Card title="CLI" href="/docs/cli" />
+  <Card title="MCP Server" href="/docs/mcp" />
+  <Card title="REST API" href="/docs/api" />
+</Cards>

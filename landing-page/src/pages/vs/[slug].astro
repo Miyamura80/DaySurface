@@ -1,0 +1,155 @@
+---
+import Base from "../../layouts/Base.astro";
+import Nav from "../../components/Nav.astro";
+import Footer from "../../components/Footer.astro";
+import ComparisonTable from "../../components/ComparisonTable.astro";
+import { site, comparison } from "../../config/landing";
+
+export function getStaticPaths() {
+  return comparison.competitors.map((c) => ({
+    params: { slug: c.id },
+    props: { competitor: c },
+  }));
+}
+
+const { competitor } = Astro.props;
+const origin = (Astro.site ?? new URL(site.url)).origin;
+
+const pageTitle = `GmailMCP vs ${competitor.name}`;
+const pageDescription = `${competitor.headline} ${competitor.summary}`.slice(0, 200);
+
+// Other comparisons to cross-link at the foot of the page.
+const others = comparison.competitors.filter((c) => c.id !== competitor.id);
+
+const jsonLd = [
+  {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    name: pageTitle,
+    description: competitor.summary,
+    url: `${origin}/vs/${competitor.id}`,
+    isPartOf: { "@type": "WebSite", name: site.name, url: site.url },
+    about: [
+      { "@type": "Thing", name: site.name },
+      { "@type": "Thing", name: competitor.name },
+    ],
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: site.url },
+      { "@type": "ListItem", position: 2, name: "Compare", item: `${origin}/compare` },
+      {
+        "@type": "ListItem",
+        position: 3,
+        name: `vs ${competitor.name}`,
+        item: `${origin}/vs/${competitor.id}`,
+      },
+    ],
+  },
+];
+---
+
+<Base title={pageTitle} description={pageDescription}>
+  <script
+    type="application/ld+json"
+    is:inline
+    slot="head"
+    set:html={JSON.stringify(jsonLd)}
+  />
+
+  <Nav />
+  <main class="mx-auto max-w-4xl px-6 py-16">
+    <a href="/compare" class="text-sm opacity-70 hover:opacity-100">&larr; All comparisons</a>
+
+    <header class="mt-6">
+      <span class="font-mono text-xs uppercase tracking-widest text-fg-subtle">
+        {competitor.category}
+      </span>
+      <h1 class="mt-2 text-4xl font-bold tracking-tight sm:text-5xl">
+        GmailMCP <span class="text-fg-muted">vs</span> {competitor.name}
+      </h1>
+      <p class="mt-4 text-xl text-accent">{competitor.headline}</p>
+      <p class="mt-4 text-lg leading-relaxed text-fg-muted">{competitor.summary}</p>
+    </header>
+
+    <!-- Focused two-column matrix: us vs this competitor -->
+    <section class="mt-14">
+      <h2 class="text-2xl font-bold tracking-tight">Side by side</h2>
+      <div class="mt-6">
+        <ComparisonTable competitors={[competitor]} />
+      </div>
+    </section>
+
+    <!-- When to pick which -->
+    <section class="mt-14 grid gap-6 md:grid-cols-2">
+      <div class="border-2 border-accent bg-accent/10 p-6">
+        <h2 class="text-xl font-semibold">Choose GmailMCP if…</h2>
+        <p class="mt-3 text-pretty leading-relaxed text-fg-muted">{competitor.pickUs}</p>
+      </div>
+      <div class="border-2 border-border bg-surface-1 p-6">
+        <h2 class="text-xl font-semibold">Choose {competitor.name} if…</h2>
+        <p class="mt-3 text-pretty leading-relaxed text-fg-muted">{competitor.pickThem}</p>
+        <a
+          href={competitor.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="mt-4 inline-block text-sm text-fg-subtle underline transition hover:text-fg"
+        >
+          Visit {competitor.name} →
+        </a>
+      </div>
+    </section>
+
+    <!-- Why GmailMCP (the three pillars) -->
+    <section class="mt-14">
+      <h2 class="text-2xl font-bold tracking-tight">Why GmailMCP</h2>
+      <div class="mt-6 space-y-4">
+        {
+          comparison.pillars.map((p, i) => (
+            <div class="border-l-2 border-accent py-2 pl-5">
+              <h3 class="flex items-center gap-3 text-lg font-semibold">
+                <span class="font-mono text-sm text-accent">
+                  {String(i + 1).padStart(2, "0")}
+                </span>
+                {p.title}
+              </h3>
+              <p class="mt-2 text-pretty leading-relaxed text-fg-muted">{p.body}</p>
+            </div>
+          ))
+        }
+      </div>
+    </section>
+
+    <!-- CTA -->
+    <div class="mt-14 text-center">
+      <a
+        href="/#how-it-works"
+        class="inline-flex items-center gap-2 bg-accent px-5 py-2.5 font-semibold text-accent-fg transition hover:bg-accent-strong"
+      >
+        Add GmailMCP to your client
+      </a>
+    </div>
+
+    <!-- Cross-links -->
+    <section class="mt-16 border-t border-border/60 pt-10">
+      <h2 class="text-sm font-semibold text-fg-muted">More comparisons</h2>
+      <ul class="mt-4 flex flex-wrap gap-3">
+        {
+          others.map((c) => (
+            <li>
+              <a
+                href={`/vs/${c.id}`}
+                class="inline-block border border-border px-4 py-2 text-sm text-fg-muted transition hover:border-accent hover:text-fg"
+              >
+                vs {c.name}
+              </a>
+            </li>
+          ))
+        }
+      </ul>
+    </section>
+  </main>
+  <Footer />
+</Base>

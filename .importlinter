@@ -1,0 +1,160 @@
+[importlinter]
+root_packages =
+    common
+    utils
+    src
+    tests
+    init
+    services
+    models
+    mcp_server
+    db
+    api_server
+
+[importlinter:contract:common_no_upper_layers]
+name = Common does not import higher layers
+type = forbidden
+source_modules =
+    common
+forbidden_modules =
+    utils
+    src
+    tests
+    init
+
+[importlinter:contract:utils_no_tests_init]
+name = Utils does not import tests or init
+type = forbidden
+source_modules =
+    utils
+forbidden_modules =
+    tests
+    init
+
+[importlinter:contract:src_no_tests_init]
+name = Src does not import tests or init
+type = forbidden
+source_modules =
+    src
+forbidden_modules =
+    tests
+    init
+
+[importlinter:contract:services_no_transport]
+name = Services do not import CLI or MCP transport layers
+type = forbidden
+source_modules =
+    services
+forbidden_modules =
+    tests
+    init
+    src.cli
+    mcp_server
+    api_server
+
+[importlinter:contract:models_are_pure]
+name = Models do not import app layers
+type = forbidden
+source_modules =
+    models
+forbidden_modules =
+    tests
+    init
+    services
+    mcp_server
+    api_server
+    db
+    src
+    utils
+
+[importlinter:contract:db_is_low_level]
+name = DB does not import higher layers
+type = forbidden
+source_modules =
+    db
+forbidden_modules =
+    services
+    src.cli
+    mcp_server
+    api_server
+    tests
+    init
+
+[importlinter:contract:api_server_no_cli]
+# api_server intentionally imports mcp_server to mount it at /mcp (remote MCP transport).
+# CLI remains forbidden.
+name = API server does not import CLI layers
+type = forbidden
+source_modules =
+    api_server
+forbidden_modules =
+    src.cli
+    tests
+    init
+
+[importlinter:contract:pdf_core_isolated_from_gmail]
+# The PDF form/signing domain is designed to be extractable as a standalone
+# add-on. All Gmail knowledge lives in services.pdf_gmail_bridge (the only
+# module importing both sides); the PDF core must never grow a direct
+# dependency on Gmail modules or the bridge itself.
+# See tasks/prd-pdf-forms-digital-signatures.md (isolation seam).
+name = PDF core does not import Gmail (add-on extraction seam)
+type = forbidden
+source_modules =
+    services.pdf_forms_svc
+    services.pdf_inspect
+    services.pdf_render
+    services.pdf_edit_engine
+    services.pdf_overlay
+    services.pdf_signing
+    services.pdf_documents_repo
+    services.pdf_ports
+    models.pdf_forms
+    db.models.pdf_documents
+    mcp_server.app_tools.pdf_signer
+    mcp_server.enhancers.pdf_forms
+# MAINTENANCE: import-linter wildcards can only replace a whole segment
+# (services.* would forbid far too much), so the Gmail modules are listed by
+# name. Any NEW Gmail module (services/gmail_*.py, models/gmail_*.py, ...)
+# MUST be added here or it silently escapes the contract - and when touching
+# this list, re-check the services/ and models/ trees for existing Gmail
+# modules that are missing.
+forbidden_modules =
+    services.pdf_gmail_bridge
+    services.gmail_svc
+    services.gmail_messages_svc
+    services.gmail_drafts_svc
+    services.gmail_draft_helpers
+    services.gmail_attachments_svc
+    services.gmail_curate_svc
+    services.gmail_watch_svc
+    services._gmail_fake_backend
+    models.gmail
+    models.gmail_watch
+
+[importlinter:contract:no_imports_from_tests]
+name = Tests are not imported by app code
+type = forbidden
+source_modules =
+    common
+    utils
+    src
+    init
+    services
+    models
+    mcp_server
+    db
+    api_server
+forbidden_modules =
+    tests
+
+[importlinter:contract:init_is_leaf]
+name = Init is a leaf module
+type = forbidden
+source_modules =
+    common
+    utils
+    src
+    tests
+forbidden_modules =
+    init

@@ -1,0 +1,19 @@
+{
+  "prompt": "Open my settings.",
+  "plan": [
+    {
+      "match": "webhook_settings"
+    }
+  ],
+  "final": "Opened your settings.",
+  "app_uri": "ui://mymcp/settings",
+  "expect": {
+    "tool_called": "webhook_settings",
+    "round_trip": true,
+    "app_rendered": true,
+    "dom_contains": [
+      "Settings",
+      "Gmail"
+    ]
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "mcp-ui-dev-preview",
+  "private": true,
+  "type": "module",
+  "description": "Fixture host that renders committed MCP-UI app bundles with no server/Gmail/OAuth.",
+  "scripts": {
+    "build": "bun run build.mjs",
+    "smoke": "bun run smoke.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/ext-apps": "^1.1.2"
+  },
+  "devDependencies": {
+    "playwright": "^1.52.0",
+    "typescript": "^5.7.2"
+  }
+}

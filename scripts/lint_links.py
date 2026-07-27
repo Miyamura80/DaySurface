@@ -1,0 +1,183 @@
+#!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.12"
+# dependencies = ["pytest", "pytest-check-links"]
+# ///
+"""Lint markdown links with exponential backoff for rate-limited URLs.
+
+Wraps pytest-check-links, retrying the full check up to 3 times with
+exponential backoff when failures are all 429 (rate-limited). Non-429
+failures (404, 403, etc.) are not retried.
+
+Domains that block automated requests outright (403 regardless of
+backoff) are added to the ignore list.
+"""
+
+import os
+import re
+import subprocess
+import sys
+import time
+
+BOT_BLOCKED_DOMAINS = [
+    r"https://www\.mastercard\.com/.*",
+    r"https://news\.ycombinator\.com/.*",
+    # Railway template deploy links are browser-only SPA routes; they 404 for
+    # non-browser HTTP clients even though they resolve fine in a browser.
+    r"https://railway\.com/deploy/.*",
+]
+
+# Domains we deliberately keep OFF the Claude Code cloud sandbox network
+# allowlist because they are programmable endpoints (SSRF relays, RPC, package/
+# tool registries, render-and-share services) that widen the data-exfiltration
+# surface, not static docs. The sandbox egress proxy returns 403 for them, so we
+# skip them only when running inside the cloud sandbox. Normal CI (open egress)
+# still checks them for real. See `make lint_links` discussion / network policy.
+CLOUD_SANDBOX_IGNORES = [
+    r"https?://(www\.)?shields\.io(/|\?|$)",
+    r"https?://img\.shields\.io(/|\?|$)",
+    r"https?://rpc\.tempo\.xyz(/|\?|$)",
+    r"https?://registry\.modelcontextprotocol\.io(/|\?|$)",
+    r"https?://mcp\.gmailmcp\.com(/|\?|$)",
+    r"https?://carbon\.now\.sh(/|\?|$)",
+    r"https?://chalk\.ist(/|\?|$)",
+    r"https?://facilitator\.x402\.org(/|\?|$)",
+    r"https?://jules\.googleapis\.com(/|\?|$)",
+    r"https?://skills\.sh(/|\?|$)",
+    r"https?://banner\.godori\.dev(/|\?|$)",
+    r"https?://contrib\.rocks(/|\?|$)",
+    r"https?://(www\.)?render\.com(/|\?|$)",
+    r"https?://(www\.)?railway\.com(/|\?|$)",
+    # VS Code Marketplace is a publish surface (extension gallery API); keep it
+    # off the allowlist rather than grant standing egress for one convenience
+    # link to an extension page.
+    r"https?://marketplace\.visualstudio\.com(/|\?|$)",
+]
+
+# Files whose external links are deliberately not checked inside the cloud
+# sandbox. The research doc cites ~20 third-party news/vendor pages; rather than
+# widen the sandbox allowlist to all of them, we skip the file in the sandbox
+# only. Normal CI (open egress) still link-checks it.
+CLOUD_SANDBOX_IGNORE_FILES = [
+    "./docs/agentic_payment_protocols_research.md",
+]
+
+
+def _in_claude_code_cloud() -> bool:
+    """True when running inside the Claude Code cloud sandbox.
+
+    Claude Code on the web sets ``CLAUDE_CODE_REMOTE=true`` in the session
+    shell. We gate the extra ignores on this so the skip never leaks into a
+    developer's local run or GitHub Actions CI (which have open egress).
+    """
+    return os.environ.get("CLAUDE_CODE_REMOTE") == "true"
+
+
+MAX_RETRIES = 3
+BASE_DELAY = 5
+
+
+def _build_cmd(extra_ignores: list[str]) -> list[str]:
+    cmd = [
+        sys.executable,
+        "-m",
+        "pytest",
+        "-p",
+        "no:cov",
+        "-o",
+        "addopts=",
+        # Markdown lives inside importable packages (e.g. mcp_server/ has an
+        # __init__.py). Default prepend mode makes pytest import the package to
+        # collect a .md file in it, dragging in project deps this isolated env
+        # doesn't have. importlib mode collects the file without importing its
+        # parent package.
+        "--import-mode=importlib",
+        "--check-links",
+        "--check-links-ignore",
+        r"http://localhost:.*",
+    ]
+    for pattern in extra_ignores:
+        cmd.extend(["--check-links-ignore", pattern])
+
+    find_cmd = [
+        "find",
+        ".",
+        "-name",
+        "*.md",
+        "-not",
+        "-path",
+        "./.venv/*",
+        "-not",
+        "-path",
+        "./.venv-test/*",
+        "-not",
+        "-path",
+        "*/node_modules/*",
+    ]
+    if _in_claude_code_cloud():
+        for path in CLOUD_SANDBOX_IGNORE_FILES:
+            find_cmd.extend(["-not", "-path", path])
+
+    md_files = (
+        subprocess.run(
+            find_cmd,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        .stdout.strip()
+        .splitlines()
+    )
+
+    cmd.extend(md_files)
+    return cmd
+
+
+def _is_only_429(output: str) -> bool:
+    """Check if all failures in the pytest output are 429s."""
+    error_lines = re.findall(r"https?://\S+:\s+\d+:.*", output)
+    if not error_lines:
+        return False
+    non_429 = [line for line in error_lines if "429" not in line]
+    return len(non_429) == 0
+
+
+def main() -> int:
+    ignores = list(BOT_BLOCKED_DOMAINS)
+    if _in_claude_code_cloud():
+        print(
+            "Claude Code cloud sandbox detected (CLAUDE_CODE_REMOTE=true): "
+            "skipping egress-restricted, exfil-sensitive domains that are kept "
+            "off the network allowlist. These are still checked in normal CI.",
+            file=sys.stderr,
+        )
+        ignores.extend(CLOUD_SANDBOX_IGNORES)
+    cmd = _build_cmd(ignores)
+
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    combined = result.stdout + result.stderr
+    for attempt in range(MAX_RETRIES):
+        if result.returncode == 0:
+            return 0
+
+        if not _is_only_429(combined):
+            print(combined, file=sys.stderr)
+            return result.returncode
+
+        if attempt < MAX_RETRIES - 1:
+            delay = BASE_DELAY * (2**attempt)
+            print(
+                f"Rate-limited (429). Retrying in {delay}s "
+                f"(attempt {attempt + 2}/{MAX_RETRIES})...",
+                file=sys.stderr,
+            )
+            time.sleep(delay)
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            combined = result.stdout + result.stderr
+
+    print(combined, file=sys.stderr)
+    return result.returncode
+
+
+if __name__ == "__main__":
+    sys.exit(main())

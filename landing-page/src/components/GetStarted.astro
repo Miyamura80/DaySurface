@@ -1,0 +1,190 @@
+---
+/*
+ * Consolidated transports + onboarding section.
+ *
+ * A transport selector (CLI / MCP / HTTP API) drives BOTH steps at once:
+ *   01 - connect / install for that transport (MCP → the ConnectWidget client picker)
+ *   02 - call the SAME tool over that transport (identical-behavior payoff)
+ * Each transport renders its own pair of step panels; the toggle just swaps
+ * which pair is visible. No content is mutated in JS - only `hidden` flips.
+ */
+import { getStarted } from "../config/landing";
+import CodeBlock from "./CodeBlock.astro";
+import ConnectWidget from "./ConnectWidget.astro";
+import ChatGptShell from "./chat/ChatGptShell.astro";
+
+const { heading, subhead, defaultId, transports } = getStarted;
+
+const mask = (icon: string) =>
+  `-webkit-mask:url('${icon}') center/contain no-repeat;mask:url('${icon}') center/contain no-repeat;`;
+---
+
+<section id="how-it-works" class="scroll-mt-20 border-t border-border/60 py-24">
+  <div class="mx-auto max-w-5xl px-6">
+    <div class="mx-auto max-w-2xl text-center">
+      <h2 class="text-3xl font-bold tracking-tight sm:text-4xl">{heading}</h2>
+      <p class="mt-4 text-lg text-fg-muted">{subhead}</p>
+    </div>
+
+    <div class="mt-12" data-getstarted>
+      <!-- Transport selector -->
+      <div class="flex justify-center">
+        <div
+          class="inline-flex border-2 border-border bg-surface-1"
+          role="tablist"
+          aria-label="Transport"
+        >
+          {
+            transports.map((t) => (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={t.id === defaultId ? "true" : "false"}
+                data-transport-tab={t.id}
+                class="transport-tab inline-flex items-center gap-2 border-r-2 border-border px-5 py-2.5 font-mono text-sm font-semibold uppercase tracking-wider text-fg-muted transition last:border-r-0 hover:text-fg aria-selected:bg-accent aria-selected:text-accent-fg aria-selected:hover:text-accent-fg"
+              >
+                <span
+                  class="size-4 shrink-0 bg-current"
+                  style={mask(t.icon)}
+                  aria-hidden="true"
+                />
+                {t.label}
+              </button>
+            ))
+          }
+        </div>
+      </div>
+
+      <!-- Two steps, side by side on desktop -->
+      <div class="mt-12 grid gap-10 lg:grid-cols-2 lg:gap-12">
+        <!-- Step 01 - connect / install -->
+        <div>
+          {
+            transports.map((t) => (
+              <div data-setup-panel={t.id} hidden={t.id !== defaultId}>
+                <div class="flex items-center gap-3">
+                  <span class="grid size-9 shrink-0 place-items-center bg-accent font-mono text-sm font-bold text-accent-fg">
+                    01
+                  </span>
+                  <h3 class="text-xl font-semibold sm:text-2xl">{t.setupTitle}</h3>
+                </div>
+                <p class="mt-3 text-pretty leading-relaxed text-fg-muted">{t.setupBody}</p>
+                <div class="mt-6">
+                  {t.setupKind === "connect" ? (
+                    <ConnectWidget />
+                  ) : (
+                    <CodeBlock code={t.setupCode ?? ""} lang={t.setupLang} />
+                  )}
+                </div>
+              </div>
+            ))
+          }
+        </div>
+
+        <!-- Step 02 - call a tool -->
+        <div>
+          {
+            transports.map((t) => (
+              <div data-call-panel={t.id} hidden={t.id !== defaultId}>
+                <div class="flex items-center gap-3">
+                  <span class="grid size-9 shrink-0 place-items-center bg-accent font-mono text-sm font-bold text-accent-fg">
+                    02
+                  </span>
+                  <h3 class="text-xl font-semibold sm:text-2xl">{t.callTitle}</h3>
+                </div>
+                <p class="mt-3 text-pretty leading-relaxed text-fg-muted">{t.callBody}</p>
+                {t.callVariants ? (
+                  <div class="mt-5" data-call-variants>
+                    {/* Headless vs. interactive sub-toggle */}
+                    <div
+                      class="inline-flex border-2 border-border bg-surface-1"
+                      role="tablist"
+                      aria-label="Tool style"
+                    >
+                      {t.callVariants.map((v, i) => (
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={i === 0 ? "true" : "false"}
+                          data-call-variant-tab={v.id}
+                          class="call-variant-tab border-r-2 border-border px-4 py-1.5 font-mono text-xs font-semibold uppercase tracking-wider text-fg-muted transition last:border-r-0 hover:text-fg aria-selected:bg-accent aria-selected:text-accent-fg aria-selected:hover:text-accent-fg"
+                        >
+                          {v.label}
+                        </button>
+                      ))}
+                    </div>
+                    {t.callVariants.map((v, i) => (
+                      <div data-call-variant-panel={v.id} hidden={i !== 0}>
+                        <p class="mt-4 text-pretty text-sm leading-relaxed text-fg-subtle">
+                          {v.body}
+                        </p>
+                        <div class="mt-4">
+                          {v.kind === "app" ? (
+                            <div>
+                              <div class="mb-3 flex items-center gap-2">
+                                <span class="size-1.5 rounded-full bg-accent" />
+                                <span class="font-mono text-[10px] uppercase tracking-wider text-fg-subtle">
+                                  rendered inline in your client
+                                </span>
+                              </div>
+                              <ChatGptShell />
+                            </div>
+                          ) : (
+                            <CodeBlock code={v.code ?? ""} lang={v.lang} />
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div class="mt-6">
+                    <CodeBlock code={t.callCode} lang={t.callLang} />
+                  </div>
+                )}
+              </div>
+            ))
+          }
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+  function initGetStarted() {
+    document.querySelectorAll<HTMLElement>("[data-getstarted]").forEach((root) => {
+      const tabs = root.querySelectorAll<HTMLButtonElement>(".transport-tab");
+      tabs.forEach((tab) => {
+        tab.addEventListener("click", () => {
+          const id = tab.dataset.transportTab;
+          tabs.forEach((t) => t.setAttribute("aria-selected", String(t === tab)));
+          root
+            .querySelectorAll<HTMLElement>("[data-setup-panel], [data-call-panel]")
+            .forEach((panel) => {
+              const panelId =
+                panel.dataset.setupPanel ?? panel.dataset.callPanel;
+              panel.hidden = panelId !== id;
+            });
+        });
+      });
+
+      // Sub-toggle: headless vs. interactive within a "call a tool" step.
+      root.querySelectorAll<HTMLElement>("[data-call-variants]").forEach((group) => {
+        const vTabs = group.querySelectorAll<HTMLButtonElement>(".call-variant-tab");
+        const panels = group.querySelectorAll<HTMLElement>("[data-call-variant-panel]");
+        vTabs.forEach((tab) => {
+          tab.addEventListener("click", () => {
+            const id = tab.dataset.callVariantTab;
+            vTabs.forEach((t) => t.setAttribute("aria-selected", String(t === tab)));
+            panels.forEach((p) => {
+              p.hidden = p.dataset.callVariantPanel !== id;
+            });
+          });
+        });
+      });
+    });
+  }
+
+  initGetStarted();
+  document.addEventListener("astro:page-load", initGetStarted);
+</script>

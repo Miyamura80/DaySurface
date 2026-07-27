@@ -1,0 +1,41 @@
+---
+/**
+ * Landing-page comparison section: the three headline differentiators followed
+ * by the full capability matrix. Links out to the /compare hub and the
+ * per-competitor /vs pages. Data lives in config/landing.ts (`comparison`).
+ */
+import { comparison } from "../config/landing";
+import ComparisonTable from "./ComparisonTable.astro";
+import PillarCards from "./PillarCards.astro";
+---
+
+<section id="compare" class="scroll-mt-20 border-t border-border/60 py-24">
+  <div class="mx-auto max-w-6xl px-6">
+    <div class="mx-auto max-w-2xl text-center">
+      <h2 class="text-3xl font-bold tracking-tight sm:text-4xl">
+        {comparison.heading}
+      </h2>
+      <p class="mt-4 text-lg text-fg-muted">{comparison.subhead}</p>
+    </div>
+
+    <!-- The three pillars -->
+    <div class="mt-16">
+      <PillarCards />
+    </div>
+
+    <!-- Full matrix -->
+    <div class="mt-16">
+      <ComparisonTable competitors={comparison.competitors} />
+    </div>
+
+    <div class="mt-10 text-center">
+      <a
+        href="/compare"
+        class="inline-flex items-center gap-2 bg-accent px-5 py-2.5 font-semibold text-accent-fg transition hover:bg-accent-strong"
+      >
+        See the full comparison
+        <span aria-hidden="true">→</span>
+      </a>
+    </div>
+  </div>
+</section>

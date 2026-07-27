@@ -1,0 +1,58 @@
+---
+title: クイックスタート
+description: MCP テンプレートを始めましょう
+---
+
+MCP Template は同じツールセットに対して3つのインターフェースを提供します:
+
+- **CLI** - ターミナルでコマンドを実行
+- **MCP** - Claude などの AI アシスタントを直接接続
+- **REST API** - 認証付きで HTTP エンドポイントを呼び出し
+
+ワークフローに合ったインターフェースを選択するか、3つすべてを使用できます。
+
+## インストール
+
+import { Step, Steps } from 'fumadocs-ui/components/steps';
+
+<Steps>
+<Step>
+
+### ソースからインストール
+
+```bash
+git clone https://github.com/Miyamura80/MCP-Template.git
+cd MCP-Template
+uv sync
+```
+
+</Step>
+<Step>
+
+### インストールを確認
+
+```bash
+uv run mymcp --version
+uv run mymcp --help
+```
+
+</Step>
+<Step>
+
+### コマンドを試す
+
+```bash
+uv run mymcp greet Alice
+# Hello, Alice!
+```
+
+</Step>
+</Steps>
+
+## インターフェースを選択
+
+<Cards>
+  <Card title="CLI" href="/docs/cli" />
+  <Card title="MCP Server" href="/docs/mcp" />
+  <Card title="REST API" href="/docs/api" />
+</Cards>

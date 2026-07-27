@@ -1,0 +1,73 @@
+---
+/*
+ * Claude.ai shell - warm cream "paper" canvas, serif assistant copy, coral
+ * sunburst avatar + send button. Light mode is Claude's signature look.
+ * Colors approximate Claude's published brand coral (#D97757) + reverse-engineered
+ * cream surfaces. The embedded <InboxApp /> keeps its own brand-cyan look.
+ */
+import ConvoScroll from "./ConvoScroll.astro";
+---
+
+<div class="overflow-hidden rounded-xl border border-[#e5e0d6] bg-[#f5f1e8] text-[#2d2a26] shadow-2xl shadow-black/50">
+  <!-- header: model pill -->
+  <div class="flex items-center justify-between border-b border-[#e9e3d6] px-4 py-2.5">
+    <span class="inline-flex items-center gap-1.5 rounded-full border border-[#e0d9c9] bg-[#faf8f2] px-2.5 py-1 text-xs font-medium text-[#5c574d]">
+      <img src="/logos/claude.svg" alt="" class="size-3.5" aria-hidden="true" />
+      Claude
+      <svg class="size-3 text-[#9a9286]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+    </span>
+  </div>
+
+  <div class="space-y-4 px-4 py-4">
+    <!-- user bubble (right) -->
+    <div class="flex justify-end">
+      <p class="max-w-[80%] rounded-2xl bg-[#e7e1d4] px-4 py-2 text-sm">
+        Triage my inbox and draft replies.
+      </p>
+    </div>
+
+    <!-- assistant: coral sunburst + serif text, no bubble -->
+    <div class="flex gap-3">
+      <img src="/logos/claude.svg" alt="" class="mt-0.5 size-6 shrink-0" aria-hidden="true" />
+      <div class="min-w-0 flex-1 space-y-2.5">
+        <p style="font-family:Georgia,'Times New Roman',serif" class="text-[15px] leading-relaxed text-[#2d2a26]">
+          I triaged your inbox. Here's the curated view.
+        </p>
+        <div class="inline-flex items-center gap-1.5 rounded-lg border border-[#e0d9c9] bg-[#faf8f2] px-2 py-1 font-mono text-[11px] text-[#7a756b]">
+          <svg class="size-3 text-[#c96442]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 8l4 4-4 4m6 0h6"></path></svg>
+          gmail_curate_inbox
+          <span class="text-[#c96442]">✓</span>
+        </div>
+        <ConvoScroll>
+          <!-- summoned host-chat turn: the app posted this user message -->
+          <div class="flex justify-end">
+            <p class="max-w-[85%] rounded-2xl bg-[#e7e1d4] px-4 py-2 text-sm">
+              Draft a researched reply to the Q3 contract thread from Dana.
+            </p>
+          </div>
+          <!-- assistant continues: tool call + result -->
+          <div class="space-y-2">
+            <div class="inline-flex items-center gap-1.5 rounded-lg border border-[#e0d9c9] bg-[#faf8f2] px-2 py-1 font-mono text-[11px] text-[#7a756b]">
+              <svg class="size-3 text-[#c96442]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 8l4 4-4 4m6 0h6"></path></svg>
+              gmail_reply_to_thread
+              <span class="text-[#c96442]">✓</span>
+            </div>
+            <p style="font-family:Georgia,'Times New Roman',serif" class="text-[15px] leading-relaxed text-[#2d2a26]">
+              Researched the thread and drafted a reply, saved to your inbox.
+            </p>
+          </div>
+        </ConvoScroll>
+      </div>
+    </div>
+  </div>
+
+  <!-- composer -->
+  <div class="px-4 pb-4">
+    <div class="flex items-center gap-2 rounded-2xl border border-[#e0d9c9] bg-white px-4 py-2.5">
+      <span class="flex-1 text-sm text-[#9a9286]">Reply to Claude…</span>
+      <span class="grid size-7 place-items-center rounded-full bg-[#c96442] text-white">
+        <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"></path></svg>
+      </span>
+    </div>
+  </div>
+</div>

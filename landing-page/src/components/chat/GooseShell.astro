@@ -1,0 +1,84 @@
+---
+/*
+ * Goose (Block) desktop shell - charcoal #22252a canvas, frameless top with the
+ * goose glyph, INVERTED user bubble (white bg / dark text, the Goose tell),
+ * bubble-less assistant text with a mono timestamp, Block-teal (#13bbaf) accent,
+ * the signature bordered tool-call card (status icon + name + chevron), and a
+ * bottom composer with a round send button + model chip. Card stays cyan.
+ * Values read from block/goose desktop theme tokens.
+ */
+import ConvoScroll from "./ConvoScroll.astro";
+---
+
+<div class="overflow-hidden rounded-xl border border-[#3f434b] bg-[#22252a] text-[#e3e6ea] shadow-2xl shadow-black/50">
+  <!-- frameless top: goose glyph -->
+  <div class="flex items-center gap-2 px-4 py-2.5">
+    <span class="size-4 bg-[#e3e6ea]" style="-webkit-mask:url('/logos/goose.svg') center/contain no-repeat;mask:url('/logos/goose.svg') center/contain no-repeat" aria-hidden="true"></span>
+    <span class="text-sm font-semibold lowercase tracking-wide text-[#e3e6ea]">goose</span>
+  </div>
+
+  <div class="space-y-3.5 px-4 pb-2">
+    <!-- user bubble (right, inverted) -->
+    <div class="flex justify-end">
+      <p class="max-w-[85%] rounded-xl bg-white px-4 py-2.5 text-sm text-[#22252a]">
+        Triage my inbox and draft replies.
+      </p>
+    </div>
+
+    <!-- assistant: plain text + timestamp, no avatar -->
+    <div class="space-y-2.5">
+      <p class="text-sm leading-relaxed text-[#e3e6ea]">On it. Running the inbox tool now.</p>
+
+      <!-- Goose tool-call card (header) -->
+      <div class="rounded-lg border border-[#3f434b]">
+        <div class="flex items-center gap-2 px-3 py-2">
+          <span class="grid size-4 place-items-center rounded-full bg-[#13bbaf] text-[#22252a]">
+            <svg class="size-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>
+          </span>
+          <span class="flex-1 truncate font-mono text-xs text-[#e3e6ea]">gmail_curate_inbox</span>
+          <svg class="size-4 rotate-90 text-[#878787]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        </div>
+      </div>
+
+      <ConvoScroll>
+        <!-- summoned host-chat turn: the app posted this user message -->
+        <div class="flex justify-end">
+          <p class="max-w-[85%] rounded-xl bg-white px-4 py-2.5 text-sm text-[#22252a]">
+            Draft a researched reply to the Q3 contract thread from Dana.
+          </p>
+        </div>
+        <!-- assistant continues: tool-call card + result -->
+        <div class="space-y-2">
+          <div class="rounded-lg border border-[#3f434b]">
+            <div class="flex items-center gap-2 px-3 py-2">
+              <span class="grid size-4 place-items-center rounded-full bg-[#13bbaf] text-[#22252a]">
+                <svg class="size-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>
+              </span>
+              <span class="flex-1 truncate font-mono text-xs text-[#e3e6ea]">gmail_reply_to_thread</span>
+              <svg class="size-4 rotate-90 text-[#878787]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            </div>
+          </div>
+          <p class="text-sm leading-relaxed text-[#e3e6ea]">Researched the thread and drafted a reply, saved to your inbox.</p>
+        </div>
+      </ConvoScroll>
+
+      <p class="font-mono text-xs text-[#878787]">goose · 9:42 AM</p>
+    </div>
+  </div>
+
+  <!-- composer card -->
+  <div class="px-4 pb-4">
+    <div class="rounded-lg border border-[#3f434b] bg-[#22252a] p-2.5">
+      <div class="flex items-center gap-2">
+        <span class="flex-1 px-1 text-sm text-[#878787]">Ask goose anything…</span>
+        <span class="grid size-7 place-items-center rounded-full bg-[#474e57] text-[#e3e6ea]">
+          <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"></path></svg>
+        </span>
+      </div>
+      <div class="mt-2 flex items-center gap-1.5 border-t border-[#3f434b] pt-2">
+        <span class="size-1.5 rounded-full bg-[#13bbaf]"></span>
+        <span class="font-mono text-[11px] text-[#878787]">3 extensions</span>
+      </div>
+    </div>
+  </div>
+</div>

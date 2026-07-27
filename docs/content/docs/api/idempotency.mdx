@@ -1,0 +1,42 @@
+---
+title: Idempotency
+description: Safely retry mutating requests with Idempotency-Key
+---
+
+Services declared with `mutating=True` (side effects like create/charge/send)
+require an `Idempotency-Key` header on their REST endpoint. The key lets you
+retry a request after a network failure without performing the side effect
+twice: the first request is executed and its response cached, and every retry
+with the same key replays that stored response.
+
+Read-only services do not use idempotency keys.
+
+## Usage
+
+Send a unique key (a UUID is ideal) per logical operation:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/services/{tool_name} \
+  -H "Authorization: Bearer sk_live_..." \
+  -H "Idempotency-Key: 9f8c3e1a-7b2d-4c6e-9a1f-2b3c4d5e6f70" \
+  -H "Content-Type: application/json" \
+  -d '{ ... }'
+```
+
+Reuse the **same** key when retrying. Use a **new** key for a genuinely new
+operation.
+
+## Behavior
+
+| Situation | Result |
+|-----------|--------|
+| First request with a key | Executed; response cached under the key |
+| Retry, same key + same payload | Cached response replayed (no re-execution) |
+| Retry, same key + **different** payload | `422`: key already used with a different request |
+| Concurrent request still in flight | `409`: a request with this key is in progress |
+| Missing or empty header | `422`: the `Idempotency-Key` header is required |
+| `compute` failed on the first try | Claim released; the same key can be retried |
+
+Keys are scoped per user and per endpoint, so two users (or two different
+tools) can reuse the same key value without colliding. Stored keys are retained
+for 24 hours; retries after that window re-execute.

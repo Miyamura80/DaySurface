@@ -1,0 +1,1 @@
+../../.claude/rules/lint_links_egress.md

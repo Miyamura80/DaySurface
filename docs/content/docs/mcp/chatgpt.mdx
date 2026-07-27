@@ -1,0 +1,90 @@
+---
+title: ChatGPT
+description: Connect your server to ChatGPT as a remote MCP connector via developer mode
+icon: chatgpt
+---
+
+import { Step, Steps } from 'fumadocs-ui/components/steps';
+import { Callout } from 'fumadocs-ui/components/callout';
+
+ChatGPT connects to your server as a *custom remote MCP connector* through
+OpenAI's **developer mode**. Because ChatGPT runs in OpenAI's cloud (not
+locally), you point it at your public **streamable-HTTP** endpoint at `/mcp`,
+never `localhost`.
+
+<Callout type="info" title="Account requirements">
+Custom connectors need ChatGPT **Plus, Pro, Business, Enterprise, or Edu**.
+Developer mode on Business/Enterprise/Edu must be enabled by a workspace admin.
+ChatGPT **Free** cannot create custom connectors.
+</Callout>
+
+<Steps>
+
+<Step>
+
+### Get your connection URL
+
+The connection URL is just the streamable-HTTP endpoint:
+
+```
+https://YOUR-DEPLOYMENT/mcp
+```
+
+Configure [OAuth 2.1](/docs/mcp/oauth) on your deployment so ChatGPT can
+authenticate on connect - you'll pick **OAuth** as the connector's auth method
+in Step 3. ChatGPT's connector can't send a custom `X-API-KEY` header, so the
+header-based API-key path that [local clients](/docs/mcp/setup) use doesn't
+apply here.
+
+</Step>
+
+<Step>
+
+### Enable developer mode
+
+1. Open ChatGPT **Settings > Apps & Connectors**.
+2. Scroll to **Advanced settings** at the bottom.
+3. Toggle **Developer mode** on.
+
+OpenAI notes that developer mode gives ChatGPT full read/write access to the
+tools you expose. Your server still enforces its own auth and policy on every
+call as an additional layer.
+
+</Step>
+
+<Step>
+
+### Add the custom connector
+
+Under **Settings > Apps & Connectors**, open **Apps** and click **Create**,
+then:
+
+1. Enter a **name** (e.g. `mymcp`); icon and description are optional.
+2. Keep **Server URL** selected under Connection.
+3. Paste your connection **URL** from Step 1.
+4. Set **Authentication** to **OAuth** - ChatGPT discovers your server's
+   authorization server and walks you through consent. (Use **No Auth** only if
+   your deployment runs with no auth configured, e.g. a private internal
+   deployment.)
+5. Check the box acknowledging the risk warning.
+6. Click **Create**.
+
+ChatGPT connects and lists your available tools. Enable them per-conversation
+from the composer's **Tools** menu.
+
+<Callout type="warn" title="Teams: each member connects with their own account">
+With OAuth, every member signs in individually on connect, so tool calls are
+attributed to the right user. For a team rollout, have the workspace admin
+enable developer mode under **Workspace Settings > Permissions & roles >
+Connected data**, then let each member add their own connector.
+</Callout>
+
+</Step>
+
+</Steps>
+
+## Related
+
+- [Claude Web & Cowork](/docs/mcp/claude-web-cowork) - the equivalent flow for Anthropic's cloud clients
+- [OAuth 2.1](/docs/mcp/oauth) - zero-provisioning auth for cloud clients
+- [Tools](/docs/mcp/tools) - what your server exposes

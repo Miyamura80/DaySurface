@@ -1,0 +1,74 @@
+---
+// A code/config block with fake window chrome and a copy-to-clipboard button.
+// Syntax highlighting is done at build time by Shiki (Astro's <Code>), so no
+// highlighter ships to the client.
+import { Code } from "astro:components";
+
+interface Props {
+  code: string;
+  lang?: string;
+  /** Render compactly (single-line install commands). */
+  inline?: boolean;
+}
+const { code, lang = "bash", inline = false } = Astro.props;
+---
+
+<div
+  class="group relative overflow-hidden border border-border bg-surface-1 text-left shadow-2xl shadow-black/40"
+>
+  <div class="flex items-center gap-2 border-b border-border px-4 py-2.5">
+    <span class="size-2.5 border border-fg-subtle"></span>
+    <span class="size-2.5 border border-fg-subtle"></span>
+    <span class="size-2.5 bg-accent"></span>
+    <span class="ml-2 font-mono text-xs uppercase tracking-widest text-fg-subtle">{lang}</span>
+    <button
+      type="button"
+      class="copy-btn ml-auto grid place-items-center p-1.5 text-fg-muted transition hover:bg-surface-2 hover:text-accent"
+      data-code={code}
+      aria-label="Copy"
+    >
+      <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+    </button>
+  </div>
+  <div class={`code-scroll overflow-x-auto px-4 font-mono text-sm leading-relaxed ${inline ? "py-3" : "py-4"}`}>
+    <Code code={code} lang={lang as any} theme="tokyo-night" />
+  </div>
+</div>
+
+<style is:global>
+  /* Let the brand surface show through Shiki's theme background, and inherit
+     the site's mono font / sizing instead of the theme's defaults. */
+  .code-scroll .astro-code,
+  .code-scroll .astro-code span {
+    background-color: transparent !important;
+  }
+  .code-scroll .astro-code {
+    margin: 0;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+  }
+</style>
+
+<script>
+  // Shared clipboard handler for every `.copy-btn` on the page (CodeBlock +
+  // ConnectWidget). On success the clipboard glyph briefly flips to a checkmark.
+  const CHECK_ICON =
+    '<svg class="size-4 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>';
+
+  document.querySelectorAll<HTMLButtonElement>(".copy-btn").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const code = btn.dataset.code ?? "";
+      try {
+        await navigator.clipboard.writeText(code);
+        const original = btn.innerHTML;
+        btn.innerHTML = CHECK_ICON;
+        window.setTimeout(() => {
+          btn.innerHTML = original;
+        }, 1500);
+      } catch {
+        // Clipboard API unavailable (e.g. non-secure context) - fail quietly.
+      }
+    });
+  });
+</script>

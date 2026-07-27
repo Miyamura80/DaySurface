@@ -1,0 +1,54 @@
+---
+description: 
+globs: *.py
+alwaysApply: false
+---
+Langfuse is an LLM observability tool used to monitor LLM behavior in our application. It uses decorators and callbacks to record LLM inference. Always use it in LLM-related modules to ensure traceability.
+
+### Langfuse v4 API Guide
+As of Langfuse SDK v4.x, the low-level observation API uses `start_observation()`.
+
+**Decorator-based usage (unchanged from v3):**
+
+```python
+from langfuse import observe, get_client
+
+@observe()
+def function_name(...):
+    get_client().update_current_span(name=f"descriptive_name_{id}")
+    trace_id = get_client().get_current_trace_id()
+    observation_id = get_client().get_current_observation_id()
+```
+
+**Low-level observation creation (v4 pattern):**
+
+```python
+from langfuse import Langfuse, LangfuseGeneration, LangfuseTool
+from langfuse.types import TraceContext
+
+langfuse = Langfuse()
+
+# Create a generation observation
+trace_context: TraceContext = {"trace_id": trace_id}
+if parent_observation_id:
+    trace_context["parent_span_id"] = parent_observation_id
+
+span = langfuse.start_observation(
+    name="model_name",
+    as_type="generation",  # or "span", "tool", "agent", etc.
+    input=user_input,
+    trace_context=trace_context,
+    metadata={...},
+)
+
+# End an observation: update first, then end (v4 .end() only accepts end_time)
+span.update(output=result, model=model_name, level="DEFAULT")
+span.end()
+```
+
+**Key changes from v3:**
+1. `.generation()` and `.span()` removed - use `start_observation(as_type=...)`.
+2. `.end(**kwargs)` no longer accepts output/model/level - split into `.update()` + `.end()`.
+3. Use `TraceContext` dict with `trace_id` and optional `parent_span_id` instead of positional args.
+4. New observation types available: `LangfuseTool`, `LangfuseAgent`, etc.
+

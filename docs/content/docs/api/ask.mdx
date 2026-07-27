@@ -1,0 +1,117 @@
+---
+title: Ask (NLWeb)
+description: Natural-language Q&A over the docs via an NLWeb-conformant endpoint
+---
+
+The `/ask` endpoint answers natural-language questions about the product using
+its documentation. It is **NLWeb-conformant**: it accepts the NLWeb request
+parameters and emits Schema.org results, with Server-Sent Events (SSE)
+streaming by default.
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+`/ask` is **public** and **IP-rate-limited** (no auth required). It is
+deliberately **excluded from the `/mcp` tool surface** - `/mcp` exposes
+callable action tools, while `/ask` is server-side retrieval-augmented Q&A.
+
+<Callout type="warn">
+`/ask` ships **disabled** by default. When `ask.enabled` is `false`, the
+endpoint returns HTTP `404` (it behaves as if it does not exist) and the CLI
+prints a notice. Enable it by setting `ask.enabled: true` in
+`common/global_config.yaml`.
+</Callout>
+
+```
+POST /ask
+GET  /ask
+```
+
+## Request parameters
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `query` | string | _(required)_ | The natural-language question |
+| `streaming` | boolean | `true` | SSE stream when true; JSON when false |
+| `mode` | string | `generate` | One of `list`, `summarize`, `generate` |
+| `query_id` | string | _(generated)_ | Conversation/query identifier |
+| `prev` | string[] | `[]` | Prior turns for context |
+| `site` | string | _(docs URL)_ | Site scope for results |
+| `decontextualized_query` | string | `null` | Pre-rewritten standalone query |
+
+GET requests pass these as query-string params; POST requests pass them as a
+JSON body.
+
+## Streaming response (SSE)
+
+With `streaming=true`, the server returns `Content-Type: text/event-stream`.
+Each event is a single `data:` line carrying a JSON message:
+
+```
+data: {"message_type":"start","_meta":{"response_type":"nlws","version":"0.1","query_id":"a1b2c3"}}
+
+data: {"message_type":"result","index":0,"item":{"@type":"TechArticle","@context":"https://schema.org","name":"Setup","url":"https://docs.gmailmcp.com/mcp/setup","description":"...","text":"..."}}
+
+data: {"message_type":"result","index":1,"item":{"@type":"SearchSummary","@context":"https://schema.org","text":"The generated answer text."}}
+
+data: {"message_type":"complete","_meta":{"response_type":"nlws","version":"0.1","session_context":{"conversation_id":"a1b2c3"}}}
+```
+
+Events arrive in order: a `start` event, one `result` per retrieved doc chunk,
+a `SearchSummary` `result` carrying the generated answer (omitted when
+`mode=list`), then a `complete` event.
+
+## Non-streaming response (JSON)
+
+With `streaming=false`, the server returns a single JSON document. The
+generated answer is included as a `SearchSummary` entry at index 0:
+
+```json
+{
+  "query_id": "a1b2c3",
+  "results": [
+    {
+      "url": "",
+      "name": "Answer",
+      "site": "https://docs.gmailmcp.com",
+      "score": 1.0,
+      "description": "The generated answer text.",
+      "schema_object": { "@type": "SearchSummary", "@context": "https://schema.org", "text": "The generated answer text." }
+    },
+    {
+      "url": "https://docs.gmailmcp.com/mcp/setup",
+      "name": "Setup",
+      "site": "https://docs.gmailmcp.com",
+      "score": 7.21,
+      "description": "...",
+      "schema_object": { "@type": "TechArticle", "@context": "https://schema.org", "name": "Setup", "url": "https://docs.gmailmcp.com/mcp/setup", "description": "...", "text": "..." }
+    }
+  ]
+}
+```
+
+## Example
+
+```bash
+curl -N "http://localhost:8080/ask?query=How+do+I+set+up+the+MCP+server%3F"
+```
+
+```bash
+curl -X POST http://localhost:8080/ask \
+  -H "Content-Type: application/json" \
+  -d '{"query": "How do I set up the MCP server?", "streaming": false}'
+```
+
+## Retrieval
+
+The default retriever runs BM25 (via `rank-bm25`) over the `*.mdx` files under
+`ask.corpus_path`. It is a pluggable class, so a vector database can replace it
+later without touching the route or service layer. Configure it under `ask` in
+`common/global_config.yaml`:
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `enabled` | `false` | Master switch; `404` when disabled |
+| `corpus_path` | `docs/content/docs` | Docs corpus root |
+| `docs_base_url` | `https://docs.gmailmcp.com` | Base URL for result links |
+| `top_k` | `5` | Number of chunks retrieved per query |
+| `rate_limit_per_minute` | `20` | Per-IP request limit |

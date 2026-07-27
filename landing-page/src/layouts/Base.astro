@@ -1,0 +1,78 @@
+---
+import "../styles/global.css";
+import { site } from "../config/landing";
+import WebMcp from "../components/WebMcp.astro";
+
+interface Props {
+  title?: string;
+  description?: string;
+  /** Social-share image, root-relative or absolute. Defaults to /og.png. */
+  image?: string;
+  /** Alt text describing the share image (accessibility + some crawlers). */
+  imageAlt?: string;
+}
+
+const { title, description, image, imageAlt } = Astro.props;
+const pageTitle = title ?? `${site.name} - ${site.tagline}`;
+const pageDescription = description ?? site.description;
+const base = Astro.site ?? new URL(site.url);
+const canonical = new URL(Astro.url.pathname, base).href;
+// OG/Twitter image must be an absolute URL for crawlers to resolve it.
+const ogImage = new URL(image ?? "/og.png", base).href;
+const ogImageAlt = imageAlt ?? `${site.name} - ${site.tagline}`;
+const fontHref =
+  "https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap";
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="generator" content={Astro.generator} />
+    <meta name="theme-color" content="#000000" />
+
+    <!-- Archivo (Edison brand typeface). Loaded non-render-blocking: preload the
+         stylesheet, then flip media from print→all on load so it never blocks
+         first paint (protects LCP). <noscript> covers JS-off clients. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preload" as="style" href={fontHref} />
+    <link rel="stylesheet" href={fontHref} media="print" onload="this.media='all'" />
+    <noscript><link rel="stylesheet" href={fontHref} /></noscript>
+
+    <title>{pageTitle}</title>
+    <meta name="description" content={pageDescription} />
+    <link rel="canonical" href={canonical} />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={pageTitle} />
+    <meta property="og:description" content={pageDescription} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:site_name" content={site.name} />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={ogImageAlt} />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={pageTitle} />
+    <meta name="twitter:description" content={pageDescription} />
+    <meta name="twitter:image" content={ogImage} />
+    <meta name="twitter:image:alt" content={ogImageAlt} />
+
+    <!-- Machine-readable / agent discovery -->
+    <link rel="alternate" type="text/plain" title="llms.txt" href="/llms.txt" />
+    <link rel="alternate" type="text/plain" title="llms-full.txt" href="/llms-full.txt" />
+    <link rel="alternate" type="text/markdown" title="agents.md" href="/agents.md" />
+
+    <slot name="head" />
+  </head>
+  <body class="min-h-screen bg-bg text-fg antialiased">
+    <slot />
+    <WebMcp />
+  </body>
+</html>

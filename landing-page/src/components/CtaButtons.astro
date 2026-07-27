@@ -1,0 +1,50 @@
+---
+// The primary conversion buttons, shared by the hero and the final CTA so they
+// stay identical. The repo is the primary CTA (open source & self-hostable),
+// rendered in the Edison palette: solid cyan primary, wireframe secondary.
+import { ctas } from "../config/landing";
+
+interface Props {
+  class?: string;
+}
+const { class: className = "" } = Astro.props;
+
+const isExternal = (href: string) => href.startsWith("http");
+---
+
+<div class={`flex flex-col items-center gap-3 sm:flex-row ${className}`}>
+  <a
+    href={ctas.primary.href}
+    target={isExternal(ctas.primary.href) ? "_blank" : undefined}
+    rel={isExternal(ctas.primary.href) ? "noopener noreferrer" : undefined}
+    class="flex w-full items-center justify-center gap-2.5 bg-accent px-6 py-3 font-semibold text-accent-fg transition hover:bg-accent-strong sm:w-auto"
+  >
+    {
+      ctas.primary.logo && (
+        <span
+          class="size-5 shrink-0 bg-accent-fg"
+          style={`-webkit-mask:url('${ctas.primary.logo}') center/contain no-repeat;mask:url('${ctas.primary.logo}') center/contain no-repeat;`}
+          aria-hidden="true"
+        />
+      )
+    }
+    {ctas.primary.label}
+  </a>
+  <a
+    href={ctas.secondary.href}
+    target={isExternal(ctas.secondary.href) ? "_blank" : undefined}
+    rel={isExternal(ctas.secondary.href) ? "noopener noreferrer" : undefined}
+    class="flex w-full items-center justify-center gap-2.5 border border-accent/40 px-6 py-3 font-semibold text-fg transition hover:border-accent hover:bg-surface-1 sm:w-auto"
+  >
+    {
+      ctas.secondary.logo && (
+        <span
+          class="size-5 shrink-0 bg-fg"
+          style={`-webkit-mask:url('${ctas.secondary.logo}') center/contain no-repeat;mask:url('${ctas.secondary.logo}') center/contain no-repeat;`}
+          aria-hidden="true"
+        />
+      )
+    }
+    {ctas.secondary.label}
+  </a>
+</div>

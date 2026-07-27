@@ -1,0 +1,128 @@
+---
+import Base from "../layouts/Base.astro";
+import Nav from "../components/Nav.astro";
+import Hero from "../components/Hero.astro";
+import TrustStrip from "../components/TrustStrip.astro";
+import GetStarted from "../components/GetStarted.astro";
+import Features from "../components/Features.astro";
+import Comparison from "../components/Comparison.astro";
+import Testimonials from "../components/Testimonials.astro";
+import Pricing from "../components/Pricing.astro";
+import AskAi from "../components/AskAi.astro";
+import Faq from "../components/Faq.astro";
+import FinalCta from "../components/FinalCta.astro";
+import Footer from "../components/Footer.astro";
+import { site, faq } from "../config/landing";
+import { buildLlmsFullTxt } from "../agent/content";
+
+const origin = (Astro.site ?? new URL(site.url)).origin;
+
+// schema.org structured data (advertised via /schemamap.xml + NLWeb).
+const jsonLd = [
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    name: site.name,
+    description: site.description,
+    url: site.url,
+    applicationCategory: "DeveloperApplication",
+    operatingSystem: "Any",
+    offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+    sameAs: [site.githubUrl],
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    name: site.name,
+    url: site.url,
+    sameAs: [site.githubUrl],
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: faq.items.map((i) => ({
+      "@type": "Question",
+      name: i.q,
+      acceptedAnswer: { "@type": "Answer", text: i.a },
+    })),
+  },
+];
+
+// Plain-text payload served to agents that request ?mode=agent.
+const agentText = buildLlmsFullTxt(origin);
+---
+
+<Base>
+  <script
+    type="application/ld+json"
+    is:inline
+    slot="head"
+    set:html={JSON.stringify(jsonLd)}
+  />
+
+  <!-- Switch to a stripped, text-first view as early as possible when an agent
+       requests ?mode=agent, before the marketing shell paints. -->
+  <script is:inline slot="head">
+    if (new URLSearchParams(location.search).get("mode") === "agent") {
+      document.documentElement.dataset.mode = "agent";
+    }
+  </script>
+
+  <div id="site-shell">
+    <Nav />
+    <main>
+      <Hero />
+      <TrustStrip />
+      <GetStarted />
+      <Features />
+      <Comparison />
+      <Testimonials />
+      <Pricing />
+      <AskAi />
+      <Faq />
+      <FinalCta />
+    </main>
+    <Footer />
+  </div>
+
+  <!-- Dedicated agent view: shown only for ?mode=agent. Concise, link-rich,
+       and free of marketing chrome so agents get the facts in one read. -->
+  <main id="agent-view" hidden>
+    <pre>{agentText}</pre>
+  </main>
+
+  <style is:global>
+    #agent-view {
+      max-width: 80ch;
+      margin: 0 auto;
+      padding: 2rem 1.25rem;
+    }
+    #agent-view pre {
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.875rem;
+      line-height: 1.6;
+    }
+    html[data-mode="agent"] #site-shell {
+      display: none;
+    }
+    html[data-mode="agent"] #agent-view {
+      display: block;
+    }
+    html[data-mode="agent"] #agent-view[hidden] {
+      display: block;
+    }
+  </style>
+
+  <script is:inline>
+    // Reveal the agent view for clients that set ?mode=agent (handles the case
+    // where the inline head script ran before this element existed).
+    if (new URLSearchParams(location.search).get("mode") === "agent") {
+      document.documentElement.dataset.mode = "agent";
+      var av = document.getElementById("agent-view");
+      if (av) av.removeAttribute("hidden");
+      document.title = "GmailMCP - agent view";
+    }
+  </script>
+</Base>

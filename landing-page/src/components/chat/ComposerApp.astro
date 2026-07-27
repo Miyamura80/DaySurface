@@ -1,0 +1,103 @@
+---
+/*
+ * The MCP UI App served in the NEW conversation turn - the rendered output of
+ * gmail_reply_to_thread. When the agent (summoned by the inbox card's "AI
+ * reply") creates the draft, the host renders this app's ui:// resource as a
+ * FRESH embedded iframe inside that assistant turn, below the reply. It is NOT
+ * a mutation of the original inbox card - it's a new UI in the new turn.
+ *
+ * This mirrors the InlineComposer (Inbox.tsx:401-429, 1144-1322): the
+ * conversation thread we're replying to + an EDITABLE compose card pre-filled
+ * with the agent's researched draft (To, body, Send). Same neutral light look
+ * as InboxApp so it renders identically across hosts.
+ *
+ * INTERACTIVE: the body is a real <textarea> - you can click in, edit, and
+ * scroll the draft. ConvoScroll pauses the whole attract loop on hover/focus so
+ * the card holds still while you use it (otherwise the auto-scroll would yank it
+ * under the cursor). Decorative auto-play otherwise; no JS.
+ *
+ * It fades/slides in at ~56-60% of the shared 15s loop - exactly as ConvoScroll
+ * scrolls it into view - so it reads as a freshly served UI, then clears as the
+ * loop restarts. Reduced-motion users never see it (ConvoScroll hides the
+ * followup region entirely).
+ */
+const draftBody = `Hi Dana, thanks for the quick turnaround. I've reviewed page 4 and signed; the countersignature is attached.
+
+One flag before we file: the renewal date in §3.2 currently reads Sep 1, but per our SOW it should be Oct 1. Everything else looks right to me.
+
+Happy to hop on a quick call if that's easier.
+
+Best,
+Alex`;
+---
+
+<div
+  class="composer-app h-[276px] w-full max-w-[460px] overflow-hidden rounded-lg border border-black/10 bg-white text-[#202124] shadow-sm"
+  style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif"
+>
+  <div class="flex h-full flex-col">
+    <div class="flex items-center gap-1.5 border-b border-[#eee] px-3 py-2 text-[12px] text-[#5f6368]">
+      <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg>
+      Inbox
+      <span class="ml-auto inline-flex items-center gap-1 rounded-full bg-[#e6f4ea] px-2 py-0.5 text-[10px] font-semibold text-[#137333]">
+        <span class="size-1.5 rounded-full bg-[#137333]"></span>
+        Draft ready
+      </span>
+    </div>
+
+    <div class="flex min-h-0 flex-1 flex-col px-3.5 pb-3 pt-2">
+      <strong class="text-[13px] font-semibold leading-snug">Re: Q3 contract - countersignature</strong>
+
+      <!-- collapsed conversation context (the thread we're replying to) -->
+      <div class="mt-1.5 flex items-center gap-2 rounded-md bg-[#f6f8fc] px-2 py-1 text-[11px]">
+        <span class="grid size-4 shrink-0 place-items-center rounded-full bg-[#7b6cf6] text-[8px] font-semibold text-white">D</span>
+        <span class="font-semibold text-[#3c4043]">Dana Whitfield</span>
+        <span class="min-w-0 flex-1 truncate text-[#5f6368]">Just need your signature on page 4…</span>
+        <span class="shrink-0 text-[#999]">2d</span>
+      </div>
+
+      <!-- editable compose card, pre-filled with the agent's researched draft -->
+      <div class="mt-1.5 flex min-h-0 flex-1 flex-col rounded-lg border border-[#dadce0] shadow-sm">
+        <div class="flex items-center gap-2 border-b border-[#f0f0f0] px-3 py-1.5 text-[12px]">
+          <span class="text-[#5f6368]">To</span>
+          <span class="text-[#202124]">dana@acme.legal</span>
+        </div>
+        <textarea
+          class="compose-body min-h-0 w-full flex-1 resize-none bg-transparent px-3 py-2 text-[12px] leading-relaxed text-[#3c4043] outline-none"
+          spellcheck="false"
+          aria-label="Draft reply">{draftBody}</textarea>
+        <div class="flex items-center gap-2 border-t border-[#f0f0f0] px-3 py-2">
+          <button type="button" class="rounded-full bg-[#1a73e8] px-4 py-1.5 text-[12px] font-semibold text-white">Send</button>
+          <button type="button" class="grid size-7 place-items-center rounded-full text-[#5f6368] hover:bg-[#f1f3f4]" aria-label="Attach">
+            <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21.4 11.05l-8.49 8.49a5 5 0 0 1-7.07-7.07l8.49-8.49a3 3 0 0 1 4.24 4.24l-8.49 8.49a1 1 0 0 1-1.41-1.41l7.78-7.78"></path></svg>
+          </button>
+          <span class="ml-auto text-[11px] text-[#5f6368]">Draft saved</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  /* fade/slide in as ConvoScroll brings it into view (~56-60%), hold, then
+     clear for the loop restart - sells "a new UI was just served". Pauses on
+     hover/focus (ConvoScroll), so editing the textarea isn't yanked around. */
+  .composer-app {
+    opacity: 0;
+    transform: translateY(6px) scale(0.99);
+    animation: composer-serve 15s ease-in-out infinite;
+  }
+  @keyframes composer-serve {
+    0%, 54% { opacity: 0; transform: translateY(6px) scale(0.99); }
+    60%, 90% { opacity: 1; transform: translateY(0) scale(1); }
+    94%, 100% { opacity: 0; transform: translateY(6px) scale(0.99); }
+  }
+
+  /* real editable draft: scrolls internally, accepts a text caret on focus */
+  .compose-body { font-family: inherit; }
+  .compose-body::placeholder { color: #9aa0a6; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .composer-app { animation: none; opacity: 1; transform: none; }
+  }
+</style>

@@ -1,0 +1,38 @@
+---
+title: Debugging
+description: Test and troubleshoot MCP tools
+---
+
+## MCP Inspector
+
+Use the [MCP Inspector](https://github.com/modelcontextprotocol/inspector) to test tools interactively without an AI client:
+
+```bash
+npx @modelcontextprotocol/inspector uv --directory /path/to/MCP-Template run mymcp-mcp
+```
+
+This opens a web UI where you can:
+
+- Browse all available tools
+- Call each tool with custom parameters
+- Inspect request/response payloads
+- Verify error handling
+
+## Common Issues
+
+### Server not showing up in client
+
+- Verify the path in your config points to the correct `MCP-Template` directory
+- Make sure `uv` is installed and on your PATH
+- Restart your AI client after saving the config
+
+### Tools not appearing
+
+- Run `uv sync` in the MCP-Template directory to ensure dependencies are installed
+- Try running `uv --directory /path/to/MCP-Template run mymcp-mcp` manually to check for errors
+
+### Tool call returns an error
+
+- Check the error message in the response - it usually describes the issue
+- Use `config_get` with a known key to verify the server is working
+- Run `doctor` to check for environment issues

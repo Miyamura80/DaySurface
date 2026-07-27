@@ -1,0 +1,172 @@
+model_name: gemini/gemini-3-flash-preview
+dot_global_config_health_check: true
+DEV_ENV: dev
+
+example_parent:
+  example_child: "example_value"
+
+########################################################
+# LLMs
+########################################################
+default_llm:
+  default_model: gemini/gemini-3-flash-preview
+  fallback_model: gemini/gemini-2.5-flash-preview
+  default_temperature: 0.5
+  default_max_tokens: 100000
+
+llm_config:
+  cache_enabled: false
+  retry:
+    max_attempts: 3
+    min_wait_seconds: 1
+    max_wait_seconds: 5
+
+# NLWeb /ask natural-language Q&A endpoint over the docs corpus.
+# Ships inert: when disabled, /ask returns 404 and the CLI prints a notice.
+ask:
+  enabled: false
+  corpus_path: docs/content/docs
+  docs_base_url: https://docs.gmailmcp.com
+  top_k: 5
+  rate_limit_per_minute: 20
+
+########################################################
+# Debugging
+########################################################
+features:
+  # Add feature flags here. Can be overridden by env vars: FEATURES__NEW_UI=true
+  new_ui: false
+  beta_features: false
+  enable_llm_fallback: true
+
+logging:
+  verbose: true
+  format:
+    show_time: false
+    show_session_id: true
+    location:
+      enabled: true
+      show_file: true
+      show_function: true
+      show_line: true
+      # Configure which log levels show location information
+      show_for_info: false
+      show_for_debug: true
+      show_for_warning: true
+      show_for_error: true
+  levels:
+    debug: false  # Suppress all debug logs
+    info: true    # Show info logs
+    warning: true # Show warning logs
+    error: true   # Show error logs
+    critical: true # Show critical logs
+  redaction:
+    enabled: true
+    use_default_pii: true
+    patterns:
+      - name: "ANTHROPIC_API_KEY"
+        regex: "sk-ant-[a-zA-Z0-9-]{20,}"
+        placeholder: "[REDACTED_API_KEY]"
+      - name: "OPENAI_API_KEY"
+        regex: "sk-[a-zA-Z0-9]{20,}"
+        placeholder: "[REDACTED_API_KEY]"
+      - name: "STRIPE_API_KEY"
+        regex: "[spr]k_(live|test)_[a-zA-Z0-9]{20,}"
+        placeholder: "[REDACTED_API_KEY]"
+      - name: "BEARER_TOKEN"
+        regex: "Bearer\\s+[a-zA-Z0-9._\\-]{20,}"
+        placeholder: "[REDACTED_BEARER_TOKEN]"
+      - name: "GENERIC_KEY"
+        regex: "(?i:(?:api[_-]?key|project[_-]?key|secret[_-]?key)[=:\\s]+['\"]?[a-zA-Z0-9_\\-]{16,}['\"]?)"
+        placeholder: "[REDACTED_KEY]"
+
+########################################################
+# Rate Limiting
+########################################################
+rate_limit:
+  enabled: true
+  trust_proxy_headers: false
+  tiers:
+    free_tier:
+      rps: 10
+      rpm: 120
+      rph: 5000
+      rpd: 10000
+    plus_tier:
+      rps: 10
+      rpm: 120
+      rph: 5000
+      rpd: 10000
+    default:
+      rps: 5
+      rpm: 60
+      rph: 1000
+      rpd: 5000
+
+########################################################
+# API Server
+########################################################
+server:
+  host: "0.0.0.0"
+  port: 8080
+  allowed_origins:
+    - "http://localhost:3000"
+  # /mcp session mode. true = self-contained requests (safe for multi-replica
+  # and spin-down hosting; in-band elicitation unavailable). false = stateful
+  # sessions (single replica only; enables host-native elicitation, e.g. the
+  # PDF signing confirmation dialog). See mcp_server/server.py.
+  mcp_stateless_http: true
+
+########################################################
+# Registry branding (pre-connect discovery)
+########################################################
+# Served at /.well-known/mcp/server-card.json (SEP-2127). This is what MCP
+# registries and client "add server" directories show before connecting. The
+# deployed endpoint URL is NOT set here - it comes from MCP_PUBLIC_URL so the
+# card and OAuth resource metadata stay in lockstep.
+branding:
+  name: "io.github.Miyamura80/MCP-Template"   # reverse-DNS registry id (one slash)
+  title: "GmailMCP"                            # human-readable display name
+  description: "Give your AI agent real tools - one service registry over CLI, MCP, and HTTP."
+  website_url: "https://gmailmcp.com"
+  repository_url: "https://github.com/Miyamura80/MCP-Template"
+  repository_source: "github"
+  icons:
+    - src: "https://gmailmcp.com/favicon.svg"
+      mime_type: "image/svg+xml"
+      sizes: ["any"]
+
+########################################################
+# Web Bot Auth (HTTP Message Signatures key directory)
+########################################################
+# Published at /.well-known/http-message-signatures-directory as an Ed25519 JWK
+# Set. The signing key itself is the WEB_BOT_AUTH_PRIVATE_KEY secret (base64url
+# 32-byte seed); set it to advertise a verifiable agent identity. Unset -> 404.
+web_bot_auth:
+  key_lifetime_days: 365   # per-key exp, relative to first publish
+
+########################################################
+# Gmail integration
+########################################################
+gmail:
+  # Max decoded size (bytes) of a single attachment returned by
+  # gmail_get_attachment before it is rejected. gmail_get_attachment returns the
+  # file's base64 straight into the model's context, so this guards the context
+  # window against an unbounded fetch. Set absurdly high for now (~1 TiB =
+  # effectively unbounded); tighten to a real limit later.
+  max_attachment_bytes: 1099511627776
+
+########################################################
+# CLI
+########################################################
+telemetry:
+  enabled: true
+  endpoint: null
+
+cli:
+  default_format: table
+  interactive_fallback: true
+  check_updates_on_start: true
+  emoji: "🏵️"
+  primary_color: "bright_yellow"
+  secondary_color: "yellow"

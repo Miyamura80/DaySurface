@@ -1,0 +1,58 @@
+---
+title: 快速入门
+description: 开始使用 MCP 模板
+---
+
+MCP Template 提供三种方式与同一组工具进行交互:
+
+- **CLI** - 在终端中运行命令
+- **MCP** - 直接连接 Claude 等 AI 助手
+- **REST API** - 通过 HTTP 调用带认证的端点
+
+选择适合你工作流的接口，或三种都用。
+
+## 安装
+
+import { Step, Steps } from 'fumadocs-ui/components/steps';
+
+<Steps>
+<Step>
+
+### 从源码安装
+
+```bash
+git clone https://github.com/Miyamura80/MCP-Template.git
+cd MCP-Template
+uv sync
+```
+
+</Step>
+<Step>
+
+### 验证安装
+
+```bash
+uv run mymcp --version
+uv run mymcp --help
+```
+
+</Step>
+<Step>
+
+### 尝试一个命令
+
+```bash
+uv run mymcp greet Alice
+# Hello, Alice!
+```
+
+</Step>
+</Steps>
+
+## 选择你的接口
+
+<Cards>
+  <Card title="CLI" href="/docs/cli" />
+  <Card title="MCP Server" href="/docs/mcp" />
+  <Card title="REST API" href="/docs/api" />
+</Cards>
