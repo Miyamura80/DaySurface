@@ -6,11 +6,10 @@
  * the dedicated /pricing page, plus the machine-readable /pricing.md manifest
  * that answer engines read (see src/agent/content.ts).
  *
- * The tiering rationale lives in manual_docs/pricing_strategy.md. The short
- * version, and the thing every row below has to justify itself against:
- * interactive is free, autonomous is paid, and the tiers above Team sell
- * throughput rather than features. If a capability does not sit on one of the
- * three axes in `pricingAxes`, it is free.
+ * The rule every row below has to justify itself against: interactive is free,
+ * autonomous is paid, and the tiers above Team sell throughput rather than
+ * features. If a capability does not sit on one of the three axes in
+ * `pricingAxes`, it is free.
  *
  * Shape: Free -> Team -> Scaling -> Enterprise, with governance sold as an
  * add-on that attaches to any paid tier. Splitting scale (a tier) from
