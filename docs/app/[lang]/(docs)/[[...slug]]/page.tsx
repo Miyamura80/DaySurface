@@ -10,6 +10,8 @@ import { getMDXComponents } from "@/mdx-components";
 import type { Metadata } from "next";
 import { createRelativeLink } from "fumadocs-ui/mdx";
 import { LLMCopyButton, ViewOptions } from "@/components/ai/page-actions";
+import { i18n } from "@/lib/i18n";
+import { SITE_NAME, absoluteUrl } from "@/lib/site";
 
 export default async function Page({
   params,
@@ -22,8 +24,8 @@ export default async function Page({
 
   const MDX = page.data.body;
   const gitConfig = {
-    user: "username",
-    repo: "repo",
+    user: "Miyamura80",
+    repo: "DaySurface",
     branch: "main",
   };
 
@@ -64,10 +66,42 @@ export async function generateMetadata({
   const page = source.getPage(slug, lang);
   if (!page) notFound();
 
+  // Untranslated pages fall back to English content, so every locale resolves
+  // to a real URL. Without hreflang those reads as four duplicates of the same
+  // page; with it, search engines treat them as one page in four languages and
+  // consolidate the ranking signals instead of splitting them.
+  // Absolute throughout: metadata is not basePath-aware, so a relative string
+  // here would resolve against metadataBase and drop the `/docs` prefix.
+  const languages: Record<string, string> = {};
+  for (const locale of i18n.languages) {
+    const localized = source.getPage(slug, locale);
+    if (localized) languages[locale] = absoluteUrl(localized.url);
+  }
+
   return {
     title: page.data.title,
     description: page.data.description,
+    alternates: {
+      canonical: absoluteUrl(page.url),
+      languages: {
+        ...languages,
+        "x-default": absoluteUrl(
+          source.getPage(slug, i18n.defaultLanguage)?.url ?? page.url,
+        ),
+      },
+    },
     openGraph: {
+      type: "article",
+      siteName: `${SITE_NAME} docs`,
+      title: page.data.title,
+      description: page.data.description,
+      url: absoluteUrl(page.url),
+      images: getPageImage(page).url,
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: page.data.title,
+      description: page.data.description,
       images: getPageImage(page).url,
     },
   };

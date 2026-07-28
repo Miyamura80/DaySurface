@@ -15,8 +15,10 @@ export const site = {
     "An MCP server for Gmail: triage a ranked inbox, draft replies in a real composer, and fill and sign PDF attachments - inside Claude, ChatGPT, or any MCP client.",
   // TODO: the canonical deployed URL (also set `site` in astro.config.mjs).
   url: "https://daysurface.com",
-  // TODO: links used across nav, footer, and CTAs.
-  docsUrl: "https://docs.daysurface.com",
+  // Docs are a path on the apex, not a `docs.` subdomain, so inbound links and
+  // internal links all build authority for one domain. `docs.daysurface.com`
+  // should 301 here. See the `/docs` proxy in `landing-page/server.ts`.
+  docsUrl: "https://daysurface.com/docs",
   githubUrl: "https://github.com/Miyamura80/DaySurface",
   // TODO: the deployed streamable-HTTP MCP endpoint users add to their client.
   // This is the URL you paste / one-click-install into Claude, Cursor, etc.

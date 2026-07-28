@@ -7,13 +7,134 @@
  * responses send `Vary: Accept, Accept-Encoding` so CDNs don't cross-serve the
  * HTML and markdown variants. Run with bun: `bun server.ts`. Honors `$PORT`.
  */
-import { createServer, type ServerResponse } from "node:http";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { Readable } from "node:stream";
 import sirv from "sirv";
 
 import { buildAgentsMd } from "./src/agent/content.ts";
 import { site } from "./src/config/landing";
 
 const PORT = Number(process.env.PORT ?? 8080);
+
+/**
+ * Origin of the Next.js docs service (see `docs/railway.toml`), e.g.
+ * `http://daysurface-docs.railway.internal:8080` over Railway private
+ * networking. Everything under `/docs` is proxied there.
+ *
+ * The docs used to live on `docs.daysurface.com`. Serving them from the apex
+ * instead means one domain accumulates all the inbound links rather than
+ * splitting authority across two hostnames. The docs app sets
+ * `basePath: '/docs'`, so a single prefix covers its pages, `_next` assets,
+ * `sitemap.xml`, `robots.txt`, and API routes - nothing else needs forwarding.
+ */
+const DOCS_UPSTREAM = process.env.DOCS_UPSTREAM?.replace(/\/$/, "");
+const DOCS_PREFIX = "/docs";
+
+if (!DOCS_UPSTREAM) {
+  console.warn(
+    "[landing-page] DOCS_UPSTREAM is not set - /docs will return 503. " +
+      "Set it to the docs service origin (e.g. http://daysurface-docs.railway.internal:8080).",
+  );
+}
+
+/** True for `/docs` itself and anything beneath it, but not `/docsomething`. */
+function isDocsPath(pathname: string): boolean {
+  return (
+    pathname === DOCS_PREFIX ||
+    pathname.startsWith(`${DOCS_PREFIX}/`) ||
+    pathname.startsWith(`${DOCS_PREFIX}?`)
+  );
+}
+
+// Hop-by-hop headers are connection-scoped (RFC 9110 §7.6.1) and must not be
+// forwarded; passing `transfer-encoding` through in particular corrupts the
+// response, since fetch has already de-chunked the body for us.
+const HOP_BY_HOP = new Set([
+  "connection",
+  "keep-alive",
+  "proxy-authenticate",
+  "proxy-authorization",
+  "te",
+  "trailer",
+  "transfer-encoding",
+  "upgrade",
+]);
+
+/**
+ * Reverse-proxy a `/docs` request to the Next.js docs service.
+ *
+ * Redirects are passed through verbatim (`redirect: "manual"`) rather than
+ * followed here: the docs app emits 307/308s for locale normalization, and the
+ * browser - not this process - has to see them so the address bar and the
+ * canonical URL agree.
+ */
+async function proxyDocs(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (!DOCS_UPSTREAM) {
+    res.statusCode = 503;
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.end("Docs are temporarily unavailable.");
+    return;
+  }
+
+  const target = `${DOCS_UPSTREAM}${req.url ?? "/"}`;
+  const headers = new Headers();
+  for (const [key, value] of Object.entries(req.headers)) {
+    if (value === undefined || HOP_BY_HOP.has(key.toLowerCase())) continue;
+    headers.set(key, Array.isArray(value) ? value.join(", ") : value);
+  }
+
+  // Let the docs app reconstruct public URLs behind this hop.
+  const forwardedHost = firstHeaderToken(
+    req.headers["x-forwarded-host"] ?? req.headers.host,
+  );
+  if (forwardedHost) headers.set("x-forwarded-host", forwardedHost);
+  headers.set(
+    "x-forwarded-proto",
+    firstHeaderToken(req.headers["x-forwarded-proto"]) ?? "https",
+  );
+
+  const method = req.method ?? "GET";
+  const hasBody = method !== "GET" && method !== "HEAD";
+
+  let upstream: Response;
+  try {
+    upstream = await fetch(target, {
+      method,
+      headers,
+      body: hasBody ? (Readable.toWeb(req) as ReadableStream) : undefined,
+      // Required by undici whenever a streaming body is sent.
+      ...(hasBody ? { duplex: "half" } : {}),
+      redirect: "manual",
+    } as RequestInit);
+  } catch (error) {
+    // Defensive boundary: the docs service is a separate deployment that can be
+    // restarting, unreachable, or mid-rollout. A 502 keeps the marketing site up.
+    console.error("[landing-page] /docs upstream failed:", error);
+    res.statusCode = 502;
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.end("Docs are temporarily unavailable.");
+    return;
+  }
+
+  res.statusCode = upstream.status;
+  upstream.headers.forEach((value, key) => {
+    if (HOP_BY_HOP.has(key.toLowerCase())) return;
+    // `content-encoding`/`content-length` describe the pre-decode body; fetch
+    // has already decompressed it, so echoing them would mislead the client.
+    if (key.toLowerCase() === "content-encoding") return;
+    if (key.toLowerCase() === "content-length") return;
+    res.setHeader(key, value);
+  });
+
+  if (method === "HEAD" || !upstream.body) {
+    res.end();
+    return;
+  }
+
+  const body = Buffer.from(await upstream.arrayBuffer());
+  res.setHeader("Content-Length", String(body.byteLength));
+  res.end(body);
+}
 
 // `single` = SPA fallback to index.html. sirv@3 dropped the `cors` option, so
 // `setHeaders` re-adds the `Access-Control-Allow-Origin: *` that sirv-cli's
@@ -129,6 +250,14 @@ const server = createServer((req, res) => {
     pathname = new URL(req.url ?? "/", "http://localhost").pathname;
   } catch {
     pathname = "";
+  }
+
+  // Ahead of everything else: sirv runs with `single: true`, so without this
+  // the SPA fallback would answer every /docs URL with the landing page at a
+  // 200 instead of proxying it.
+  if (isDocsPath(pathname)) {
+    void proxyDocs(req, res);
+    return;
   }
 
   const negotiable = isCanonical(pathname) && (method === "GET" || method === "HEAD");
