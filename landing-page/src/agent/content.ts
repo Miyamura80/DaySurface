@@ -80,7 +80,7 @@ export function buildLlmsFullTxt(origin: string): string {
     })
     .join("\n\n");
   const faqBlock = faq.items.map((i) => `### ${i.q}\n${i.a}`).join("\n\n");
-  const clients = compatibility.clients.map((c) => c.name).join(", ");
+  const clients = compatibility.hosts.map((h) => h.name).join(", ");
 
   const pillarsBlock = comparison.pillars
     .map((p) => `- **${p.title}**: ${p.body}`)

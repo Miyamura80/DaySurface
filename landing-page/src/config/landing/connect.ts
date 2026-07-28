@@ -17,14 +17,14 @@ import { site } from "./site";
  * with the monochrome Hackbox aesthetic. `logo: null` renders a text monogram
  * fallback - drop an SVG in `public/logos/` and point `logo` at it to upgrade.
  */
-export interface Client {
+export interface Host {
   name: string;
   logo: string | null;
 }
 
-export const compatibility: { heading: string; clients: Client[] } = {
+export const compatibility: { heading: string; hosts: Host[] } = {
   heading: "Works with every MCP client",
-  clients: [
+  hosts: [
     { name: "Claude", logo: "/logos/claude.svg" },
     { name: "Codex", logo: "/logos/codex.svg" },
     { name: "Cursor", logo: "/logos/cursor.svg" },
