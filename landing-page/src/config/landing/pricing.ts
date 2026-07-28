@@ -151,40 +151,40 @@ export const pricing: {
 };
 
 /**
- * Add-ons attach to any paid tier, so buying Okta support never means buying
- * throughput you will not use. Kept separate from `pricing.tiers` because they
- * are orthogonal to the ladder, not another rung on it.
+ * Add-ons attach to a paid tier rather than forming a rung of their own, so
+ * buying Okta support never means buying throughput you will not use. Each one
+ * renders as an inset "+ optional" panel inside the card named by `attachTo`,
+ * which keeps the ladder four cards wide however many add-ons we sell.
  */
 export interface AddOn {
   name: string;
   price: string;
   cadence: string;
+  /** Long form. Not rendered on the card - used by the /pricing.md manifest. */
   description: string;
   features: string[];
-  /** Which tiers this can be attached to. */
+  /** Which tiers this can be attached to, shown as small print. */
   availableOn: string;
-  cta: { label: string; href: string };
+  /** Name of the tier whose card this panel renders inside. */
+  attachTo: string;
 }
 
-export const addOns: { heading: string; subhead: string; items: AddOn[] } = {
-  heading: "Add-ons",
-  subhead:
-    "Bought on top of any paid tier, self-serve. Nothing here requires moving to an enterprise contract first.",
+export const addOns: { items: AddOn[] } = {
   items: [
     {
-      name: "Governance",
+      name: "Governance add-on",
       price: "$300",
       cadence: "/mo",
       description:
         "What a security team asks for before it will sign off. Priced as an add-on so a six-person team can buy Okta support without buying an enterprise contract to go with it.",
       features: [
-        "Enterprise SSO (Okta, Entra ID, any SAML IdP)",
-        "SSO enforcement - block non-SSO sign-in org-wide",
-        "Fine-grained RBAC across mailboxes and rules",
-        "Support via a dedicated Slack or MS Teams channel",
+        "Enterprise SSO (e.g. Okta)",
+        "SSO enforcement",
+        "Fine-grained RBAC",
+        "Support via dedicated Slack / MS Teams channel",
       ],
-      availableOn: "Team and Scaling. Included in Enterprise.",
-      cta: { label: "Add to your plan", href: "/#how-it-works" },
+      availableOn: "Also available on Team. Included in Enterprise.",
+      attachTo: "Scaling",
     },
   ],
 };

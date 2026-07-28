@@ -137,7 +137,7 @@ const jsonLd = [
                 )}
                 <p class="mt-3 text-sm text-pretty text-fg-muted">{tier.description}</p>
 
-                <ul class="mt-6 space-y-3 text-sm">
+                <ul class="mt-6 grow space-y-3 text-sm">
                   {tier.features.map((f) => (
                     <li class="flex items-start gap-2">
                       <svg
@@ -157,6 +157,51 @@ const jsonLd = [
                   ))}
                 </ul>
 
+                {/* Add-ons render as an inset panel inside the tier they
+                    attach to. fieldset/legend gives the notched border for
+                    free, and mt-auto pins the panel and CTA to the card
+                    bottom so cards of different heights still line up. */}
+                {addOns.items
+                  .filter((addOn) => addOn.attachTo === tier.name)
+                  .map((addOn) => (
+                    <fieldset class="mt-8 border border-border/70 px-4 pb-5">
+                      <legend class="mx-auto px-2 text-xs font-medium text-fg-subtle">
+                        + optional
+                      </legend>
+
+                      <div class="flex items-baseline justify-between gap-3">
+                        <h3 class="text-sm font-bold text-balance text-fg">{addOn.name}</h3>
+                        {/* One expression: separate elements would render a
+                            stray space between "$300" and "/mo". */}
+                        <span class="shrink-0 text-sm font-bold text-fg">
+                          {`${addOn.price}${addOn.cadence}`}
+                        </span>
+                      </div>
+
+                      <ul class="mt-4 space-y-2.5 text-sm">
+                        {addOn.features.map((f) => (
+                          <li class="flex items-start gap-2">
+                            <svg
+                              class="mt-0.5 size-4 shrink-0 text-accent"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="2.5"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              aria-hidden="true"
+                            >
+                              <path d="M20 6L9 17l-5-5" />
+                            </svg>
+                            <span class="text-fg-muted">{f}</span>
+                          </li>
+                        ))}
+                      </ul>
+
+                      <p class="mt-4 text-xs text-fg-subtle">{addOn.availableOn}</p>
+                    </fieldset>
+                  ))}
+
                 <a
                   href={tier.href}
                   class="mt-8 border-2 border-border px-5 py-2.5 text-center font-semibold text-fg transition hover:border-accent hover:text-accent"
@@ -168,63 +213,6 @@ const jsonLd = [
           }
         </div>
 
-        <div id="add-ons" class="mt-16 scroll-mt-20 border-t border-border/60 pt-12">
-          <div class="max-w-2xl">
-            <h2 class="text-2xl font-bold tracking-tight">{addOns.heading}</h2>
-            <p class="mt-3 text-pretty text-fg-muted">{addOns.subhead}</p>
-          </div>
-
-          {/* Same 4-column grid as the tiers, with the add-on parked in the
-              Scaling column so it lines up under the tier it most often
-              attaches to. Dashed border marks it as bolt-on, not a rung. */}
-          <div class="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            {
-              addOns.items.map((addOn) => (
-                <div class="flex flex-col border border-dashed border-accent/50 bg-surface-1 p-7 lg:col-start-3">
-                  <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-                    <h3 class="text-lg font-semibold">{addOn.name}</h3>
-                    <span class="font-mono text-xs tracking-widest text-accent uppercase">
-                      Add-on
-                    </span>
-                  </div>
-                  <div class="mt-4 flex items-baseline gap-1">
-                    <span class="text-4xl font-bold">{addOn.price}</span>
-                    <span class="text-fg-muted">{addOn.cadence}</span>
-                  </div>
-                  <p class="mt-2 text-xs text-fg-subtle">{addOn.availableOn}</p>
-                  <p class="mt-3 text-sm text-pretty text-fg-muted">{addOn.description}</p>
-
-                  <ul class="mt-6 space-y-3 text-sm">
-                    {addOn.features.map((f) => (
-                      <li class="flex items-start gap-2">
-                        <svg
-                          class="mt-0.5 size-4 shrink-0 text-accent"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          stroke-width="2.5"
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                          aria-hidden="true"
-                        >
-                          <path d="M20 6L9 17l-5-5" />
-                        </svg>
-                        <span class="text-fg-muted">{f}</span>
-                      </li>
-                    ))}
-                  </ul>
-
-                  <a
-                    href={addOn.cta.href}
-                    class="mt-8 border-2 border-border px-5 py-2.5 text-center font-semibold text-fg transition hover:border-accent hover:text-accent"
-                  >
-                    {addOn.cta.label}
-                  </a>
-                </div>
-              ))
-            }
-          </div>
-        </div>
       </div>
     </section>
 
