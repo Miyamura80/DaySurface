@@ -10,10 +10,6 @@ import type { MatrixValue } from "../config/landing";
 import { pricing, pricingMatrix } from "../config/landing";
 
 const tiers = pricing.tiers;
-
-function isFeatured(i: number): boolean {
-  return Boolean(tiers[i]?.featured);
-}
 ---
 
 <div class="overflow-x-auto">
@@ -27,15 +23,8 @@ function isFeatured(i: number): boolean {
           Capability
         </th>
         {
-          tiers.map((t, i) => (
-            <th
-              scope="col"
-              class={`px-4 py-4 align-bottom text-sm ${
-                isFeatured(i)
-                  ? "border-x-2 border-accent bg-accent/10 font-bold text-fg"
-                  : "font-semibold text-fg-muted"
-              }`}
-            >
+          tiers.map((t) => (
+            <th scope="col" class="px-4 py-4 align-bottom text-sm font-semibold text-fg-muted">
               <div>{t.name}</div>
               <div class="mt-1 text-xs font-normal text-fg-subtle">
                 {t.price}
@@ -66,12 +55,8 @@ function isFeatured(i: number): boolean {
                   <div class="mt-1 max-w-sm text-sm text-fg-muted">{row.detail}</div>
                 )}
               </th>
-              {row.values.map((v: MatrixValue, i: number) => (
-                <td
-                  class={`px-4 py-4 ${
-                    isFeatured(i) ? "border-x-2 border-accent bg-accent/10" : ""
-                  }`}
-                >
+              {row.values.map((v: MatrixValue) => (
+                <td class="px-4 py-4">
                   {v === true && (
                     <span class="text-lg font-bold text-accent" aria-label="Included">
                       ✓

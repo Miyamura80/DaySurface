@@ -13,22 +13,29 @@
  */
 import { site } from "./site";
 
+/**
+ * A bullet in a tier card. Plain strings get the default check mark; the object
+ * form swaps in a named icon (and optionally links out), which is how the free
+ * tier's self-host line carries the GitHub mark.
+ */
+export type PricingFeature = string | { text: string; icon: "github"; href?: string };
+
 export interface PricingTier {
   name: string;
   price: string;
   cadence?: string;
   description: string;
-  features: string[];
+  features: PricingFeature[];
   cta: string;
   href: string;
   /**
-   * Visual emphasis only (accent border on the card, highlighted column in the
-   * matrix). Deliberately NOT a "most popular" badge: we are not going to
-   * invent social proof, and an unverifiable popularity claim is exactly the
-   * kind of thing this audience notices.
+   * Small print under the price (seat minimums, billing notes).
+   *
+   * Note there is deliberately no "featured"/"most popular" flag. We are not
+   * inventing social proof, and we are not steering people to a tier with
+   * styling either - every card gets identical treatment and the table below
+   * does the arguing.
    */
-  featured?: boolean;
-  /** Small print under the price (seat minimums, billing notes). */
   note?: string;
 }
 
@@ -61,7 +68,7 @@ export const pricing: {
         "1 connected mailbox",
         "30 days of curation memory",
         "3 PDF signatures per month",
-        "MIT-licensed - self-host the lot",
+        { text: "MIT-licensed - self-host every feature", icon: "github", href: site.githubUrl },
         "Community support",
       ],
       cta: "Start free",
@@ -84,7 +91,6 @@ export const pricing: {
       ],
       cta: "Start 14-day trial",
       href: "/#how-it-works",
-      featured: true,
       note: "No card up front. Free tier never expires.",
     },
     {
