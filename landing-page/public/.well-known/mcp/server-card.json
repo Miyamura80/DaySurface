@@ -2,7 +2,7 @@
   "name": "io.github.Miyamura80/DaySurface",
   "version": "0.1.1",
   "title": "DaySurface",
-  "description": "Rank, triage, and draft replies for a Gmail inbox - over MCP, CLI, and HTTP.",
+  "description": "Triage a ranked inbox, draft replies, and sign PDFs - from any MCP client.",
   "websiteUrl": "https://daysurface.com",
   "serverUrl": "https://mcp.daysurface.com/mcp",
   "repository": {

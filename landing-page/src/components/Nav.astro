@@ -10,10 +10,10 @@ import { site, nav } from "../config/landing";
     aria-label="Primary"
   >
     <a href="#top" class="flex items-center gap-2 font-semibold tracking-tight">
-      <span
-        class="grid size-7 place-items-center bg-accent font-mono text-sm font-bold text-accent-fg"
-        >{site.name.charAt(0)}</span
-      >
+      {/* The canonical brand mark, same asset the favicon and og.png use - not
+          a letter tile. It is multi-colour, so it renders as an <img> rather
+          than a CSS mask like the monochrome client logos. */}
+      <img src="/favicon.svg" alt="" width="28" height="28" class="size-7 shrink-0" />
       <span>{site.name}</span>
     </a>
 

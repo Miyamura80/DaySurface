@@ -12,7 +12,7 @@ export const site = {
   tagline: "An MCP server for Gmail",
   // Used for <title>, meta description, and OG tags.
   description:
-    "DaySurface is a Model Context Protocol server that lets your agent rank, triage, and draft replies for a Gmail inbox - over MCP, CLI, and HTTP.",
+    "An MCP server for Gmail: triage a ranked inbox, draft replies in a real composer, and fill and sign PDF attachments - inside Claude, ChatGPT, or any MCP client.",
   // TODO: the canonical deployed URL (also set `site` in astro.config.mjs).
   url: "https://daysurface.com",
   // TODO: links used across nav, footer, and CTAs.
@@ -47,7 +47,7 @@ export const serverCard = {
   // SemVer - keep in step with pyproject.toml / server.json when you release.
   version: "0.1.1",
   // Concise capability summary (<=100 chars for the registry server.json schema).
-  description: "Rank, triage, and draft replies for a Gmail inbox - over MCP, CLI, and HTTP.",
+  description: "Triage a ranked inbox, draft replies, and sign PDFs - from any MCP client.",
   // repository.source value the MCP registry expects ("github" | "gitlab" | ...).
   repositorySource: "github",
 } as const;
