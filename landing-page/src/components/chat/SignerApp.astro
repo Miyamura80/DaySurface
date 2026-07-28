@@ -52,18 +52,22 @@ const pageLines: [string, boolean][] = [
   <div class="flex h-full flex-col">
     <!-- header: filename + the phase badge (pending -> signed) -->
     <div
-      class="flex shrink-0 items-center justify-between gap-3 border-b border-[#e0e0e0] bg-white px-4 py-2.5"
+      class="flex shrink-0 items-center justify-between gap-2 border-b border-[#e0e0e0] bg-white px-4 py-2.5 sm:gap-3"
     >
-      <span class="whitespace-nowrap text-[14px] font-semibold">terms-v3.pdf</span>
+      <!-- The badge is the part that must stay whole, so the filename is what
+           gives: min-w-0 + truncate, the way a real file chip behaves. Without
+           it the nowrap name pushes the badge past the card's right edge in a
+           phone-width column. -->
+      <span class="min-w-0 flex-1 truncate text-[13px] font-semibold sm:text-[14px]">terms-v3.pdf</span>
       <!-- the badge itself is absolute (the two phases cross-fade in place), so
            this holder is what reserves room for it beside the filename -->
-      <span class="relative flex h-[22px] min-w-[164px] shrink-0 justify-end sm:min-w-[170px]">
+      <span class="relative flex h-[22px] w-[148px] shrink-0 justify-end sm:w-[170px]">
         <span
-          class="badge-pending absolute right-0 whitespace-nowrap rounded-full border border-[#f0d48a] bg-[#fff3d6] px-2.5 py-[3px] text-[12px] leading-none text-[#8a5a00]"
+          class="badge-pending absolute right-0 whitespace-nowrap rounded-full border border-[#f0d48a] bg-[#fff3d6] px-2 py-[3px] text-[11px] leading-none text-[#8a5a00] sm:px-2.5 sm:text-[12px]"
           style="padding-top:4px;padding-bottom:4px">Awaiting your signature</span
         >
         <span
-          class="badge-signed absolute right-0 whitespace-nowrap rounded-full border border-[#b7dfc0] bg-[#e6f4ea] px-2.5 py-[3px] text-[12px] leading-none text-[#0d652d]"
+          class="badge-signed absolute right-0 whitespace-nowrap rounded-full border border-[#b7dfc0] bg-[#e6f4ea] px-2 py-[3px] text-[11px] leading-none text-[#0d652d] sm:px-2.5 sm:text-[12px]"
           style="padding-top:4px;padding-bottom:4px">✓ Signed by Alex Rivera</span
         >
       </span>
