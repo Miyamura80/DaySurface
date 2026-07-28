@@ -282,10 +282,16 @@ export const connect: {
       id: "chatgpt",
       name: "ChatGPT",
       logo: "/logos/chatgpt.svg",
-      // ChatGPT has no install URL scheme - manual only.
+      // No install URL scheme exists for ChatGPT - manual only. Re-checked
+      // July 2026: no deep link is documented by OpenAI, none is in community
+      // use, and no "Add to ChatGPT" badge exists in an ecosystem where the
+      // equivalents for VS Code, Cursor and LM Studio are commonplace.
+      // Developer mode is a prerequisite, so a deep link would land most users
+      // on a screen with no Create button anyway.
       method: "manual",
       steps: [
-        "Settings → Connectors → Advanced: turn on Developer mode",
+        "Settings → Connectors (newer builds: Apps & Connectors)",
+        "Advanced settings → turn on Developer mode",
         "Back on Connectors, click Create",
         "Paste the URL above, name it, then click Create",
         "Start a new chat so the tools menu refreshes",
