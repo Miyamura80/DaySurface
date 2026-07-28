@@ -35,6 +35,79 @@
     monospace;
 }
 
+/*
+ * Per-client chat theming.
+ *
+ * The selected client is page-level state on <html data-client> (see
+ * src/lib/client-state.ts), so every chat surface reads the same one. These
+ * tokens are what let a surface re-skin itself in CSS instead of shipping four
+ * copies of its markup - the hero's four shells stay bespoke (each client's
+ * chrome differs structurally), but the features frames are one frame wearing
+ * whichever client is selected.
+ *
+ * Palettes are lifted from the corresponding *Shell.astro so the two agree.
+ */
+:root,
+:root[data-client="claude"] {
+  --chat-canvas: #f5f1e8;
+  --chat-chrome: #faf8f2;
+  --chat-border: #e5e0d6;
+  --chat-text: #2d2a26;
+  --chat-muted: #9a9286;
+  --chat-accent: #c96442;
+  --chat-accent-fg: #ffffff;
+  --chat-bubble: #e7e1d4;
+  --chat-say-font: Georgia, "Times New Roman", serif;
+  --chat-logo: url("/logos/claude.svg");
+  --chat-name: "Claude";
+  --chat-placeholder: "Reply to Claude…";
+}
+
+:root[data-client="chatgpt"] {
+  --chat-canvas: #212121;
+  --chat-chrome: #303030;
+  --chat-border: #3a3a3a;
+  --chat-text: #ececec;
+  --chat-muted: #a8a8a8;
+  --chat-accent: #10a37f;
+  --chat-accent-fg: #ffffff;
+  --chat-bubble: #303030;
+  --chat-say-font: var(--font-sans);
+  --chat-logo: url("/logos/chatgpt.svg");
+  --chat-name: "ChatGPT";
+  --chat-placeholder: "Ask anything";
+}
+
+:root[data-client="goose"] {
+  --chat-canvas: #22252a;
+  --chat-chrome: #3f434b;
+  --chat-border: #474e57;
+  --chat-text: #e3e6ea;
+  --chat-muted: #878787;
+  --chat-accent: #13bbaf;
+  --chat-accent-fg: #10221f;
+  --chat-bubble: #3f434b;
+  --chat-say-font: var(--font-sans);
+  --chat-logo: url("/logos/goose.svg");
+  --chat-name: "Goose";
+  --chat-placeholder: "Ask goose anything…";
+}
+
+:root[data-client="vscode"] {
+  --chat-canvas: #1f1f1f;
+  --chat-chrome: #181818;
+  --chat-border: #3c3c3c;
+  --chat-text: #cccccc;
+  --chat-muted: #858585;
+  --chat-accent: #0078d4;
+  --chat-accent-fg: #ffffff;
+  --chat-bubble: #2b2b2b;
+  --chat-say-font: var(--font-sans);
+  --chat-logo: url("/logos/vscode.svg");
+  --chat-name: "VS Code";
+  --chat-placeholder: "Ask Copilot";
+}
+
 html {
   scroll-behavior: smooth;
   background-color: var(--color-bg);

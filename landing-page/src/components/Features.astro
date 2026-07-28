@@ -19,8 +19,12 @@ import FeatureVisual from "./FeatureVisual.astro";
       <!-- LEFT: sticky visual panel (desktop only) -->
       <div class="hidden lg:block">
         <div class="sticky top-28">
+          <!-- Fixed height rather than aspect-square: the cross-fading visuals
+               are absolutely positioned so the box has to be sized, and what it
+               has to fit is the tallest chat frame (~490px), which doesn't
+               follow the column's width. -->
           <div
-            class="relative aspect-square w-full border-2 border-accent bg-surface-1"
+            class="relative h-[560px] w-full border-2 border-accent bg-surface-1"
           >
             <!-- Edison corner tag: live step index, updated on scroll -->
             <span

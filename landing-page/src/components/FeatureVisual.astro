@@ -5,15 +5,15 @@
  * mobile (Features.astro).
  *
  * These are the REAL MCP App mocks - the same components the hero chat mock
- * embeds (InboxApp / ComposerApp) plus SignerApp for the signing ceremony -
- * rather than bespoke diagrams. Each runs its own attract loop on the shared
- * 15s timeline, so a visitor sees the actual product surface working, and
- * there's one reproduction of each app to keep true rather than two.
+ * embeds (InboxApp / ComposerApp) plus SignerApp - inside a ChatFrame wearing
+ * whichever client the page is currently set to. Pick ChatGPT in the hero and
+ * these frames are ChatGPT too: same page-level state, same tokens.
  *
- * The cards ship the apps' own neutral light chrome, not the site's Hackbox
- * brand: that IS the product, since a sandboxed MCP App renders identically in
- * every host. The Edison frame around them is the panel in Features.astro.
+ * The app cards themselves deliberately do NOT re-skin with the host. A
+ * sandboxed MCP App ships its own UI and renders identically in every client -
+ * that's the point of the frame around them changing while they don't.
  */
+import ChatFrame from "./chat/ChatFrame.astro";
 import InboxApp from "./chat/InboxApp.astro";
 import ComposerApp from "./chat/ComposerApp.astro";
 import SignerApp from "./chat/SignerApp.astro";
@@ -24,15 +24,33 @@ interface Props {
 const { name } = Astro.props;
 ---
 
-<div class="feature-visual flex h-full items-center justify-center p-3 sm:p-6">
-  {/* Drafts you edit, not approve - the composer served into the chat */}
-  {name === "composer" && <ComposerApp standalone />}
+<div class="feature-visual flex h-full items-center justify-center p-3 sm:p-5">
+  {
+    /* Drafts you edit, not approve - the composer served into the chat */
+    name === "composer" && (
+      <ChatFrame say="Drafted a reply to Dana - it's open for you to edit.">
+        <ComposerApp standalone />
+      </ChatFrame>
+    )
+  }
 
-  {/* Triage that remembers - the curated inbox, list -> reader -> AI reply */}
-  {name === "ledger" && <InboxApp />}
+  {
+    /* Triage that remembers - the curated inbox, list -> reader -> AI reply */
+    name === "ledger" && (
+      <ChatFrame say="I triaged your inbox. Here's what needs you.">
+        <InboxApp />
+      </ChatFrame>
+    )
+  }
 
-  {/* Fill and sign, in the thread - the signing ceremony */}
-  {name === "signing" && <SignerApp />}
+  {
+    /* Fill and sign, in the thread - the signing ceremony */
+    name === "signing" && (
+      <ChatFrame say="Filled the form. It needs your signature to go back.">
+        <SignerApp />
+      </ChatFrame>
+    )
+  }
 </div>
 
 <style>

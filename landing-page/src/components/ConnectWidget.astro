@@ -175,6 +175,27 @@ const selected = enriched.find((t) => t.id === defaultId) ?? enriched[0];
 </div>
 
 <script>
+  import { onClient, setClient } from "../lib/client-state";
+
+  /*
+   * Which chat surface to show for a given install target. Only four clients
+   * have a shell, so the rest are aliased to the closest one that does - the
+   * VS Code forks to VS Code, Claude Code to Claude. Targets with no honest
+   * match (Zed, "any MCP client") are absent on purpose: picking one leaves
+   * the page's chat surfaces as they were rather than showing a client the
+   * visitor didn't choose.
+   */
+  const CLIENT_FOR_TARGET: Record<string, string> = {
+    claude: "claude",
+    "claude-code": "claude",
+    chatgpt: "chatgpt",
+    goose: "goose",
+    vscode: "vscode",
+    cursor: "vscode",
+    cline: "vscode",
+    windsurf: "vscode",
+  };
+
   // Clipboard handler for every `.copy-btn` in this widget (the MCP URL and
   // the per-client setup prompt). This used to live in CodeBlock.astro and was
   // inherited only because GetStarted rendered a CodeBlock on the same page;
@@ -240,26 +261,54 @@ const selected = enriched.find((t) => t.id === defaultId) ?? enriched[0];
         menu.classList.contains("hidden") ? open() : close();
       });
 
-      root.querySelectorAll<HTMLButtonElement>("[data-option]").forEach((opt) => {
+      const options = Array.from(
+        root.querySelectorAll<HTMLButtonElement>("[data-option]"),
+      );
+
+      let selectedId = options.find(
+        (o) => o.closest("[role=option]")?.getAttribute("aria-selected") === "true",
+      )?.dataset.option;
+
+      const select = (opt: HTMLButtonElement) => {
+        const id = opt.dataset.option!;
+        selectedId = id;
+        // Update the trigger label + logo.
+        selName.textContent = opt.dataset.name ?? "";
+        const mask = `url('${opt.dataset.logo}') center/contain no-repeat`;
+        selLogo.style.setProperty("-webkit-mask", mask);
+        selLogo.style.setProperty("mask", mask);
+        // Swap visible panel + selected state.
+        root.querySelectorAll<HTMLElement>("[data-panel]").forEach((p) => {
+          p.hidden = p.dataset.panel !== id;
+        });
+        menu.querySelectorAll<HTMLElement>("[role=option]").forEach((li) => {
+          li.setAttribute(
+            "aria-selected",
+            li.querySelector("[data-option]") === opt ? "true" : "false",
+          );
+        });
+      };
+
+      options.forEach((opt) => {
         opt.addEventListener("click", () => {
-          const id = opt.dataset.option!;
-          // Update the trigger label + logo.
-          selName.textContent = opt.dataset.name ?? "";
-          const mask = `url('${opt.dataset.logo}') center/contain no-repeat`;
-          selLogo.style.setProperty("-webkit-mask", mask);
-          selLogo.style.setProperty("mask", mask);
-          // Swap visible panel + selected state.
-          root.querySelectorAll<HTMLElement>("[data-panel]").forEach((p) => {
-            p.hidden = p.dataset.panel !== id;
-          });
-          menu.querySelectorAll<HTMLElement>("[role=option]").forEach((li) => {
-            li.setAttribute(
-              "aria-selected",
-              li.querySelector("[data-option]") === opt ? "true" : "false",
-            );
-          });
+          select(opt);
+          // Push the choice to the rest of the page (hero shells, features
+          // frames) when this target has a chat surface to show.
+          const client = CLIENT_FOR_TARGET[opt.dataset.option!];
+          if (client) setClient(client);
           close();
         });
+      });
+
+      // ...and pull, so picking a client in the hero preselects it here.
+      onClient((id) => {
+        // Unless what's selected already means this client: picking Cursor
+        // sets the page to the VS Code surface, and reacting to that by
+        // selecting "VS Code" would throw away the more specific choice the
+        // visitor just made - along with Cursor's install instructions.
+        if (selectedId && CLIENT_FOR_TARGET[selectedId] === id) return;
+        const opt = options.find((o) => o.dataset.option === id);
+        if (opt) select(opt);
       });
 
       // Close on outside click / Escape.
