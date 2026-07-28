@@ -338,9 +338,7 @@ export function buildPricingMd(origin: string): string {
       // Glue slash cadences ("$20/mo") but space-separate word cadences ("$0 forever").
       const cadence = t.cadence ?? "";
       const price = cadence && !cadence.startsWith("/") ? `${t.price} ${cadence}` : `${t.price}${cadence}`;
-      const featureLines = t.features
-        .map((f) => `- ${typeof f === "string" ? f : f.text}`)
-        .join("\n");
+      const featureLines = t.features.map((f) => `- ${f}`).join("\n");
       return (
         `## ${t.name}\n\n` +
         `- Price: ${price}\n` +

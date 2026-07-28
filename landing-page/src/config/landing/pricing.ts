@@ -13,19 +13,19 @@
  */
 import { site } from "./site";
 
-/**
- * A bullet in a tier card. Plain strings get the default check mark; the object
- * form swaps in a named icon (and optionally links out), which is how the free
- * tier's self-host line carries the GitHub mark.
- */
-export type PricingFeature = string | { text: string; icon: "github"; href?: string };
-
 export interface PricingTier {
   name: string;
   price: string;
   cadence?: string;
   description: string;
-  features: PricingFeature[];
+  features: string[];
+  /**
+   * Icon shown beside the tier name. Only the free tier uses it, to mark at a
+   * glance that this is the open-source, self-hostable tier.
+   */
+  icon?: "github";
+  /** Where the icon links, when it has somewhere to go. */
+  iconHref?: string;
   cta: string;
   href: string;
   /**
@@ -68,11 +68,13 @@ export const pricing: {
         "1 connected mailbox",
         "30 days of curation memory",
         "3 PDF signatures per month",
-        { text: "MIT-licensed - self-host every feature", icon: "github", href: site.githubUrl },
+        "MIT-licensed - self-host every feature",
         "Community support",
       ],
       cta: "Start free",
       href: "/#how-it-works",
+      icon: "github",
+      iconHref: site.githubUrl,
     },
     {
       name: "Pro",
