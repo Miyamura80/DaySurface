@@ -50,7 +50,7 @@ one of them, free otherwise.
 
 The one-line version, and the one to put on the pricing page:
 
-> **Interactive is free. Autonomous is paid. Organisational is Business.**
+> **Interactive is free. Autonomous is paid. Your whole team is one price.**
 
 This is defensible in public, it maps exactly onto our cost curve, and it
 answers "why is X paid?" without special pleading in every case.
@@ -72,7 +72,7 @@ quietly walk it back.
 | --- | --- | --- |
 | >30-day data access | **Yes, reframed** | Ratchet |
 | Support | Yes, but not tier-defining | Line item |
-| SSO / SAML | Yes, Business only | Hard gate |
+| SSO / SAML | Yes, Team tier, self-serve | Hard gate |
 | PDF signing | Yes, but **meter it, do not gate it** | Meter |
 | Follow-up Manager | **Yes. Strongest candidate.** | Hard gate on a new feature |
 
@@ -130,14 +130,14 @@ sequencing mistake in this whole plan that cannot be undone.
 
 ### 3.4 SSO/SAML
 
-Business tier, no negotiation, and WorkOS is already wired
+Paid tier, no negotiation, and WorkOS is already wired
 (`api_server/auth/workos_auth.py`, `authkit_auth.py`), so the lift is small.
 
 One caution: do not make SSO a "call sales" tarpit. The SSO-tax backlash is
 real and it is worse for an OSS project, where the audience is exactly the
-crowd that writes the blog posts. Put SSO in a **self-serve, priced Business
-tier**. Enterprise custom pricing is for SLA, DPA, and dedicated infra, not for
-turning on a login method.
+crowd that writes the blog posts. Put SSO in the **self-serve, flat-priced
+Team tier** at $29/mo. Enterprise custom pricing is for SLA, DPA, and dedicated
+infra, not for turning on a login method.
 
 ### 3.5 Missing from the list, and worth more than some of what is on it
 
@@ -148,9 +148,10 @@ turning on a login method.
 - **Multiple connected accounts.** Free is one mailbox. Painless, standard, and
   it maps neatly to "you now have a work inbox and a personal inbox".
 - **Shared team curation.** Team-wide rules and importance priors, shared
-  mailbox triage. Business.
-- **Audit log and retention policy controls.** Business/Enterprise.
-- **Seats.** The actual unit of business revenue. Per-seat on Business.
+  mailbox triage. Team.
+- **Audit log and retention policy controls.** Team/Enterprise.
+- **Team size.** Bundled five-at-a-time rather than sold per seat, so the
+  price never becomes an argument about headcount.
 
 ## 4. The paywall user journey
 
@@ -173,7 +174,7 @@ sale.
             User has succeeded N times. Pitch is continuation, not risk.
 
   GATE      hard stop, feature unavailable      <- only for org-shaped things
-            "SSO requires Business"
+            "SSO requires Team"
             Fine here: whoever hits this is a buyer, not a user. It is a
             sales conversation, not a paywall.
 ```
@@ -190,14 +191,14 @@ Never put a hard gate on the autonomy axis for a first-time user. Gate the
            first webhook subscription                     FREE (1 of 1)
   ~day 7   agent mentions Follow-up Manager exists        soft, in-chat
   day 31   oldest curation ages out                       RATCHET fires
-           "Pro keeps this. Try free for 14 days?"        one click, in chat
+           "Team keeps this. Try free for 14 days?"       one click, in chat
 ```
 
 The free tier *is* the trial. The `trial_period_days: 7` currently in
 `common/subscription_config.yaml` is the wrong shape for a 30-day ratchet:
 it expires three weeks before the user ever feels the wall.
 
-Recommendation: no card-up-front trial at signup. Instead offer a **14-day Pro
+Recommendation: no card-up-front trial at signup. Instead offer a **14-day Team
 trial triggered at the moment of the wall**. Intent is proven at that instant,
 so it converts far better than a signup-time trial that most people forget they
 started.
@@ -219,7 +220,7 @@ started.
    channel. No other product category gets this for free, and it is far less
    annoying than a banner.
 4. **Keep gated tools in `tools/list`, prefixed in the description.** Hiding
-   them means nobody ever learns Follow-up Manager exists. Prefix with `[Pro]`
+   them means nobody ever learns Follow-up Manager exists. Prefix with `[Team]`
    so the agent can offer the feature without burning a failing call on it.
 5. **Never break a mutating flow mid-flight.** Entitlement is checked at the
    entry of a multi-step flow, never at the exit. `pdf_open` checks; `pdf_edit`
@@ -231,45 +232,60 @@ started.
    window. Locking someone out of their inbox tooling over an expired card is
    how an OSS project earns a front-page thread it does not want.
 7. **Self-hosters see none of this.** With `enforce: false` there is no wall,
-   no `[Pro]` prefix, no upgrade elicitation.
+   no `[Team]` prefix, no upgrade elicitation.
 
 ### 4.4 Failure mode to design against
 
 A user asks the agent "chase everyone who has not replied". The agent calls a
-Pro-gated follow-up tool, gets a hard 402 with no URL, decides the tool is
+Team-gated follow-up tool, gets a hard 402 with no URL, decides the tool is
 broken, falls back to reading 40 threads by hand, burns the user's context and
 their patience, and never mentions that a paid feature would have done it in
 one call. Everything in 4.3 exists to prevent that specific transcript.
 
 ## 5. Proposed tiers
 
-| | Free | Pro | Business | Enterprise |
-| --- | --- | --- | --- | --- |
-| Price | $0 | ~$20/mo | ~$25-40/seat/mo, 5 seat min | Custom |
-| Gmail-parity core | Full | Full | Full | Full |
-| Connected accounts | 1 | 5 | Unlimited | Unlimited |
-| Curation / history retention | 30 days | Unlimited | Unlimited + policy control | Custom |
-| PDF signing | 3/mo | Unlimited | Unlimited | Unlimited |
-| Webhooks / background watch | 1 subscription, best effort | Full | Full | Full |
-| Follow-up Manager | No | Yes | Yes, shared | Yes |
-| Shared team rules / mailboxes | No | No | Yes | Yes |
-| SSO / SAML / SCIM | No | No | Yes | Yes |
-| Audit log, admin console | No | No | Yes | Yes |
-| Support | Community | Email | Priority | Dedicated + SLA |
-| DPA / security review / VPC | No | No | DPA | Yes |
-| Self-host | Everything, always | | | |
+Three tiers, not four. An individual "Pro" between Free and Team existed only
+to charge people who work alone for autonomy, and a per-seat Business tier on
+top of it made SSO cost roughly 5x the product. Both collapse into a single
+flat-priced Team tier.
+
+| | Free | Team | Enterprise |
+| --- | --- | --- | --- |
+| Price | $0 | $29/mo, 5 members included, $6/mo each after | Custom |
+| Gmail-parity core | Full | Full | Full |
+| Connected mailboxes | 1 | Unlimited | Unlimited |
+| Curation / history retention | 30 days | Unlimited + policy control | Custom |
+| PDF signing | 3/mo | Unlimited | Unlimited |
+| Webhooks / background watch | 1 subscription, best effort | Full | Full |
+| Follow-up Manager | No | Yes, shared | Yes |
+| Shared team rules / mailboxes | No | Yes | Yes |
+| SSO / SAML / SCIM | No | Yes, self-serve | Yes |
+| Audit log, admin console | No | Yes | Yes |
+| Support | Community | Priority | Dedicated |
+| DPA / security review / VPC | No | DPA | Yes |
+| Uptime SLA | No | No | Yes |
+| Self-host | Everything, always | | |
 
 Notes:
 
-- Keep Pro at $20. The landing page already says $20 and there is no reason to
-  churn the marketing (`landing-page/src/config/landing/content.ts`).
-- The current landing page tiers (Open Source / Hosted Pro / Team) are close to
-  right but describe Hosted Pro purely as "we run it for you". That is a weak
-  pitch, and it is the one thing a competent engineer will do themselves.
-  Reposition Pro around autonomy: it keeps working while you are not in the
-  chat.
-- Business needs a self-serve checkout, not a contact form. "Contact sales" for
-  SSO is the failure mode in 3.4.
+- **$29 flat for five people is deliberately generous**, and it is the whole
+  positioning. A five-person team paying per seat at $30 would owe $150/mo for
+  the same thing. Undercutting that by 5x is a far stronger story than shaving
+  a feature off the free tier, and it removes the seat-counting conversation
+  from the sale entirely.
+- The cost of that generosity: a solo user goes from $20 to $29. Accepted. An
+  individual tier at $20 would exist only to extract money from the people
+  least able to justify it, and it would put SSO another tier away. The free
+  tier is a genuinely good place for a solo user to stay.
+- **SSO ships in the $29 tier.** This is the single most defensible thing on
+  the page for an open-source project. See 3.4.
+- Extra members are $6/mo rather than another tier. The ladder stays three
+  rungs no matter how big the team gets, until Enterprise terms are the reason
+  to talk.
+- The old landing page tiers (Open Source / Hosted Pro / Team) described the
+  paid tier purely as "we run it for you". That is a weak pitch and the one
+  thing a competent engineer will do themselves. Team is positioned on
+  autonomy plus single sign-on instead.
 
 ## 6. Implementation design
 
@@ -331,7 +347,7 @@ Then a gated service is a one-line change and every transport inherits it:
     description="...",
     input_model=FollowupListInput,
     output_model=FollowupListResult,
-    tier="pro_tier",
+    tier="team_tier",
 )
 ```
 
@@ -355,17 +371,18 @@ tier_limits:
     meters:
       pdf_signatures: 3
       webhook_subscriptions: 1
-  pro_tier:
+  team_tier:
     daily_requests: 100000
     retention_days: 0        # 0 = unlimited
-    connected_accounts: 5
+    connected_accounts: 0    # 0 = unlimited
+    included_members: 5      # extra members billed per-seat on top
     meters: {}
-  business_tier: ...
+  enterprise_tier: ...
 ```
 
-`SubscriptionTier` in `db/models/subscription_types.py` grows `PRO`,
-`BUSINESS`, `ENTERPRISE`. Keep `PLUS = "plus_tier"` as a deprecated alias so
-existing rows keep resolving; map it to `pro_tier` limits.
+`SubscriptionTier` in `db/models/subscription_types.py` grows `TEAM` and
+`ENTERPRISE`. Keep `PLUS = "plus_tier"` as a deprecated alias so
+existing rows keep resolving; map it to `team_tier` limits.
 
 ### 6.4 UpgradeRequiredError, modelled on ConnectRequiredError
 
@@ -406,9 +423,10 @@ grace window (30 days is fine, and it matches the free retention number).
    free first.
 3. **Retention ratchet plus the nightly job**, with in-chat warning at day 23.
 4. **PDF signing meter** at 3/month, plus `_meta` allowance reporting.
-5. **Webhooks and background watch** moved to Pro, with the first subscription
+5. **Webhooks and background watch** moved to Team, with the first subscription
    free.
-6. **Business tier**: seats, SSO, shared rules, audit log, self-serve checkout.
+6. **Team features**: member management, SSO, shared rules, audit log,
+   self-serve checkout.
 7. Reposition the landing page around autonomy rather than "we host it".
 
 Steps 1 to 4 are the ones that decide whether this monetises. Steps 5 to 7 are

@@ -13,6 +13,7 @@ import PricingTable from "../components/PricingTable.astro";
 import {
   site,
   pricing,
+  repoName,
   pricingAxes,
   pricingFaq,
   pricingJourney,
@@ -99,34 +100,27 @@ const jsonLd = [
     <!-- Tier cards -->
     <section class="border-b border-border/60 py-20">
       <div class="mx-auto max-w-6xl px-6">
-        <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <div class="grid gap-6 md:grid-cols-3">
           {
             pricing.tiers.map((tier) => (
               <div class="flex flex-col border border-border bg-surface-1 p-7">
-                <div class="flex items-center gap-2">
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
                   <h2 class="text-lg font-semibold">{tier.name}</h2>
-                  {tier.icon === "github" &&
-                    (tier.iconHref ? (
-                      <a
-                        href={tier.iconHref}
-                        title="Open source - self-host this tier"
-                        class="group inline-flex"
-                      >
-                        <span
-                          class="size-[18px] shrink-0 bg-accent transition group-hover:bg-accent-strong"
-                          style="-webkit-mask:url('/logos/github.svg') center/contain no-repeat;mask:url('/logos/github.svg') center/contain no-repeat;"
-                          aria-label="Open source on GitHub"
-                          role="img"
-                        />
-                      </a>
-                    ) : (
+                  {tier.repoBadge && (
+                    <a
+                      href={site.githubUrl}
+                      title={`Open source - ${repoName} on GitHub`}
+                      class="inline-flex items-center gap-1.5 text-xs font-medium text-fg-muted transition hover:text-accent"
+                    >
+                      {/* Masked so the mark follows the link colour on hover. */}
                       <span
-                        class="size-[18px] shrink-0 bg-accent"
+                        class="size-4 shrink-0 bg-current"
                         style="-webkit-mask:url('/logos/github.svg') center/contain no-repeat;mask:url('/logos/github.svg') center/contain no-repeat;"
-                        aria-label="Open source"
-                        role="img"
+                        aria-hidden="true"
                       />
-                    ))}
+                      {repoName}
+                    </a>
+                  )}
                 </div>
                 <div class="mt-4 flex items-baseline gap-1">
                   <span class="text-4xl font-bold">{tier.price}</span>
