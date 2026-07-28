@@ -60,7 +60,7 @@ import { site, nav } from "../config/landing";
            without this panel they'd be unreachable on a phone. -->
       <button
         type="button"
-        class="grid size-10 shrink-0 place-items-center border border-border text-fg-muted transition hover:border-accent hover:text-fg sm:size-11 md:hidden"
+        class="grid size-11 shrink-0 place-items-center border border-border text-fg-muted transition hover:border-accent hover:text-fg md:hidden"
         aria-expanded="false"
         aria-controls="mobile-nav"
         aria-label="Open menu"
@@ -156,12 +156,22 @@ import { site, nav } from "../config/landing";
       toggle.addEventListener("click", () =>
         setOpen(toggle.getAttribute("aria-expanded") !== "true"),
       );
-      // Links are in-page anchors; close the sheet behind the jump.
-      panel
-        .querySelectorAll("a")
+      // Every link in the header, not just the ones inside the sheet: the brand
+      // ("#top") and the CTA ("/#how-it-works") are same-document jumps on the
+      // home page, so nothing reloads and a sheet left open would sit on top of
+      // the destination with aria-expanded still true.
+      header
+        ?.querySelectorAll("a")
         .forEach((a) => a.addEventListener("click", () => setOpen(false)));
       document.addEventListener("keydown", (e) => {
-        if (e.key === "Escape") setOpen(false);
+        if (e.key !== "Escape") return;
+        if (toggle.getAttribute("aria-expanded") !== "true") return;
+        // Escape hides the panel, so focus sitting on a link inside it would be
+        // stranded on a hidden subtree - hand it back to the trigger. Only when
+        // focus was actually in there, so an unrelated Escape doesn't grab it.
+        const refocus = panel.contains(document.activeElement);
+        setOpen(false);
+        if (refocus) toggle.focus();
       });
       // Never leave the panel open past the md breakpoint - the desktop links
       // take over there and the toggle itself disappears.

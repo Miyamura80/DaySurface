@@ -23,7 +23,7 @@ const { code, lang = "bash", inline = false } = Astro.props;
     <span class="ml-2 font-mono text-xs uppercase tracking-widest text-fg-subtle">{lang}</span>
     <button
       type="button"
-      class="copy-btn ml-auto grid size-9 shrink-0 place-items-center text-fg-muted transition hover:bg-surface-2 hover:text-accent"
+      class="copy-btn -my-2 ml-auto grid size-11 shrink-0 place-items-center text-fg-muted transition hover:bg-surface-2 hover:text-accent sm:-my-2.5"
       data-code={code}
       aria-label="Copy"
     >
