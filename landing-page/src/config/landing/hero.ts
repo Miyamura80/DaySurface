@@ -46,18 +46,28 @@ export const heroChat: { defaultId: ChatClient["id"]; clients: ChatClient[] } = 
 };
 
 export const features: { heading: string; subhead: string; items: Feature[] } = {
-  heading: "One codebase, every surface",
-  subhead: "Write a tool once. Ship it to agents, scripts, and services without rewrites.",
+  // Pays off the hero headline verb by verb: draft, triage, sign. Keep it to
+  // end-user outcomes - the transports story lives in the comparison pillars
+  // and on /api, and the visuals here must not restage the hero chat mock
+  // (which already renders the composer and the ranked inbox).
+  heading: "Every action lands somewhere you can edit.",
+  subhead:
+    "Replies open in a real composer, triage banks what your agent already read, and PDFs get filled for you to sign. Nothing leaves your account until you send it.",
   items: [
     {
-      visual: "transports",
-      title: "Three transports, zero duplication",
-      body: "Every tool is a pure function in a shared registry, exposed identically over CLI, MCP, and HTTP. Behavior never drifts between interfaces.",
+      visual: "composer",
+      title: "Drafts you edit, not approve",
+      body: "Replies land in a real Gmail draft with a composer rendered inside the chat - recipients, subject, body and attachments, all editable in place. Your agent writes the first version; nothing sends until you press send.",
     },
     {
-      visual: "interactive",
-      title: "Headless or interactive",
-      body: "Return data for autonomous agents, or opt into enhanced tools that elicit input, attach media, and render sandboxed UI dashboards.",
+      visual: "ledger",
+      title: "Triage that remembers",
+      body: "Your agent reads a thread once and banks its verdict. Each judgment is stamped against the thread's Gmail history, so the next \"what needs me?\" only re-reads what actually changed - instead of re-running a search and starting from zero.",
+    },
+    {
+      visual: "signing",
+      title: "Fill and sign, in the thread",
+      body: "Your agent opens a PDF attachment, fills its form fields, and hands it back for signature. The bytes stay server-side and never enter the conversation - and signing is a step only you can complete, by typing your own name.",
     },
   ],
 };
