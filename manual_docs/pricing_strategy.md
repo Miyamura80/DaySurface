@@ -50,7 +50,7 @@ one of them, free otherwise.
 
 The one-line version, and the one to put on the pricing page:
 
-> **Interactive is free. Autonomous is paid. Your whole team is one price.**
+> **Interactive is free. Autonomous is paid. Scale when you need to.**
 
 This is defensible in public, it maps exactly onto our cost curve, and it
 answers "why is X paid?" without special pleading in every case.
@@ -72,7 +72,7 @@ quietly walk it back.
 | --- | --- | --- |
 | >30-day data access | **Yes, reframed** | Ratchet |
 | Support | Yes, but not tier-defining | Line item |
-| SSO / SAML | Yes, Team tier, self-serve | Hard gate |
+| SSO / SAML | Yes, $300/mo add-on, self-serve | Hard gate |
 | PDF signing | Yes, but **meter it, do not gate it** | Meter |
 | Follow-up Manager | **Yes. Strongest candidate.** | Hard gate on a new feature |
 
@@ -130,14 +130,16 @@ sequencing mistake in this whole plan that cannot be undone.
 
 ### 3.4 SSO/SAML
 
-Paid tier, no negotiation, and WorkOS is already wired
+Paid, no negotiation, and WorkOS is already wired
 (`api_server/auth/workos_auth.py`, `authkit_auth.py`), so the lift is small.
 
 One caution: do not make SSO a "call sales" tarpit. The SSO-tax backlash is
 real and it is worse for an OSS project, where the audience is exactly the
-crowd that writes the blog posts. Put SSO in the **self-serve, flat-priced
-Team tier** at $29/mo. Enterprise custom pricing is for SLA, DPA, and dedicated
-infra, not for turning on a login method.
+crowd that writes the blog posts. The fix is a **published price you can pay
+without a sales call**, not necessarily a cheap one: enterprise SSO lands in
+the $300/mo Governance add-on (5.1), while ordinary Google sign-in stays free
+on every tier. Enterprise custom pricing is for SLA, DPA, and dedicated infra,
+not for turning on a login method.
 
 ### 3.5 Missing from the list, and worth more than some of what is on it
 
@@ -149,9 +151,12 @@ infra, not for turning on a login method.
   it maps neatly to "you now have a work inbox and a personal inbox".
 - **Shared team curation.** Team-wide rules and importance priors, shared
   mailbox triage. Team.
-- **Audit log and retention policy controls.** Team/Enterprise.
-- **Team size.** Bundled five-at-a-time rather than sold per seat, so the
-  price never becomes an argument about headcount.
+- **Audit log and retention policy controls.** Team and above.
+- **Team size.** Bundled rather than sold per seat, so the price never
+  becomes an argument about headcount.
+- **Throughput.** Tool calls, concurrent sessions, and webhook deliveries are
+  the one thing that scales linearly with our bill, which makes them the
+  honest basis for a tier above Team.
 
 ## 4. The paywall user journey
 
@@ -174,7 +179,7 @@ sale.
             User has succeeded N times. Pitch is continuation, not risk.
 
   GATE      hard stop, feature unavailable      <- only for org-shaped things
-            "SSO requires Team"
+            "SSO requires the Governance add-on"
             Fine here: whoever hits this is a buyer, not a user. It is a
             sales conversation, not a paywall.
 ```
@@ -244,48 +249,77 @@ one call. Everything in 4.3 exists to prevent that specific transcript.
 
 ## 5. Proposed tiers
 
-Three tiers, not four. An individual "Pro" between Free and Team existed only
-to charge people who work alone for autonomy, and a per-seat Business tier on
-top of it made SSO cost roughly 5x the product. Both collapse into a single
-flat-priced Team tier.
+Four rungs plus an add-on: Free, Team, Scaling, Enterprise, with governance
+sold separately. Two structural decisions carry the whole shape.
 
-| | Free | Team | Enterprise |
-| --- | --- | --- | --- |
-| Price | $0 | $29/mo, 5 members included, $6/mo each after | Custom |
-| Gmail-parity core | Full | Full | Full |
-| Connected mailboxes | 1 | Unlimited | Unlimited |
-| Curation / history retention | 30 days | Unlimited + policy control | Custom |
-| PDF signing | 3/mo | Unlimited | Unlimited |
-| Webhooks / background watch | 1 subscription, best effort | Full | Full |
-| Follow-up Manager | No | Yes, shared | Yes |
-| Shared team rules / mailboxes | No | Yes | Yes |
-| SSO / SAML / SCIM | No | Yes, self-serve | Yes |
-| Audit log, admin console | No | Yes | Yes |
-| Support | Community | Priority | Dedicated |
-| DPA / security review / VPC | No | DPA | Yes |
-| Uptime SLA | No | No | Yes |
-| Self-host | Everything, always | | |
+**Scale is a tier; governance is an add-on.** These vary independently. A
+six-person team that needs Okta should not have to buy throughput for
+twenty-five people to get it, and a high-volume team of six should not need an
+enterprise contract to raise a rate limit. Bundling them into one ladder forces
+half your buyers to pay for something they will not use.
 
-Notes:
+**An individual tier stays deleted.** A "Pro" between Free and Team existed
+only to charge people who work alone for autonomy. Team is the first paid rung
+whoever you are.
 
-- **$29 flat for five people is deliberately generous**, and it is the whole
-  positioning. A five-person team paying per seat at $30 would owe $150/mo for
-  the same thing. Undercutting that by 5x is a far stronger story than shaving
-  a feature off the free tier, and it removes the seat-counting conversation
-  from the sale entirely.
-- The cost of that generosity: a solo user goes from $20 to $29. Accepted. An
-  individual tier at $20 would exist only to extract money from the people
-  least able to justify it, and it would put SSO another tier away. The free
-  tier is a genuinely good place for a solo user to stay.
-- **SSO ships in the $29 tier.** This is the single most defensible thing on
-  the page for an open-source project. See 3.4.
-- Extra members are $6/mo rather than another tier. The ladder stays three
-  rungs no matter how big the team gets, until Enterprise terms are the reason
-  to talk.
-- The old landing page tiers (Open Source / Hosted Pro / Team) described the
-  paid tier purely as "we run it for you". That is a weak pitch and the one
-  thing a competent engineer will do themselves. Team is positioned on
-  autonomy plus single sign-on instead.
+| | Free | Team | Scaling | Enterprise |
+| --- | --- | --- | --- | --- |
+| Price | $0 | $29/mo | $99/mo | Custom |
+| Members | 1 | 5 incl, $6/mo after | 25 incl, $5/mo after | Unlimited |
+| Tool calls / day | 500 | 5,000 | 50,000 | Custom |
+| Concurrent sessions | 1 | 5 | 25 | Custom |
+| Webhook deliveries | 100/day | 10k/day | 100k/day | Custom |
+| Background queue | None | Standard | Priority | Dedicated |
+| Gmail-parity core | Full | Full | Full | Full |
+| Connected mailboxes | 1 | Unlimited | Unlimited | Unlimited |
+| Curation retention | 30 days | Unlimited | Unlimited | Custom |
+| PDF signing | 3/mo | Unlimited | Unlimited | Unlimited |
+| Follow-up Manager | No | Yes | Yes | Yes |
+| Shared rules, audit log | No | Yes | Yes | Yes |
+| Enterprise SSO, RBAC | No | Add-on | Add-on | Included |
+| Support | Community | Priority | Priority + target | Dedicated |
+| Uptime SLA | No | No | No | Yes |
+| Self-host | Everything, always, no limits | | | |
+
+### 5.1 The Governance add-on, $300/mo
+
+Attaches to Team or Scaling, self-serve, included in Enterprise:
+
+- Enterprise SSO (Okta, Entra ID, any SAML IdP)
+- SSO enforcement (block non-SSO sign-in org-wide)
+- Fine-grained RBAC across mailboxes and rules
+- Support via a dedicated Slack or MS Teams channel
+
+Note this **moves SSO out of the $29 tier**, where an earlier draft of this doc
+put it. The reasoning in 3.4 still holds, but it was aimed at the wrong target.
+The thing that earns the backlash is *"contact sales to log in"* - an unpriced
+gate that turns a login method into a procurement cycle. A published $300 price
+that a team can put on a card without talking to anyone is not that. Ordinary
+Google sign-in stays free on every tier including Free, so nobody is locked out
+of authentication itself.
+
+$300 is also honest about who it is for. Okta integration, SCIM provisioning,
+enforcement policy, and a staffed Slack channel are real recurring cost, and
+the buyer is a security team with a budget line, not an individual.
+
+### 5.2 Notes on the numbers
+
+- **The rate limits are placeholders.** 500 / 5,000 / 50,000 tool calls a day
+  are round numbers picked to be legible, not calibrated against real usage.
+  Before launch, instrument actual per-user call volume and set Free just above
+  what an engaged daily user generates, so the free tier never feels like a
+  trap, and set Team where continuous agent operation starts to bite.
+- **$29 flat for five is deliberately generous** and it is the whole
+  positioning. Five seats at a typical $30/seat would be $150/mo for the same
+  thing. Undercutting that by 5x is a far stronger story than shaving features
+  off the free tier.
+- The cost of that: a solo user pays $29 rather than $20. Accepted, and
+  answered directly in the pricing FAQ rather than left for people to work out.
+- Extra members are $6/mo (Team) and $5/mo (Scaling) rather than another tier,
+  so the ladder stays four rungs regardless of team size.
+- Scaling sells headroom, not features. Keeping the feature set identical to
+  Team is what makes the tier honest: nobody upgrades for a capability, they
+  upgrade because they hit a ceiling they can see coming in the usage analytics.
 
 ## 6. Implementation design
 
@@ -365,23 +399,34 @@ entitlements:
   enforce: false
 tier_limits:
   free_tier:
-    daily_requests: 10000
+    daily_requests: 500
     retention_days: 30
     connected_accounts: 1
     meters:
       pdf_signatures: 3
       webhook_subscriptions: 1
   team_tier:
-    daily_requests: 100000
+    daily_requests: 5000
     retention_days: 0        # 0 = unlimited
     connected_accounts: 0    # 0 = unlimited
     included_members: 5      # extra members billed per-seat on top
     meters: {}
+  scaling_tier:
+    daily_requests: 50000
+    retention_days: 0
+    connected_accounts: 0
+    included_members: 25
+    meters: {}
   enterprise_tier: ...
+# Add-ons are entitlements too, granted independently of the tier.
+add_ons:
+  governance:
+    grants: [sso_saml, sso_enforcement, rbac, dedicated_channel]
 ```
 
-`SubscriptionTier` in `db/models/subscription_types.py` grows `TEAM` and
-`ENTERPRISE`. Keep `PLUS = "plus_tier"` as a deprecated alias so
+`SubscriptionTier` in `db/models/subscription_types.py` grows `TEAM`,
+`SCALING`, and `ENTERPRISE`. Add-on grants live in a separate table rather than
+on the tier enum, since they are orthogonal to it. Keep `PLUS = "plus_tier"` as a deprecated alias so
 existing rows keep resolving; map it to `team_tier` limits.
 
 ### 6.4 UpgradeRequiredError, modelled on ConnectRequiredError
@@ -425,9 +470,11 @@ grace window (30 days is fine, and it matches the free retention number).
 4. **PDF signing meter** at 3/month, plus `_meta` allowance reporting.
 5. **Webhooks and background watch** moved to Team, with the first subscription
    free.
-6. **Team features**: member management, SSO, shared rules, audit log,
-   self-serve checkout.
-7. Reposition the landing page around autonomy rather than "we host it".
+6. **Team features**: member management, shared rules, audit log, self-serve
+   checkout.
+7. **Scaling tier + the Governance add-on**, once real usage data exists to
+   calibrate the rate limits in 5.2.
+8. Reposition the landing page around autonomy rather than "we host it".
 
-Steps 1 to 4 are the ones that decide whether this monetises. Steps 5 to 7 are
-the ones that decide whether it monetises to businesses.
+Steps 1 to 4 decide whether this monetises at all. Steps 5 to 8 decide whether
+it monetises to businesses.

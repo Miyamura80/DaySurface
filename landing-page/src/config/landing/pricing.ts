@@ -1,6 +1,6 @@
 /**
- * Pricing: tiers, the three-axis rationale, the full comparison matrix, the
- * free-forever promise, and the pricing FAQ.
+ * Pricing: tiers, add-ons, the three-axis rationale, the full comparison
+ * matrix, the free-forever promise, and the pricing FAQ.
  *
  * Source of truth for BOTH the homepage `#pricing` teaser (Pricing.astro) and
  * the dedicated /pricing page, plus the machine-readable /pricing.md manifest
@@ -8,14 +8,15 @@
  *
  * The tiering rationale lives in manual_docs/pricing_strategy.md. The short
  * version, and the thing every row below has to justify itself against:
- * interactive is free, autonomous is paid, and a team is one price rather than
- * a per-seat ladder. If a feature does not sit on one of the three axes in
- * `pricingAxes`, it is free.
+ * interactive is free, autonomous is paid, and the tiers above Team sell
+ * throughput rather than features. If a capability does not sit on one of the
+ * three axes in `pricingAxes`, it is free.
  *
- * Three tiers, deliberately. An individual "Pro" sitting between Free and Team
- * only existed to make people who work alone pay for autonomy, and a per-seat
- * Business tier on top of it made SSO cost 5x more than the product. Both
- * collapsed into Team.
+ * Shape: Free -> Team -> Scaling -> Enterprise, with governance sold as an
+ * add-on that attaches to any paid tier. Splitting scale (a tier) from
+ * governance (an add-on) is deliberate: a 40-person team that needs Okta
+ * should not have to buy throughput it will not use, and a high-volume team of
+ * six should not have to buy an enterprise contract to get rate limits.
  */
 import { site } from "./site";
 
@@ -61,8 +62,8 @@ export const pricing: {
   enabled: true,
   heading: "Pricing",
   subhead:
-    "The full Gmail experience is free forever, and always will be. One paid tier covers your whole team, single sign-on included. Or self-host the whole thing, every feature, for nothing.",
-  principle: "Interactive is free. Autonomous is paid. Your whole team is one price.",
+    "The full Gmail experience is free forever, and always will be. Paid tiers buy autonomy and throughput, governance is an add-on you attach when you need it, and you can self-host the whole thing for nothing.",
+  principle: "Interactive is free. Autonomous is paid. Scale when you need to.",
   tiers: [
     {
       name: "Free",
@@ -75,6 +76,7 @@ export const pricing: {
         "Draft, reply, and send",
         "Interactive MCP Apps (composer + ranked inbox)",
         "1 connected mailbox",
+        "500 tool calls per day",
         "30 days of curation memory",
         "3 PDF signatures per month",
         "MIT-licensed - self-host every feature",
@@ -89,7 +91,7 @@ export const pricing: {
       price: "$29",
       cadence: "/mo",
       description:
-        "Everything DaySurface does, for you and up to four colleagues. It keeps working after you close the chat, and single sign-on is in the box.",
+        "Everything DaySurface does, for you and up to four colleagues. It keeps working after you close the chat.",
       features: [
         "Everything in Free, for all 5 members",
         "Follow-up Manager - nothing slips",
@@ -97,10 +99,9 @@ export const pricing: {
         "Scheduled rules",
         "Unlimited curation memory",
         "Unlimited PDF signing",
-        "SSO / SAML / SCIM - self-serve, no sales call",
         "Shared team rules + shared mailboxes",
         "Audit log + admin console",
-        "Unlimited connected mailboxes",
+        "5,000 tool calls per day",
         "Priority support",
       ],
       cta: "Start 14-day trial",
@@ -108,13 +109,35 @@ export const pricing: {
       note: "5 members included. $6/mo per extra member. No card up front.",
     },
     {
+      name: "Scaling",
+      price: "$99",
+      cadence: "/mo",
+      description:
+        "Same product, far more headroom. For teams running agents against their mail all day rather than a few times an hour.",
+      features: [
+        "Everything in Team",
+        "25 members included",
+        "50,000 tool calls per day",
+        "25 concurrent agent sessions",
+        "100k webhook deliveries per day",
+        "Priority background job queue",
+        "Higher curation throughput",
+        "Usage analytics + per-member breakdown",
+        "Priority support with a response target",
+      ],
+      cta: "Start 14-day trial",
+      href: "/#how-it-works",
+      note: "25 members included. $5/mo per extra member.",
+    },
+    {
       name: "Enterprise",
       price: "Custom",
       description:
         "Procurement, uptime commitments, and deployment on infrastructure you control.",
       features: [
-        "Everything in Team",
-        "Unlimited members",
+        "Everything in Scaling",
+        "Unlimited members and custom limits",
+        "Governance add-on included",
         "Uptime SLA + DPA",
         "Dedicated or VPC deployment",
         "Security review + procurement support",
@@ -123,6 +146,45 @@ export const pricing: {
       ],
       cta: "Contact sales",
       href: "/#how-it-works",
+    },
+  ],
+};
+
+/**
+ * Add-ons attach to any paid tier, so buying Okta support never means buying
+ * throughput you will not use. Kept separate from `pricing.tiers` because they
+ * are orthogonal to the ladder, not another rung on it.
+ */
+export interface AddOn {
+  name: string;
+  price: string;
+  cadence: string;
+  description: string;
+  features: string[];
+  /** Which tiers this can be attached to. */
+  availableOn: string;
+  cta: { label: string; href: string };
+}
+
+export const addOns: { heading: string; subhead: string; items: AddOn[] } = {
+  heading: "Add-ons",
+  subhead:
+    "Bought on top of any paid tier, self-serve. Nothing here requires moving to an enterprise contract first.",
+  items: [
+    {
+      name: "Governance",
+      price: "$300",
+      cadence: "/mo",
+      description:
+        "What a security team asks for before it will sign off. Priced as an add-on so a six-person team can buy Okta support without buying an enterprise contract to go with it.",
+      features: [
+        "Enterprise SSO (Okta, Entra ID, any SAML IdP)",
+        "SSO enforcement - block non-SSO sign-in org-wide",
+        "Fine-grained RBAC across mailboxes and rules",
+        "Support via a dedicated Slack or MS Teams channel",
+      ],
+      availableOn: "Team and Scaling. Included in Enterprise.",
+      cta: { label: "Add to your plan", href: "/#how-it-works" },
     },
   ],
 };
@@ -143,9 +205,9 @@ export const selfHost: {
 } = {
   eyebrow: "Open source",
   heading: "Or run the whole thing yourself, for nothing",
-  body: `${site.name} is MIT-licensed. Every feature on this page - Follow-up Manager, unlimited memory, SSO, the lot - is in the repo, and the entitlement checks that draw the tiers above are disabled by default in the source. Self-hosting is not a limited edition of the product. It is the product.`,
+  body: `${site.name} is MIT-licensed. Every feature on this page - Follow-up Manager, unlimited memory, SSO, RBAC, the lot - is in the repo, and the entitlement checks that draw the tiers above are disabled by default in the source. Self-hosting is not a limited edition of the product. It is the product.`,
   points: [
-    "No licence fee, no member count, no feature flags removed",
+    "No licence fee, no member count, no rate limits",
     "Ships with a Dockerfile and Railway config",
     "Your mail never touches our servers",
     "Fork it, audit it, or take it in-house permanently",
@@ -165,7 +227,7 @@ export const pricingAxes: {
 } = {
   heading: "What we charge for, and why",
   subhead:
-    "We do not paywall by vibes. A feature costs money only if it sits on one of these three axes. Everything else is free, permanently.",
+    "We do not paywall by vibes. A capability costs money only if it sits on one of these three axes. Everything else is free, permanently.",
   items: [
     {
       name: "Autonomy",
@@ -176,14 +238,14 @@ export const pricingAxes: {
     {
       name: "Organisation",
       free: "One person, one mailbox, one machine.",
-      paid: "More than one of you. SSO, shared rules, audit log, admin console - at the same flat price, not per seat.",
-      tier: "Team",
+      paid: "More than one of you. Shared rules and audit log in Team; enterprise SSO and RBAC as an add-on.",
+      tier: "Team + add-on",
     },
     {
       name: "Unit cost",
-      free: "Bounded per-call work. Gmail passthrough costs us almost nothing.",
-      paid: "Retained memory, stored documents, delivered webhooks. Free allowance, then metered.",
-      tier: "Metered",
+      free: "Bounded per-call work, at a rate one human can generate.",
+      paid: "Volume. Tool calls, concurrent sessions, webhook deliveries, retained memory.",
+      tier: "Scaling",
     },
   ],
 };
@@ -212,7 +274,7 @@ export type MatrixValue = boolean | string;
 export interface PricingMatrixRow {
   capability: string;
   detail?: string;
-  values: [MatrixValue, MatrixValue, MatrixValue];
+  values: [MatrixValue, MatrixValue, MatrixValue, MatrixValue];
 }
 
 export interface PricingMatrixGroup {
@@ -220,7 +282,7 @@ export interface PricingMatrixGroup {
   rows: PricingMatrixRow[];
 }
 
-/** Column order matches `pricing.tiers`: Free, Team, Enterprise. */
+/** Column order matches `pricing.tiers`: Free, Team, Scaling, Enterprise. */
 export const pricingMatrix: PricingMatrixGroup[] = [
   {
     group: "The inbox (always free)",
@@ -228,21 +290,52 @@ export const pricingMatrix: PricingMatrixGroup[] = [
       {
         capability: "Read, search, triage",
         detail: "Your full Gmail history, not a recent window",
-        values: [true, true, true],
+        values: [true, true, true, true],
       },
       {
         capability: "Draft, reply, send",
-        values: [true, true, true],
+        values: [true, true, true, true],
       },
       {
         capability: "Interactive MCP Apps",
         detail: "In-chat composer and ranked inbox",
-        values: [true, true, true],
+        values: [true, true, true, true],
       },
       {
         capability: "Self-host, all features",
         detail: "MIT licence, no crippled build",
-        values: [true, true, true],
+        values: [true, true, true, true],
+      },
+    ],
+  },
+  {
+    group: "Scale and limits",
+    rows: [
+      {
+        capability: "Tool calls per day",
+        values: ["500", "5,000", "50,000", "Custom"],
+      },
+      {
+        capability: "Concurrent agent sessions",
+        values: ["1", "5", "25", "Custom"],
+      },
+      {
+        capability: "Webhook deliveries",
+        values: ["100 / day", "10k / day", "100k / day", "Custom"],
+      },
+      {
+        capability: "Background job queue",
+        detail: "Where your watches and follow-up sweeps sit",
+        values: [false, "Standard", "Priority", "Dedicated"],
+      },
+      {
+        capability: "Members",
+        detail: "Bundled, not a per-seat ladder",
+        values: ["1", "5 incl, $6/mo after", "25 incl, $5/mo after", "Unlimited"],
+      },
+      {
+        capability: "Connected mailboxes",
+        values: ["1", "Unlimited", "Unlimited", "Unlimited"],
       },
     ],
   },
@@ -252,11 +345,11 @@ export const pricingMatrix: PricingMatrixGroup[] = [
       {
         capability: "Curation memory",
         detail: "Banked triage verdicts, so repeat reads stay cheap. This is our memory of your mail, never your mail itself.",
-        values: ["30 days", "Unlimited", "Custom"],
+        values: ["30 days", "Unlimited", "Unlimited", "Custom"],
       },
       {
         capability: "Retention policy controls",
-        values: [false, true, true],
+        values: [false, true, true, true],
       },
     ],
   },
@@ -266,19 +359,15 @@ export const pricingMatrix: PricingMatrixGroup[] = [
       {
         capability: "Follow-up Manager",
         detail: "Chases what is owed to you and what you owe",
-        values: [false, true, true],
-      },
-      {
-        capability: "Webhook subscriptions",
-        values: ["1", "Unlimited", "Unlimited"],
+        values: [false, true, true, true],
       },
       {
         capability: "Real-time inbox watch",
-        values: [false, true, true],
+        values: [false, true, true, true],
       },
       {
         capability: "Scheduled rules",
-        values: [false, true, true],
+        values: [false, true, true, true],
       },
     ],
   },
@@ -287,12 +376,12 @@ export const pricingMatrix: PricingMatrixGroup[] = [
     rows: [
       {
         capability: "PDF form filling",
-        values: [true, true, true],
+        values: [true, true, true, true],
       },
       {
         capability: "Signature ceremonies",
         detail: "You always sign, never the model",
-        values: ["3 / month", "Unlimited", "Unlimited"],
+        values: ["3 / month", "Unlimited", "Unlimited", "Unlimited"],
       },
     ],
   },
@@ -300,26 +389,31 @@ export const pricingMatrix: PricingMatrixGroup[] = [
     group: "Team and governance",
     rows: [
       {
-        capability: "Members",
-        detail: "One flat price, not a per-seat ladder",
-        values: ["1", "5 included, $6/mo after", "Unlimited"],
+        capability: "Sign in with Google",
+        values: [true, true, true, true],
       },
       {
-        capability: "Connected mailboxes",
-        values: ["1", "Unlimited", "Unlimited"],
-      },
-      {
-        capability: "Shared team rules",
-        values: [false, true, true],
-      },
-      {
-        capability: "SSO / SAML / SCIM",
-        detail: "Self-serve checkout, not a sales call",
-        values: [false, true, true],
+        capability: "Shared team rules + mailboxes",
+        values: [false, true, true, true],
       },
       {
         capability: "Audit log + admin console",
-        values: [false, true, true],
+        values: [false, true, true, true],
+      },
+      {
+        capability: "Enterprise SSO (Okta, SAML)",
+        detail: "Governance add-on, $300/mo",
+        values: [false, "Add-on", "Add-on", true],
+      },
+      {
+        capability: "SSO enforcement",
+        detail: "Governance add-on, $300/mo",
+        values: [false, "Add-on", "Add-on", true],
+      },
+      {
+        capability: "Fine-grained RBAC",
+        detail: "Governance add-on, $300/mo",
+        values: [false, "Add-on", "Add-on", true],
       },
     ],
   },
@@ -328,15 +422,20 @@ export const pricingMatrix: PricingMatrixGroup[] = [
     rows: [
       {
         capability: "Support",
-        values: ["Community", "Priority", "Dedicated"],
+        values: ["Community", "Priority", "Priority + target", "Dedicated"],
+      },
+      {
+        capability: "Dedicated Slack / MS Teams channel",
+        detail: "Governance add-on, $300/mo",
+        values: [false, "Add-on", "Add-on", true],
       },
       {
         capability: "DPA + security review",
-        values: [false, "DPA", true],
+        values: [false, "DPA", "DPA", true],
       },
       {
         capability: "Uptime SLA",
-        values: [false, false, true],
+        values: [false, false, false, true],
       },
     ],
   },
@@ -370,28 +469,32 @@ export const pricingFaq: { heading: string; items: { q: string; a: string }[] } 
       a: "No, and this is the important one. Your mail lives in Gmail and search goes straight to Google's index, so you can find a thread from six years ago on the free tier. The 30 days applies only to DaySurface's own memory: the triage verdicts, summaries, and document sessions we generate and store for you. We would never hold your mail hostage, not least because we do not hold it.",
     },
     {
+      q: "What is the difference between Team and Scaling?",
+      a: "Headroom, not features. Scaling is the same product with roughly ten times the tool calls, five times the concurrent sessions, a priority background queue, and 25 members instead of 5. If your agents work your inbox continuously rather than in bursts, you will feel Team's ceiling. If they do not, Team is the right tier and we would rather you stayed on it.",
+    },
+    {
+      q: "Why is enterprise SSO an add-on rather than a tier?",
+      a: "Because the two things are unrelated. A six-person team that needs Okta should not have to buy throughput for 25 people to get it, and a high-volume team of six should not need an enterprise contract to raise its rate limits. The Governance add-on is $300/mo, attaches to Team or Scaling, and is self-serve. Ordinary Google sign-in is free on every tier, including Free.",
+    },
+    {
       q: "I work alone. Do I have to pay for five members?",
       a: "You pay $29/mo whoever you are, and you can use one of the five or all of them. We would rather charge one simple price than run an individual tier that exists purely to charge solo users for the same thing. If you only ever want the free tier, that is a fine place to stay indefinitely.",
     },
     {
       q: "It is open source. Why is anything paid at all?",
-      a: `${site.name} is MIT-licensed, so you can self-host every feature on this page for nothing, forever. What the paid tier buys is us running it: servers that keep watching your inbox and chasing your follow-ups while you are asleep, storage for memory that never expires, and the team features a solo self-hoster has no use for.`,
+      a: `${site.name} is MIT-licensed, so you can self-host every feature on this page for nothing, forever, with no rate limits. What the paid tiers buy is us running it: servers that keep watching your inbox and chasing your follow-ups while you are asleep, storage for memory that never expires, throughput we have to provision, and the governance features a solo self-hoster has no use for.`,
     },
     {
       q: "What happens if I downgrade or my card fails?",
       a: "You keep read access to everything, always. Writes and background automations stop, and retained memory is frozen rather than deleted for 30 days so resubscribing restores it intact. Being locked out of your own inbox tooling over an expired card is not something we are willing to do.",
     },
     {
-      q: "Is SSO going to cost me a sales call?",
-      a: "No. SSO, SAML, and SCIM are in Team at $29/mo with self-serve checkout. Charging enterprise money to turn on a login method is a tax, not a product. Enterprise pricing is for uptime commitments, DPAs, and dedicated deployment.",
-    },
-    {
       q: "Do I need a credit card to start?",
-      a: "No. The free tier needs no card and never expires. The 14-day Team trial is offered when you first reach something Team covers, so you can see what it does before deciding.",
+      a: "No. The free tier needs no card and never expires. The 14-day trial is offered when you first reach something a paid tier covers, so you can see what it does before deciding.",
     },
     {
       q: "If I self-host, which features do I get?",
-      a: "All of them. Entitlement checks are disabled by default in the source and are switched on only in our hosted deployment. We are not shipping a deliberately hobbled open-source build.",
+      a: "All of them, with no rate limits. Entitlement checks are disabled by default in the source and are switched on only in our hosted deployment. We are not shipping a deliberately hobbled open-source build.",
     },
   ],
 };

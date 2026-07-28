@@ -19,7 +19,7 @@ import { pricing, repoName, site } from "../config/landing";
           {pricing.principle}
         </p>
 
-        <div class="mt-14 grid gap-6 md:grid-cols-3">
+        <div class="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {pricing.tiers.map((tier) => (
             <div class="flex flex-col border border-border bg-surface-1 p-8">
               <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -86,7 +86,7 @@ import { pricing, repoName, site } from "../config/landing";
         </p>
         <p class="mt-2 text-center text-sm text-fg-muted">
           <a href="/pricing" class="text-accent underline-offset-4 hover:underline">
-            Compare every feature across all tiers &rarr;
+            Compare every feature, and the governance add-on &rarr;
           </a>
         </p>
       </div>
