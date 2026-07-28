@@ -43,6 +43,46 @@ curl -X POST http://localhost:8000/api/v1/services/greet \
 { "message": "HELLO, ALICE!", "times": 1 }
 ```
 
+## Discovery
+
+The root path describes the deployment to whoever - or whatever - lands on it.
+No authentication required.
+
+```bash
+curl https://mcp.daysurface.com/
+```
+
+```json
+{
+  "title": "DaySurface",
+  "protocol": "mcp",
+  "instructions": "This host serves the Model Context Protocol at https://mcp.daysurface.com/mcp ...",
+  "mcp": {
+    "url": "https://mcp.daysurface.com/mcp",
+    "transport": "streamable-http",
+    "authentication": { "required": true, "schemes": ["oauth2", "api_key"] },
+    "tools": ["gmail_list_inbox", "gmail_compose", "..."]
+  },
+  "endpoints": { "mcp": "...", "health": "...", "server_card": "..." }
+}
+```
+
+Browsers (`Accept: text/html`) get a small landing page with the same content.
+
+Unknown paths return a `404` carrying the same `endpoints` map plus a
+`did_you_mean` hint, so a client probing a legacy transport path - `/sse`,
+`/messages` - is told where the endpoint actually lives:
+
+```json
+{
+  "error": {
+    "code": "not_found",
+    "message": "No handler for GET /sse. Did you mean https://mcp.daysurface.com/mcp?",
+    "details": { "path": "/sse", "did_you_mean": "https://mcp.daysurface.com/mcp" }
+  }
+}
+```
+
 ## Health Check
 
 No authentication required.

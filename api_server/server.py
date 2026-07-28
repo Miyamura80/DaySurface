@@ -23,6 +23,7 @@ from api_server.routes import (
     auth,
     google_oauth,
     health,
+    index,
     services,
     stream,
     well_known,
@@ -110,6 +111,7 @@ app.add_exception_handler(GmailAttachmentTooLargeError, attachment_too_large_han
 
 # --- Routes ---------------------------------------------------------------
 
+app.include_router(index.router)
 app.include_router(health.router)
 app.include_router(well_known.router)
 app.include_router(services.router)
@@ -126,7 +128,13 @@ app.include_router(ask.router)
 
 # --- MCP server (streamable HTTP) -----------------------------------------
 # Mounts FastMCP at /mcp so CLI/API/MCP share one process, port, and middleware.
-mount_mcp_server(app)
+_mcp_app = mount_mcp_server(app)
+
+# The mount sits at "/", so it - not FastAPI - answers every path the routers
+# above don't claim. Registering the 404 handler there is what turns Starlette's
+# bare "Not Found" into a document that names the MCP endpoint; on the FastAPI
+# app it would never fire.
+_mcp_app.add_exception_handler(404, index.not_found_handler)
 
 
 def main() -> None:
