@@ -269,7 +269,7 @@ export const connect: {
       name: "Claude",
       logo: "/logos/claude.svg",
       method: "deeplink",
-      note: "Opens the “Add custom connector” dialog in Claude. Paste the URL above into “Remote MCP server URL”, name it, and click Add. On Team and Enterprise plans an admin adds it.",
+      note: "Opens Claude with the name and URL already filled in - just click Add. Claude flags it as suggested by an external link; that's expected. On Team and Enterprise plans an admin adds it.",
       // Fallback for anyone the deep link drops on the wrong screen (e.g.
       // signed out, or a client that strips the hash fragment).
       steps: [

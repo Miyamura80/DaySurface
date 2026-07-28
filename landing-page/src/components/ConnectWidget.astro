@@ -6,12 +6,17 @@
  * steps (Claude / ChatGPT). Deep links are built here at build time so no
  * client JS has to know the encoding rules.
  */
-import { connect } from "../config/landing";
+import { connect, site } from "../config/landing";
 import { deepLink } from "../utils/deeplink";
 
 const { mcpUrl, serverName, defaultId, targets } = connect;
 
-const enriched = targets.map((t) => ({ ...t, href: deepLink(t.id, mcpUrl, serverName) }));
+// site.name is the human-facing label a client shows in its install dialog
+// (Claude's connectorName field); serverName is the machine-readable key.
+const enriched = targets.map((t) => ({
+  ...t,
+  href: deepLink(t.id, mcpUrl, serverName, site.name),
+}));
 const selected = enriched.find((t) => t.id === defaultId) ?? enriched[0];
 ---
 

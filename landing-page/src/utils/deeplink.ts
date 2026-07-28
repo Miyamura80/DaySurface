@@ -9,22 +9,32 @@
  * ChatGPT has no install URL scheme at all - it is paste-the-URL only, and
  * additionally requires Developer mode. Do not invent one.
  */
-export function deepLink(id: string, mcpUrl: string, serverName: string): string | null {
+export function deepLink(
+  id: string,
+  mcpUrl: string,
+  serverName: string,
+  displayName = serverName,
+): string | null {
   switch (id) {
     case "claude": {
-      // https://claude.ai/new?modal=add-custom-connector#settings/customize-connectors
+      // https://claude.ai/new?modal=add-custom-connector&connectorName=&connectorUrl=#settings/customize-connectors
       //
-      // Click-tested: lands on Connectors with the "Add custom connector"
-      // dialog already open. It does NOT pre-fill - Name and "Remote MCP
-      // server URL" both come up empty - so the copyable URL above the picker
-      // is load-bearing here, not decorative, and the panel says to paste it.
+      // Click-tested: opens the "Add custom connector" dialog with both Name
+      // and "Remote MCP server URL" already filled in. The user still presses
+      // Add, and Claude shows a red "suggested by an external link" warning
+      // above the fields - expected, and called out in the panel copy so it
+      // doesn't read as a failure.
       //
-      // Note the shape: the modal flag is a QUERY param and the route is a
-      // HASH fragment, so the query has to come before the `#`. An earlier
-      // guess at /customize/connectors?connectorName=&connectorUrl= was wrong
-      // on both the path and the prefill; don't reintroduce it without a
-      // fresh click-test.
-      return "https://claude.ai/new?modal=add-custom-connector#settings/customize-connectors";
+      // Two things this format is picky about, both found the hard way:
+      // the route is a HASH fragment while the flags are QUERY params, so the
+      // query must come BEFORE the `#`; and the path is /new, not
+      // /customize/connectors (that variant opens nothing).
+      const params = new URLSearchParams({
+        modal: "add-custom-connector",
+        connectorName: displayName,
+        connectorUrl: mcpUrl,
+      });
+      return `https://claude.ai/new?${params.toString()}#settings/customize-connectors`;
     }
     case "cursor": {
       // cursor://anysphere.cursor-deeplink/mcp/install?name=&config=<base64({url})>
