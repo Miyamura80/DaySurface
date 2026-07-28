@@ -2,11 +2,11 @@
 import { site, footer } from "../config/landing";
 ---
 
-<footer class="border-t border-border/60 bg-surface-1/40 py-14">
-  <div class="mx-auto max-w-6xl px-6">
+<footer class="border-t border-border/60 bg-surface-1/40 py-12 sm:py-14">
+  <div class="mx-auto max-w-6xl px-4 sm:px-6">
     <div class="grid gap-10 sm:grid-cols-2 md:grid-cols-5">
       <div class="md:col-span-1">
-        <a href="#top" class="flex items-center gap-2 font-semibold">
+        <a href="#top" class="inline-flex min-h-11 items-center gap-2 font-semibold">
           <span
             class="grid size-7 place-items-center bg-accent font-mono text-sm font-bold text-accent-fg"
             >{site.name.charAt(0)}</span
@@ -20,12 +20,12 @@ import { site, footer } from "../config/landing";
         footer.columns.map((col) => (
           <div>
             <h3 class="text-sm font-semibold text-fg">{col.heading}</h3>
-            <ul class="mt-4 space-y-3">
+            <ul class="mt-2 sm:mt-4">
               {col.links.map((link) => (
                 <li>
                   <a
                     href={link.href}
-                    class="text-sm text-fg-muted transition hover:text-fg"
+                    class="inline-flex min-h-9 items-center text-sm text-fg-muted transition hover:text-fg"
                   >
                     {link.label}
                   </a>

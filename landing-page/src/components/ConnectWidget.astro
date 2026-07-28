@@ -16,7 +16,7 @@ const selected = enriched.find((t) => t.id === defaultId) ?? enriched[0];
 ---
 
 <div
-  class="w-full border-2 border-accent bg-surface-1 p-4 text-left shadow-2xl shadow-black/40"
+  class="w-full min-w-0 border-2 border-accent bg-surface-1 p-3 text-left shadow-2xl shadow-black/40 sm:p-4"
   data-connect
 >
   <!-- Shared: the MCP server URL, copyable -->
@@ -24,12 +24,12 @@ const selected = enriched.find((t) => t.id === defaultId) ?? enriched[0];
     MCP server URL
   </label>
   <div class="mt-1.5 flex items-stretch border border-border bg-bg">
-    <code class="flex-1 truncate px-3 py-2.5 font-mono text-sm text-accent" title={mcpUrl}>
+    <code class="min-w-0 flex-1 truncate px-3 py-2.5 font-mono text-xs text-accent sm:text-sm" title={mcpUrl}>
       {mcpUrl}
     </code>
     <button
       type="button"
-      class="copy-btn grid shrink-0 place-items-center border-l border-border px-3 text-fg-muted transition hover:bg-surface-2 hover:text-accent"
+      class="copy-btn grid min-h-11 w-11 shrink-0 place-items-center border-l border-border text-fg-muted transition hover:bg-surface-2 hover:text-accent"
       data-code={mcpUrl}
       aria-label="Copy"
     >
@@ -41,7 +41,7 @@ const selected = enriched.find((t) => t.id === defaultId) ?? enriched[0];
   <div class="relative mt-4" data-dropdown>
     <button
       type="button"
-      class="flex w-full items-center gap-2.5 border border-border bg-bg px-3 py-2.5 text-left transition hover:border-accent/60"
+      class="flex min-h-11 w-full items-center gap-2.5 border border-border bg-bg px-3 text-left transition hover:border-accent/60"
       aria-haspopup="listbox"
       aria-expanded="false"
       data-dropdown-toggle
@@ -51,7 +51,7 @@ const selected = enriched.find((t) => t.id === defaultId) ?? enriched[0];
         style={`-webkit-mask:url('${selected.logo}') center/contain no-repeat;mask:url('${selected.logo}') center/contain no-repeat;`}
         data-selected-logo
         aria-hidden="true"></span>
-      <span class="flex-1 text-sm font-medium text-fg" data-selected-name>{selected.name}</span>
+      <span class="min-w-0 flex-1 truncate text-sm font-medium text-fg" data-selected-name>{selected.name}</span>
       <svg class="size-4 text-fg-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </button>
 
@@ -65,7 +65,7 @@ const selected = enriched.find((t) => t.id === defaultId) ?? enriched[0];
           <li role="option" aria-selected={t.id === selected.id ? "true" : "false"}>
             <button
               type="button"
-              class="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-fg-muted transition hover:bg-bg hover:text-fg"
+              class="flex min-h-11 w-full items-center gap-2.5 px-3 text-left text-sm text-fg-muted transition hover:bg-bg hover:text-fg"
               data-option={t.id}
               data-logo={t.logo}
               data-name={t.name}
@@ -94,7 +94,7 @@ const selected = enriched.find((t) => t.id === defaultId) ?? enriched[0];
             <>
               <a
                 href={t.href}
-                class="flex w-full items-center justify-center gap-2.5 bg-accent px-4 py-3 font-semibold text-accent-fg transition hover:bg-accent-strong"
+                class="flex min-h-12 w-full items-center justify-center gap-2.5 bg-accent px-4 text-center font-semibold text-accent-fg transition hover:bg-accent-strong"
               >
                 <span
                   class="size-5 shrink-0 bg-accent-fg"

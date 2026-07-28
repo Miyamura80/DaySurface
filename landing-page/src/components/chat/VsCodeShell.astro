@@ -13,7 +13,7 @@ const navIcon = "size-5 text-[#858585]";
 
 <div class="flex overflow-hidden rounded-lg border border-[#2b2b2b] bg-[#1f1f1f] text-[#cccccc] shadow-2xl shadow-black/50">
   <!-- activity bar -->
-  <div class="flex w-11 shrink-0 flex-col items-center gap-4 border-r border-[#2b2b2b] bg-[#181818] py-3">
+  <div class="hidden w-11 shrink-0 flex-col items-center gap-4 border-r border-[#2b2b2b] bg-[#181818] py-3 min-[380px]:flex">
     <!-- active: chat (blue left rail) -->
     <span class="relative flex w-full justify-center">
       <span class="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 bg-[#0078d4]"></span>
@@ -37,7 +37,7 @@ const navIcon = "size-5 text-[#858585]";
       </span>
     </div>
 
-    <div class="space-y-3 px-3 py-3">
+    <div class="space-y-3 px-2.5 py-3 sm:px-3">
       <!-- user turn -->
       <div class="flex gap-2.5">
         <span class="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-[#3c3c3c] font-mono text-[10px] text-[#cccccc]">U</span>
@@ -79,7 +79,7 @@ const navIcon = "size-5 text-[#858585]";
     </div>
 
     <!-- composer -->
-    <div class="px-3 pb-3">
+    <div class="px-2.5 pb-3 sm:px-3">
       <div class="rounded-md border border-[#0078d4] bg-[#313131] p-2">
         <p class="px-1 pt-0.5 text-[13px] text-[#8a8a8a]">Ask Copilot</p>
         <div class="mt-2 flex items-center gap-2">

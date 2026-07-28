@@ -10,7 +10,7 @@ import ConvoScroll from "./ConvoScroll.astro";
 
 <div class="overflow-hidden rounded-xl border border-white/10 bg-[#212121] text-[#ececec] shadow-2xl shadow-black/50">
   <!-- header: model switcher + share -->
-  <div class="flex items-center justify-between px-4 py-2.5">
+  <div class="flex items-center justify-between px-3 py-2.5 sm:px-4">
     <span class="inline-flex items-center gap-1.5 text-sm font-medium text-[#ececec]">
       ChatGPT
       <svg class="size-3.5 text-[#a8a8a8]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
@@ -18,7 +18,7 @@ import ConvoScroll from "./ConvoScroll.astro";
     <span class="rounded-full border border-white/15 px-3 py-1 text-xs text-[#a8a8a8]">Share</span>
   </div>
 
-  <div class="space-y-4 px-4 py-2">
+  <div class="space-y-4 px-3 py-2 sm:px-4">
     <!-- user bubble (right) -->
     <div class="flex justify-end">
       <p class="max-w-[75%] rounded-3xl bg-[#303030] px-4 py-2.5 text-sm text-[#ececec]">
@@ -27,7 +27,7 @@ import ConvoScroll from "./ConvoScroll.astro";
     </div>
 
     <!-- assistant: OpenAI blossom + plain text, no bubble -->
-    <div class="flex gap-3">
+    <div class="flex gap-2 sm:gap-3">
       <span class="mt-0.5 grid size-6 shrink-0 place-items-center rounded-full border border-white/15">
         <img src="/logos/chatgpt.svg" alt="" class="size-3.5" aria-hidden="true" />
       </span>
@@ -60,10 +60,10 @@ import ConvoScroll from "./ConvoScroll.astro";
   </div>
 
   <!-- composer -->
-  <div class="px-4 py-4">
-    <div class="flex items-center gap-3 rounded-[28px] bg-[#303030] px-4 py-3">
+  <div class="px-3 py-4 sm:px-4">
+    <div class="flex items-center gap-2.5 rounded-[28px] bg-[#303030] px-3 py-3 sm:gap-3 sm:px-4">
       <svg class="size-5 shrink-0 text-[#a8a8a8]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke-linecap="round"></path></svg>
-      <span class="flex-1 text-sm text-[#a8a8a8]">Ask anything</span>
+      <span class="min-w-0 flex-1 truncate text-sm text-[#a8a8a8]">Ask anything</span>
       <span class="grid size-7 place-items-center rounded-full bg-[#ececec] text-[#212121]">
         <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"></path></svg>
       </span>

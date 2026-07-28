@@ -6,12 +6,15 @@ import { site, nav } from "../config/landing";
   class="sticky top-0 z-50 border-b border-border/60 bg-bg/80 backdrop-blur-md"
 >
   <nav
-    class="mx-auto flex h-16 max-w-6xl items-center justify-between px-6"
+    class="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-3 sm:gap-3 sm:px-6"
     aria-label="Primary"
   >
-    <a href="#top" class="flex items-center gap-2 font-semibold tracking-tight">
+    <a
+      href="#top"
+      class="flex shrink-0 items-center gap-2 py-2 font-semibold tracking-tight"
+    >
       <span
-        class="grid size-7 place-items-center bg-accent font-mono text-sm font-bold text-accent-fg"
+        class="grid size-7 shrink-0 place-items-center bg-accent font-mono text-sm font-bold text-accent-fg"
         >{site.name.charAt(0)}</span
       >
       <span>{site.name}</span>
@@ -30,13 +33,13 @@ import { site, nav } from "../config/landing";
       }
     </div>
 
-    <div class="flex items-center gap-3">
+    <div class="flex items-center gap-2 sm:gap-3">
       <a
         href={nav.github.href}
         target="_blank"
         rel="noopener noreferrer"
         title={nav.github.title}
-        class="group inline-flex items-center gap-2 border border-accent/40 px-3 py-2 text-sm font-medium text-fg-muted transition hover:border-accent hover:bg-surface-1 hover:text-fg"
+        class="group hidden min-h-11 items-center gap-2 border border-accent/40 px-3 text-sm font-medium text-fg-muted transition hover:border-accent hover:bg-surface-1 hover:text-fg sm:inline-flex"
       >
         <span
           class="size-[18px] shrink-0 bg-fg-muted transition group-hover:bg-accent"
@@ -48,10 +51,128 @@ import { site, nav } from "../config/landing";
 
       <a
         href={nav.cta.href}
-        class="bg-accent px-4 py-2 text-sm font-semibold text-accent-fg transition hover:bg-accent-strong"
+        class="inline-flex min-h-11 items-center whitespace-nowrap bg-accent px-2.5 text-xs font-semibold text-accent-fg transition hover:bg-accent-strong sm:px-4 sm:text-sm"
       >
         {nav.cta.label}
       </a>
+
+      <!-- Mobile menu trigger. The primary links are display:none under md, so
+           without this panel they'd be unreachable on a phone. -->
+      <button
+        type="button"
+        class="grid size-10 shrink-0 place-items-center border border-border text-fg-muted transition hover:border-accent hover:text-fg sm:size-11 md:hidden"
+        aria-expanded="false"
+        aria-controls="mobile-nav"
+        aria-label="Open menu"
+        data-nav-toggle
+      >
+        <svg
+          class="size-5"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          aria-hidden="true"
+          data-nav-icon-open
+        >
+          <path d="M4 7h16M4 12h16M4 17h16"></path>
+        </svg>
+        <svg
+          class="hidden size-5"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          aria-hidden="true"
+          data-nav-icon-close
+        >
+          <path d="M6 6l12 12M18 6L6 18"></path>
+        </svg>
+      </button>
     </div>
   </nav>
+
+  <!-- Mobile disclosure panel -->
+  <div
+    id="mobile-nav"
+    class="hidden border-t border-border/60 bg-bg md:hidden"
+    data-nav-panel
+  >
+    <ul class="mx-auto max-w-6xl px-3 py-2 sm:px-6">
+      {
+        nav.links.map((link) => (
+          <li>
+            <a
+              href={link.href}
+              class="flex min-h-12 items-center border-b border-border/40 text-base text-fg-muted transition hover:text-fg"
+            >
+              {link.label}
+            </a>
+          </li>
+        ))
+      }
+      <li class="sm:hidden">
+        <a
+          href={nav.github.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="flex min-h-12 items-center gap-2 border-b border-border/40 text-base text-fg-muted transition hover:text-fg"
+        >
+          <span
+            class="size-[18px] shrink-0 bg-fg-muted"
+            style="-webkit-mask:url('/logos/github.svg') center/contain no-repeat;mask:url('/logos/github.svg') center/contain no-repeat;"
+            aria-hidden="true"
+          />
+          {nav.github.label}
+        </a>
+      </li>
+    </ul>
+  </div>
 </header>
+
+<script>
+  function initNav() {
+    document.querySelectorAll<HTMLElement>("[data-nav-toggle]").forEach((toggle) => {
+      // Idempotent: skip triggers already wired (e.g. a repeat astro:page-load).
+      if (toggle.dataset.navReady === "true") return;
+      toggle.dataset.navReady = "true";
+
+      const header = toggle.closest("header");
+      const panel = header?.querySelector<HTMLElement>("[data-nav-panel]");
+      const iconOpen = toggle.querySelector<HTMLElement>("[data-nav-icon-open]");
+      const iconClose = toggle.querySelector<HTMLElement>("[data-nav-icon-close]");
+      if (!panel) return;
+
+      const setOpen = (open: boolean) => {
+        panel.classList.toggle("hidden", !open);
+        toggle.setAttribute("aria-expanded", String(open));
+        toggle.setAttribute("aria-label", open ? "Close menu" : "Open menu");
+        iconOpen?.classList.toggle("hidden", open);
+        iconClose?.classList.toggle("hidden", !open);
+      };
+
+      toggle.addEventListener("click", () =>
+        setOpen(toggle.getAttribute("aria-expanded") !== "true"),
+      );
+      // Links are in-page anchors; close the sheet behind the jump.
+      panel
+        .querySelectorAll("a")
+        .forEach((a) => a.addEventListener("click", () => setOpen(false)));
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") setOpen(false);
+      });
+      // Never leave the panel open past the md breakpoint - the desktop links
+      // take over there and the toggle itself disappears.
+      window
+        .matchMedia("(min-width: 768px)")
+        .addEventListener("change", (e) => {
+          if (e.matches) setOpen(false);
+        });
+    });
+  }
+
+  initNav();
+  document.addEventListener("astro:page-load", initNav);
+</script>

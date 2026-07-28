@@ -14,23 +14,28 @@ const { code, lang = "bash", inline = false } = Astro.props;
 ---
 
 <div
-  class="group relative overflow-hidden border border-border bg-surface-1 text-left shadow-2xl shadow-black/40"
+  class="group relative w-full min-w-0 max-w-full overflow-hidden border border-border bg-surface-1 text-left shadow-2xl shadow-black/40"
 >
-  <div class="flex items-center gap-2 border-b border-border px-4 py-2.5">
+  <div class="flex items-center gap-2 border-b border-border px-3 py-2 sm:px-4 sm:py-2.5">
     <span class="size-2.5 border border-fg-subtle"></span>
     <span class="size-2.5 border border-fg-subtle"></span>
     <span class="size-2.5 bg-accent"></span>
     <span class="ml-2 font-mono text-xs uppercase tracking-widest text-fg-subtle">{lang}</span>
     <button
       type="button"
-      class="copy-btn ml-auto grid place-items-center p-1.5 text-fg-muted transition hover:bg-surface-2 hover:text-accent"
+      class="copy-btn ml-auto grid size-9 shrink-0 place-items-center text-fg-muted transition hover:bg-surface-2 hover:text-accent"
       data-code={code}
       aria-label="Copy"
     >
       <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
     </button>
   </div>
-  <div class={`code-scroll overflow-x-auto px-4 font-mono text-sm leading-relaxed ${inline ? "py-3" : "py-4"}`}>
+  <div
+    class={`code-scroll overflow-x-auto overscroll-x-contain px-3 font-mono text-xs leading-relaxed sm:px-4 sm:text-sm ${inline ? "py-3" : "py-4"}`}
+    tabindex="0"
+    role="region"
+    aria-label={`${lang} code, scrollable`}
+  >
     <Code code={code} lang={lang as any} theme="tokyo-night" />
   </div>
 </div>
