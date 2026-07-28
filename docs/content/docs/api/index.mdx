@@ -13,29 +13,24 @@ drafts on your behalf.
 
 ## Base URL
 
-Production:
-
 ```
 https://api.daysurface.com
 ```
 
-Local development:
-
-```
-http://localhost:8000
-```
-
 The API shares one process with the MCP server, so the production host also
 answers at `daysurface.com` / `mcp.daysurface.com`; `api.daysurface.com` is the
-canonical vanity host for REST traffic. The examples below use `localhost`;
-swap in the production base URL to call the deployed API.
+canonical vanity host for REST traffic.
+
+Every example in these docs uses that host. Running the server yourself? Swap in
+your own deployment, or `http://localhost:8000` when it is running locally via
+`daysurface-serve`.
 
 ## Quick Example
 
 Rank the ten threads that most need attention:
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/services/gmail_curate_inbox \
+curl -X POST https://api.daysurface.com/api/v1/services/gmail_curate_inbox \
   -H "Authorization: Bearer sk_live_..." \
   -H "Content-Type: application/json" \
   -d '{"limit": 10}'
@@ -50,7 +45,7 @@ tool's input model as the body. The generated OpenAPI document lives at
 No authentication required.
 
 ```bash
-curl http://localhost:8000/health
+curl https://api.daysurface.com/health
 ```
 
 ```json

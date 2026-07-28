@@ -9,7 +9,7 @@ Include your API key in the `Authorization` header:
 
 ```bash
 curl -H "Authorization: Bearer sk_live_..." \
-  http://localhost:8000/api/v1/auth/me
+  https://api.daysurface.com/api/v1/auth/me
 ```
 
 ```json
@@ -27,7 +27,7 @@ Enterprise SSO via WorkOS is also supported.
 ### Create a key
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/auth/api-keys \
+curl -X POST https://api.daysurface.com/api/v1/auth/api-keys \
   -H "Authorization: Bearer sk_live_..." \
   -H "Content-Type: application/json" \
   -d '{"name": "my-integration", "scope_template": "standard", "expires_in_days": 90}'
@@ -54,7 +54,7 @@ The endpoint is cursor-paginated. Pass `limit` (1-100, default 20) and follow
 
 ```bash
 curl -H "Authorization: Bearer sk_live_..." \
-  "http://localhost:8000/api/v1/auth/api-keys?limit=20"
+  "https://api.daysurface.com/api/v1/auth/api-keys?limit=20"
 ```
 
 ```json
@@ -71,7 +71,7 @@ Fetch the next page by passing the cursor back verbatim (treat it as opaque):
 
 ```bash
 curl -H "Authorization: Bearer sk_live_..." \
-  "http://localhost:8000/api/v1/auth/api-keys?cursor=eyJjIjoiMjAyNS0wMS0xNVQxMDozMDowMCswMDowMCIsImkiOjQyfQ"
+  "https://api.daysurface.com/api/v1/auth/api-keys?cursor=eyJjIjoiMjAyNS0wMS0xNVQxMDozMDowMCswMDowMCIsImkiOjQyfQ"
 ```
 
 Cursor pagination (rather than `offset`/`page`) avoids duplicate rows under
@@ -84,7 +84,7 @@ page fetch. Pass the same `limit` value on each request until `has_more` is
 
 ```bash
 curl -X DELETE -H "Authorization: Bearer sk_live_..." \
-  http://localhost:8000/api/v1/auth/api-keys/{key_id}
+  https://api.daysurface.com/api/v1/auth/api-keys/{key_id}
 ```
 
 ## Scopes

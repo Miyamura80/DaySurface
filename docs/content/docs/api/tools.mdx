@@ -30,7 +30,7 @@ document at `/openapi.json`. The examples below cover the common paths.
 Check whether an account is linked.
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/services/gmail_status \
+curl -X POST https://api.daysurface.com/api/v1/services/gmail_status \
   -H "Authorization: Bearer sk_live_..." \
   -H "Content-Type: application/json" \
   -d '{}'
@@ -52,7 +52,7 @@ curl -X POST http://localhost:8000/api/v1/services/gmail_status \
 Rank recent inbox threads by a deterministic score.
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/services/gmail_curate_inbox \
+curl -X POST https://api.daysurface.com/api/v1/services/gmail_curate_inbox \
   -H "Authorization: Bearer sk_live_..." \
   -H "Content-Type: application/json" \
   -d '{"limit": 10}'
@@ -73,7 +73,7 @@ ranked payload as JSON.
 List recent messages, optionally filtered by a Gmail search query.
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/services/gmail_list_inbox \
+curl -X POST https://api.daysurface.com/api/v1/services/gmail_list_inbox \
   -H "Authorization: Bearer sk_live_..." \
   -H "Content-Type: application/json" \
   -d '{"query": "from:sarah@acme.com is:unread", "limit": 25}'
@@ -91,7 +91,7 @@ curl -X POST http://localhost:8000/api/v1/services/gmail_list_inbox \
 Fetch a thread with full message bodies.
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/services/gmail_get_thread \
+curl -X POST https://api.daysurface.com/api/v1/services/gmail_get_thread \
   -H "Authorization: Bearer sk_live_..." \
   -H "Content-Type: application/json" \
   -d '{"thread_id": "18f0c...", "strip_quoted_replies": true}'
@@ -113,7 +113,7 @@ Attachments always carry `filename`, `mime_type`, `size_bytes`, and
 Create a draft. Mutating - send an `Idempotency-Key`.
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/services/gmail_compose \
+curl -X POST https://api.daysurface.com/api/v1/services/gmail_compose \
   -H "Authorization: Bearer sk_live_..." \
   -H "Idempotency-Key: 0f1c2b3a-..." \
   -H "Content-Type: application/json" \
@@ -143,7 +143,7 @@ subject, a body preview, and the attachment list.
 Send a draft that already exists. Mutating - send an `Idempotency-Key`.
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/services/gmail_send \
+curl -X POST https://api.daysurface.com/api/v1/services/gmail_send \
   -H "Authorization: Bearer sk_live_..." \
   -H "Idempotency-Key: 7d2e9f01-..." \
   -H "Content-Type: application/json" \
@@ -172,7 +172,7 @@ The server also exposes its own maintenance services over the same route shape:
 | `doctor_fix` | Run health checks and auto-fix what it can (mutating) |
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/services/config_get \
+curl -X POST https://api.daysurface.com/api/v1/services/config_get \
   -H "Authorization: Bearer sk_live_..." \
   -H "Content-Type: application/json" \
   -d '{"key": "llm_config.cache_enabled"}'
