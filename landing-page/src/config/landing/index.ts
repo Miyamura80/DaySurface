@@ -16,4 +16,5 @@ export * from "./nav";
 export * from "./get-started";
 export * from "./comparison";
 export * from "./pricing";
+export * from "./pricing-matrix";
 export * from "./content";

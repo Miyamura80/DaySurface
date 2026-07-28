@@ -2,11 +2,11 @@
 /**
  * Full tier-by-tier feature matrix for /pricing.
  *
- * Columns are derived from `pricing.tiers`, so the table can never drift out of
- * sync with the cards above it. Cell values are `true` (included), `false` (not
- * included), or a string (a limit like "30 days" / "3 / month").
+ * Both the columns and the cells are keyed off `pricing.tiers`, so the table
+ * cannot drift out of sync with the cards above it: a row missing a tier fails
+ * to compile. Cell values are `true` (included), `false` (not included), or a
+ * string (a limit like "30 days" / "3 / month").
  */
-import type { MatrixValue } from "../config/landing";
 import { pricing, pricingMatrix } from "../config/landing";
 
 const tiers = pricing.tiers;
@@ -40,7 +40,7 @@ const tiers = pricing.tiers;
         <tbody>
           <tr>
             <th
-              scope="colgroup"
+              scope="rowgroup"
               colspan={tiers.length + 1}
               class="pt-10 pb-3 text-left text-xs font-bold tracking-widest text-accent uppercase"
             >
@@ -55,23 +55,34 @@ const tiers = pricing.tiers;
                   <div class="mt-1 max-w-sm text-sm text-fg-muted">{row.detail}</div>
                 )}
               </th>
-              {row.values.map((v: MatrixValue) => (
-                <td class="px-4 py-4">
-                  {v === true && (
-                    <span class="text-lg font-bold text-accent" aria-label="Included">
-                      ✓
-                    </span>
-                  )}
-                  {v === false && (
-                    <span class="text-lg font-bold text-fg-subtle" aria-label="Not included">
-                      –
-                    </span>
-                  )}
-                  {typeof v === "string" && (
-                    <span class="text-sm font-medium text-fg">{v}</span>
-                  )}
-                </td>
-              ))}
+              {tiers.map((t) => {
+                const v = row.values[t.id];
+                return (
+                  <td class="px-4 py-4">
+                    {/* aria-label is not exposed on a bare span (role
+                        generic), so the state goes in visually-hidden text. */}
+                    {v === true && (
+                      <>
+                        <span class="text-lg font-bold text-accent" aria-hidden="true">
+                          ✓
+                        </span>
+                        <span class="sr-only">Included</span>
+                      </>
+                    )}
+                    {v === false && (
+                      <>
+                        <span class="text-lg font-bold text-fg-subtle" aria-hidden="true">
+                          –
+                        </span>
+                        <span class="sr-only">Not included</span>
+                      </>
+                    )}
+                    {typeof v === "string" && (
+                      <span class="text-sm font-medium text-fg">{v}</span>
+                    )}
+                  </td>
+                );
+              })}
             </tr>
           ))}
         </tbody>

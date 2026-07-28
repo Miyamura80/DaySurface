@@ -22,6 +22,12 @@ import {
   selfHost,
 } from "../config/landing";
 
+// nav, footer, sitemap, and schemamap all drop this route when pricing is
+// disabled. Without this the page stayed live but orphaned - reachable, absent
+// from every index, linked from nowhere - which is worse than either state the
+// flag is meant to express.
+if (!pricing.enabled) return Astro.redirect("/", 302);
+
 const origin = (Astro.site ?? new URL(site.url)).origin;
 
 // Shown in the disclosure label so people know the size of what they are
@@ -44,9 +50,22 @@ const jsonLd = [
       "@type": "Offer",
       name: t.name,
       description: t.description,
-      price: t.price.replace(/[^0-9.]/g, "") || undefined,
-      priceCurrency: "USD",
       url: `${origin}/pricing`,
+      // An unpriced tier must omit price AND currency: a bare priceCurrency
+      // is invalid schema.org. A priced tier carries its billing period, so
+      // an answer engine cannot report "$29" as a one-time charge.
+      ...(t.priceUsd === null
+        ? {}
+        : {
+            priceSpecification: {
+              "@type": "UnitPriceSpecification",
+              price: t.priceUsd,
+              priceCurrency: "USD",
+              ...(t.billingPeriod
+                ? { billingDuration: 1, billingIncrement: 1, unitCode: "MON" }
+                : {}),
+            },
+          }),
     })),
   },
   {
@@ -158,8 +177,8 @@ const jsonLd = [
 
                 {/* Add-ons render as an inset panel inside the tier they
                     attach to. fieldset/legend gives the notched border for
-                    free, and mt-auto pins the panel and CTA to the card
-                    bottom so cards of different heights still line up. */}
+                    free; `grow` on the feature list above pins this panel and
+                    the CTA to the card bottom across unequal card heights. */}
                 {addOns.items
                   .filter((addOn) => addOn.attachTo === tier.name)
                   .map((addOn) => (

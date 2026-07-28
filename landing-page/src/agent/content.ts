@@ -48,7 +48,7 @@ ${agentGuide.whenToUse.map((s) => `- ${s}`).join("\n")}
 - [How it compares](${o}/compare): ${site.name} vs other Gmail MCP servers (GongRzhe, Composio, Zapier/Pipedream, Google Workspace MCP).
 
 ## Pricing & licensing
-- [pricing.md](${o}/pricing.md): Machine-readable pricing & tiers. ${site.name} is open source (MIT license) and free to self-host with no setup cost; paid tiers cover managed hosting, support, and teams.
+- [pricing.md](${o}/pricing.md): Machine-readable pricing & tiers. ${site.name} is open source (MIT license) and free to self-host with no setup cost; paid tiers cover autonomy (background follow-up and watches) and throughput, with governance sold as an add-on.
 
 ## Resources
 - [Documentation](${site.docsUrl})

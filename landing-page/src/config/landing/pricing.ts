@@ -19,10 +19,28 @@
  */
 import { site } from "./site";
 
+/**
+ * Stable per-tier key. Everything that has to line up with a tier keys off
+ * this rather than off the display name, so renaming a tier in marketing copy
+ * cannot silently detach its matrix column or an add-on from it.
+ */
+export type TierId = "free" | "team" | "scaling" | "enterprise";
+
 export interface PricingTier {
+  id: TierId;
   name: string;
+  /** Display price, e.g. "$29" or "Custom". */
   price: string;
   cadence?: string;
+  /**
+   * Machine-readable price for schema.org. `null` means "not publicly priced"
+   * (Enterprise), which must emit an Offer with no price at all rather than a
+   * bare currency. Kept separate from `price` so structured data is never
+   * reconstructed by stripping characters off display copy.
+   */
+  priceUsd: number | null;
+  /** Billing period, for the schema.org UnitPriceSpecification. */
+  billingPeriod: "MONTH" | null;
   description: string;
   features: string[];
   /**
@@ -44,10 +62,6 @@ export interface PricingTier {
   note?: string;
 }
 
-/** Repo name parsed from the GitHub URL (e.g. "DaySurface"). */
-export const repoName: string =
-  site.githubUrl.replace(/\/+$/, "").split("/").pop() || site.name;
-
 export const pricing: {
   enabled: boolean;
   heading: string;
@@ -66,7 +80,10 @@ export const pricing: {
   tiers: [
     {
       name: "Free",
+      id: "free",
       price: "$0",
+      priceUsd: 0,
+      billingPeriod: null,
       cadence: "forever",
       description:
         "Everything you can do in the Gmail web UI, done through your agent instead. Not a trial.",
@@ -87,7 +104,10 @@ export const pricing: {
     },
     {
       name: "Team",
+      id: "team",
       price: "$29",
+      priceUsd: 29,
+      billingPeriod: "MONTH",
       cadence: "/mo",
       description:
         "Everything DaySurface does, for you and up to four colleagues. It keeps working after you close the chat.",
@@ -109,7 +129,10 @@ export const pricing: {
     },
     {
       name: "Scaling",
+      id: "scaling",
       price: "$199",
+      priceUsd: 199,
+      billingPeriod: "MONTH",
       cadence: "/mo",
       description:
         "Same product, far more headroom. For teams running agents against their mail all day rather than a few times an hour.",
@@ -130,7 +153,10 @@ export const pricing: {
     },
     {
       name: "Enterprise",
+      id: "enterprise",
       price: "Custom",
+      priceUsd: null,
+      billingPeriod: null,
       description:
         "Procurement, uptime commitments, and deployment on infrastructure you control.",
       features: [
@@ -164,8 +190,8 @@ export interface AddOn {
   features: string[];
   /** Which tiers this can be attached to, shown as small print. */
   availableOn: string;
-  /** Name of the tier whose card this panel renders inside. */
-  attachTo: string;
+  /** Tier whose card this panel renders inside. */
+  attachTo: TierId;
 }
 
 export const addOns: { items: AddOn[] } = {
@@ -183,7 +209,7 @@ export const addOns: { items: AddOn[] } = {
         "Support via dedicated Slack / MS Teams channel",
       ],
       availableOn: "Also available on Team. Included in Enterprise.",
-      attachTo: "Scaling",
+      attachTo: "scaling",
     },
   ],
 };
@@ -267,178 +293,6 @@ export const alwaysFree: { heading: string; body: string; items: string[] } = {
     "Interactive in-chat inbox + composer",
   ],
 };
-
-export type MatrixValue = boolean | string;
-
-export interface PricingMatrixRow {
-  capability: string;
-  detail?: string;
-  values: [MatrixValue, MatrixValue, MatrixValue, MatrixValue];
-}
-
-export interface PricingMatrixGroup {
-  group: string;
-  rows: PricingMatrixRow[];
-}
-
-/** Column order matches `pricing.tiers`: Free, Team, Scaling, Enterprise. */
-export const pricingMatrix: PricingMatrixGroup[] = [
-  {
-    group: "The inbox (always free)",
-    rows: [
-      {
-        capability: "Read, search, triage",
-        detail: "Your full Gmail history, not a recent window",
-        values: [true, true, true, true],
-      },
-      {
-        capability: "Draft, reply, send",
-        values: [true, true, true, true],
-      },
-      {
-        capability: "Interactive MCP Apps",
-        detail: "In-chat composer and ranked inbox",
-        values: [true, true, true, true],
-      },
-      {
-        capability: "Self-host, all features",
-        detail: "MIT licence, no crippled build",
-        values: [true, true, true, true],
-      },
-    ],
-  },
-  {
-    group: "Scale and limits",
-    rows: [
-      {
-        capability: "Tool calls per day",
-        values: ["500", "5,000", "50,000", "Custom"],
-      },
-      {
-        capability: "Concurrent agent sessions",
-        values: ["1", "5", "25", "Custom"],
-      },
-      {
-        capability: "Webhook deliveries",
-        values: ["100 / day", "10k / day", "100k / day", "Custom"],
-      },
-      {
-        capability: "Background job queue",
-        detail: "Where your watches and follow-up sweeps sit",
-        values: [false, "Standard", "Priority", "Dedicated"],
-      },
-      {
-        capability: "Members",
-        detail: "Bundled, not a per-seat ladder",
-        values: ["1", "5 incl, $6/mo after", "25 incl, $5/mo after", "Unlimited"],
-      },
-      {
-        capability: "Connected mailboxes",
-        values: ["1", "Unlimited", "Unlimited", "Unlimited"],
-      },
-    ],
-  },
-  {
-    group: "Memory",
-    rows: [
-      {
-        capability: "Curation memory",
-        detail: "Banked triage verdicts, so repeat reads stay cheap. This is our memory of your mail, never your mail itself.",
-        values: ["30 days", "Unlimited", "Unlimited", "Custom"],
-      },
-      {
-        capability: "Retention policy controls",
-        values: [false, true, true, true],
-      },
-    ],
-  },
-  {
-    group: "Autonomy",
-    rows: [
-      {
-        capability: "Follow-up Manager",
-        detail: "Chases what is owed to you and what you owe",
-        values: [false, true, true, true],
-      },
-      {
-        capability: "Real-time inbox watch",
-        values: [false, true, true, true],
-      },
-      {
-        capability: "Scheduled rules",
-        values: [false, true, true, true],
-      },
-    ],
-  },
-  {
-    group: "Documents",
-    rows: [
-      {
-        capability: "PDF form filling",
-        values: [true, true, true, true],
-      },
-      {
-        capability: "Signature ceremonies",
-        detail: "You always sign, never the model",
-        values: ["3 / month", "Unlimited", "Unlimited", "Unlimited"],
-      },
-    ],
-  },
-  {
-    group: "Team and governance",
-    rows: [
-      {
-        capability: "Sign in with Google",
-        values: [true, true, true, true],
-      },
-      {
-        capability: "Shared team rules + mailboxes",
-        values: [false, true, true, true],
-      },
-      {
-        capability: "Audit log + admin console",
-        values: [false, true, true, true],
-      },
-      {
-        capability: "Enterprise SSO (Okta, SAML)",
-        detail: "Governance add-on, $300/mo",
-        values: [false, "Add-on", "Add-on", true],
-      },
-      {
-        capability: "SSO enforcement",
-        detail: "Governance add-on, $300/mo",
-        values: [false, "Add-on", "Add-on", true],
-      },
-      {
-        capability: "Fine-grained RBAC",
-        detail: "Governance add-on, $300/mo",
-        values: [false, "Add-on", "Add-on", true],
-      },
-    ],
-  },
-  {
-    group: "Support and terms",
-    rows: [
-      {
-        capability: "Support",
-        values: ["Community", "Priority", "Priority + target", "Dedicated"],
-      },
-      {
-        capability: "Dedicated Slack / MS Teams channel",
-        detail: "Governance add-on, $300/mo",
-        values: [false, "Add-on", "Add-on", true],
-      },
-      {
-        capability: "DPA + security review",
-        values: [false, "DPA", "DPA", true],
-      },
-      {
-        capability: "Uptime SLA",
-        values: [false, false, false, true],
-      },
-    ],
-  },
-];
 
 /**
  * The paywall journey. We only ask for money after the product has already
