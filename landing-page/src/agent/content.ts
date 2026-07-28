@@ -5,7 +5,7 @@
  * surface: llms.txt, llms-full.txt, agents.md and the in-page agent view.
  * Rebranding the site (editing landing.ts) keeps all of these in sync.
  */
-import { site, hero, features, getStarted, faq, compatibility, connect, comparison, pricing, agentGuide } from "../config/landing";
+import { site, hero, features, getStarted, faq, compatibility, connect, comparison, pricing, pricingAxes, agentGuide } from "../config/landing";
 
 /** Strip a trailing slash so we can safely append paths. */
 function trimSlash(url: string): string {
@@ -342,6 +342,7 @@ export function buildPricingMd(origin: string): string {
       return (
         `## ${t.name}${t.featured ? " (recommended)" : ""}\n\n` +
         `- Price: ${price}\n` +
+        (t.note ? `- Terms: ${t.note}\n` : "") +
         `- Summary: ${t.description}\n\n` +
         `Includes:\n${featureLines}`
       );
@@ -359,15 +360,27 @@ export function buildPricingMd(origin: string): string {
 
 ${tierBlock}
 
+## How the tiers are drawn
+
+${pricing.principle}
+
+${pricingAxes.items
+  .map((a) => `- **${a.name}** (${a.tier}) - free: ${a.free} Paid: ${a.paid}`)
+  .join("\n")}
+
 ## Notes
 
 - Licensing model: ${site.name} is open source under the **MIT license** - free
-  to use, modify, and self-host. Commercial / OEM licensing is available on the
-  Team tier.
+  to use, modify, and self-host. Every feature listed here is available when
+  self-hosting; entitlement checks are disabled by default in the source.
 - Setup cost: **none.** Self-hosting has no license or setup fee; the hosted
   tiers are paste-a-URL onboarding with no setup charge.
-- What paid tiers cover: managed hosting, monitoring, priority/dedicated
-  support, and team features (SSO, audit logs, SLA).
+- The free tier is not a trial and does not expire. No card is required.
+- **Data retention applies only to ${site.name}-generated memory** (triage
+  verdicts, summaries, document sessions) - never to the user's mail, which
+  stays in Gmail and is searchable in full on every tier, including free.
+- On downgrade or failed payment, read access is retained and stored memory is
+  frozen rather than deleted.
 
 Prices are denominated as shown above. For current, authoritative pricing
 always check ${site.url}.

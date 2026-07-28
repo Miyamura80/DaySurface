@@ -15,4 +15,5 @@ export * from "./hero";
 export * from "./nav";
 export * from "./get-started";
 export * from "./comparison";
+export * from "./pricing";
 export * from "./content";

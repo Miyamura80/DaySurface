@@ -2,7 +2,7 @@
  * Header nav, the primary/secondary CTAs, and the footer columns.
  */
 import { site } from "./site";
-import { pricing } from "./content";
+import { pricing } from "./pricing";
 
 export interface NavLink {
   label: string;
@@ -25,6 +25,7 @@ export const nav: {
     { label: "Features", href: "/#features" },
     { label: "How it works", href: "/#how-it-works" },
     { label: "Compare", href: "/compare" },
+    ...(pricing.enabled ? [{ label: "Pricing", href: "/pricing" }] : []),
     { label: "API", href: "/api" },
     { label: "Docs", href: site.docsUrl },
   ],
@@ -67,9 +68,8 @@ export const footer: { columns: FooterColumn[]; copyright: string } = {
         { label: "Features", href: "/#features" },
         { label: "How it works", href: "/#how-it-works" },
         { label: "Compare", href: "/compare" },
-        // The #pricing section only renders when pricing.enabled - don't link a dead anchor otherwise.
-        // Absolute (/#pricing) so it also resolves from sub-pages like /compare and /vs/*.
-        ...(pricing.enabled ? [{ label: "Pricing", href: "/#pricing" }] : []),
+        // The /pricing page only ships when pricing.enabled - don't link a dead route otherwise.
+        ...(pricing.enabled ? [{ label: "Pricing", href: "/pricing" }] : []),
       ],
     },
     {

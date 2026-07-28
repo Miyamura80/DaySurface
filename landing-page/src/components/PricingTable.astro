@@ -1,0 +1,96 @@
+---
+/**
+ * Full tier-by-tier feature matrix for /pricing.
+ *
+ * Columns are derived from `pricing.tiers`, so the table can never drift out of
+ * sync with the cards above it. Cell values are `true` (included), `false` (not
+ * included), or a string (a limit like "30 days" / "3 / month").
+ */
+import type { MatrixValue } from "../config/landing";
+import { pricing, pricingMatrix } from "../config/landing";
+
+const tiers = pricing.tiers;
+
+function isFeatured(i: number): boolean {
+  return Boolean(tiers[i]?.featured);
+}
+---
+
+<div class="overflow-x-auto">
+  <table class="w-full min-w-[720px] border-collapse text-left">
+    <caption class="sr-only">
+      DaySurface feature comparison across the {tiers.length} pricing tiers
+    </caption>
+    <thead>
+      <tr class="border-b-2 border-border">
+        <th scope="col" class="py-4 pr-4 align-bottom text-sm font-medium text-fg-muted">
+          Capability
+        </th>
+        {
+          tiers.map((t, i) => (
+            <th
+              scope="col"
+              class={`px-4 py-4 align-bottom text-sm ${
+                isFeatured(i)
+                  ? "border-x-2 border-accent bg-accent/10 font-bold text-fg"
+                  : "font-semibold text-fg-muted"
+              }`}
+            >
+              <div>{t.name}</div>
+              <div class="mt-1 text-xs font-normal text-fg-subtle">
+                {t.price}
+                {t.cadence}
+              </div>
+            </th>
+          ))
+        }
+      </tr>
+    </thead>
+    {
+      pricingMatrix.map((section) => (
+        <tbody>
+          <tr>
+            <th
+              scope="colgroup"
+              colspan={tiers.length + 1}
+              class="pt-10 pb-3 text-left text-xs font-bold tracking-widest text-accent uppercase"
+            >
+              {section.group}
+            </th>
+          </tr>
+          {section.rows.map((row) => (
+            <tr class="border-b border-border/60 align-top">
+              <th scope="row" class="py-4 pr-4 text-left font-normal">
+                <div class="font-medium text-fg">{row.capability}</div>
+                {row.detail && (
+                  <div class="mt-1 max-w-sm text-sm text-fg-muted">{row.detail}</div>
+                )}
+              </th>
+              {row.values.map((v: MatrixValue, i: number) => (
+                <td
+                  class={`px-4 py-4 ${
+                    isFeatured(i) ? "border-x-2 border-accent bg-accent/10" : ""
+                  }`}
+                >
+                  {v === true && (
+                    <span class="text-lg font-bold text-accent" aria-label="Included">
+                      ✓
+                    </span>
+                  )}
+                  {v === false && (
+                    <span class="text-lg font-bold text-fg-subtle" aria-label="Not included">
+                      –
+                    </span>
+                  )}
+                  {typeof v === "string" && (
+                    <span class="text-sm font-medium text-fg">{v}</span>
+                  )}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      ))
+    }
+  </table>
+</div>

@@ -1,6 +1,6 @@
 /**
- * Longer-form marketing content: agent guidance, testimonials, pricing, the
- * "Ask AI" launcher, the FAQ, and the final CTA.
+ * Longer-form marketing content: agent guidance, testimonials, the "Ask AI"
+ * launcher, the FAQ, and the final CTA. Pricing lives in ./pricing.ts.
  */
 import { site } from "./site";
 
@@ -19,17 +19,6 @@ export interface Testimonial {
 export interface FaqItem {
   q: string;
   a: string;
-}
-
-export interface PricingTier {
-  name: string;
-  price: string;
-  cadence?: string;
-  description: string;
-  features: string[];
-  cta: string;
-  href: string;
-  featured?: boolean;
 }
 
 /**
@@ -75,62 +64,6 @@ export const testimonials: { enabled: boolean; heading: string; items: Testimoni
       name: "Placeholder Name",
       title: "Founder, Placeholder AI",
       avatar: "/avatars/person-2.jpg",
-    },
-  ],
-};
-
-export const pricing: { enabled: boolean; heading: string; subhead: string; tiers: PricingTier[] } = {
-  // Surfaced on the homepage AND in the machine-readable /pricing.md manifest.
-  // Flip to false to hide the on-page section (the manifest still generates).
-  enabled: true,
-  heading: "Pricing & licensing",
-  subhead:
-    "Open source under the MIT license and free to self-host - no setup fee, no seat minimum. Pay only when you want us to run and scale it for you.",
-  tiers: [
-    {
-      name: "Open Source",
-      price: "$0",
-      cadence: "forever",
-      description:
-        "MIT-licensed. Self-host the full server on your own infrastructure - zero setup cost, no license fee.",
-      features: [
-        "MIT license - fork, modify, and ship freely",
-        "All three transports: CLI, MCP, HTTP API",
-        "Interactive MCP Apps (composer + ranked inbox)",
-        "Your own OAuth credentials & encrypted tokens",
-        "Community support",
-      ],
-      cta: "Get the source",
-      href: site.githubUrl,
-    },
-    {
-      name: "Hosted Pro",
-      price: "$20",
-      cadence: "/mo",
-      description:
-        "We run the streamable-HTTP server for you. No infrastructure to manage, paste-a-URL setup.",
-      features: [
-        "Managed cloud deployment (zero ops)",
-        "Hosted OAuth 2.1 & encrypted token storage",
-        "Usage analytics & monitoring",
-        "Priority support",
-      ],
-      cta: "Start free trial",
-      href: "/#how-it-works",
-      featured: true,
-    },
-    {
-      name: "Team",
-      price: "Custom",
-      description: "For teams running agents in production, with commercial licensing options.",
-      features: [
-        "SSO + audit logs",
-        "Commercial / OEM licensing",
-        "Uptime SLA",
-        "Dedicated support & onboarding",
-      ],
-      cta: "Contact sales",
-      href: "/#how-it-works",
     },
   ],
 };
