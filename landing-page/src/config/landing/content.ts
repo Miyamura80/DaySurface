@@ -154,8 +154,8 @@ export const askAi: {
   providers: AskAiProvider[];
 } = {
   heading: "Ask AI about this",
-  subhead: "Have your assistant explain the template, compare it, or walk you through deploying it.",
-  prompt: `What is the ${site.name} MCP server template? Explain what it does, how the CLI / MCP / HTTP transports share one codebase, and how I'd deploy it. Repo: ${site.githubUrl}`,
+  subhead: "Have your assistant explain what it does, how it compares, and how to connect it.",
+  prompt: `What is ${site.name}? It is an MCP server for Gmail that lets an AI assistant triage a ranked inbox, draft replies in a real composer, and fill and sign PDF attachments - all inside Claude, ChatGPT, or any MCP client. Explain what it can do, how it compares to other Gmail MCP servers, and how I would connect it. Site: ${site.url} - source: ${site.githubUrl}`,
   providers: [
     { id: "chatgpt", name: "ChatGPT", logo: "/logos/chatgpt.svg", url: "https://chatgpt.com/?q={q}" },
     { id: "perplexity", name: "Perplexity", logo: "/logos/perplexity.svg", url: "https://www.perplexity.ai/search?q={q}" },
@@ -167,36 +167,32 @@ export const faq: { heading: string; items: FaqItem[] } = {
   heading: "Frequently asked questions",
   items: [
     {
-      q: "Which MCP clients are supported?",
-      a: "Any client that speaks the Model Context Protocol: Claude Desktop, Claude Code, Cursor, Cline, VS Code, Windsurf, and more. The server exposes a standard tool/resource surface.",
+      q: "What can it actually do with my email?",
+      a: "Rank your inbox by what needs attention, search and read threads, draft and send replies in a real composer, manage labels, archive, handle attachments, and fill and sign PDF attachments without leaving the chat. 34 tools in total, all through the official Gmail API.",
     },
     {
-      q: "stdio or streamable HTTP?",
-      a: "Both. Streamable HTTP is the primary transport (mounted at /mcp alongside the HTTP API in one process), and stdio is available for local/dev use.",
+      q: "Can it send email without me?",
+      a: "The tools are built so replies land in a composer you review and edit first - your agent writes, you press send. Signing is stronger still: the assistant can fill a PDF's fields, but the signature itself is a step only you can complete by typing your own name. It cannot sign on your behalf.",
     },
     {
-      q: "How does authentication work?",
-      a: "The MCP mount supports OAuth 2.1 as a resource server, sharing auth and CORS with the HTTP API. You can also run it unauthenticated for local development.",
+      q: "Do you read or train on my email?",
+      a: "No. Your email is never sent to an AI model by us - DaySurface runs no LLM inference on Gmail content, and the inbox ranking is deterministic code, not a model. Mail goes only to the AI client you chose and connected, under that client's own terms. Access uses Google's gmail.modify scope; see the privacy policy for the full detail.",
     },
     {
       q: "Do I need to install anything to use it?",
-      a: "No. Because the server runs over streamable HTTP, connecting is just pasting its URL into your agent client. No local install, runtime, or download required. (Self-hosting the server is a separate, optional step.)",
+      a: "No. The server runs over streamable HTTP, so connecting is just adding its URL to your client - one click in Claude, Cursor, VS Code, and Goose. No local install, runtime, or download. (Self-hosting is a separate, optional step.)",
+    },
+    {
+      q: "Which clients does it work with?",
+      a: "Anything that speaks the Model Context Protocol: Claude, ChatGPT, Claude Code, Cursor, VS Code, Goose, Cline, Zed, Windsurf, and more. Pick yours in the connect box above - some get a one-click install link, the rest take a pasted URL or a setup prompt.",
     },
     {
       q: "Does it work on mobile?",
-      a: "Yes, anywhere your agent runs. Since it's a remote HTTP server with nothing to install locally, it works in any agent app that has a mobile app, including the Claude and ChatGPT mobile apps.",
+      a: "Yes, anywhere your agent runs. It's a remote server with nothing to install locally, so it works in any agent app with a mobile client, including the Claude and ChatGPT mobile apps.",
     },
     {
       q: "Can I self-host?",
-      a: "Yes. The whole thing is open source and ships with a Dockerfile and Railway config. Deploy it anywhere that runs a container.",
-    },
-    {
-      q: "What about my existing CLI / API?",
-      a: "They share the same service registry. Add a tool once and it's available over CLI, MCP, and HTTP simultaneously, with no duplicated logic.",
-    },
-    {
-      q: "Is there an /ask (NLWeb) endpoint?",
-      a: "Yes. There's a public, NLWeb-conformant /ask endpoint for natural-language questions answered from the docs (server-side Q&A with SSE streaming). It's distinct from the /mcp action-tool surface, which exposes callable tools. /ask is disabled by default in the template; enable it via config (ask.enabled: true).",
+      a: "Yes. The whole thing is open source and ships with a Dockerfile and Railway config, so you can run it on your own infrastructure with your own Google OAuth credentials. Deploy it anywhere that runs a container.",
     },
     {
       q: "Is this just another Gmail API wrapper?",
@@ -210,13 +206,14 @@ export const faq: { heading: string; items: FaqItem[] } = {
 };
 
 export const finalCta: { heading: string; subhead: string; features: string[] } = {
-  heading: "Ship your MCP server today.",
-  subhead: "Clone the template, deploy it, and point your agent at the URL.",
+  heading: "Put your inbox in your chat.",
+  subhead: "Pick your client, add the server, and your agent can start triaging today.",
   // Four flagship features, 3–4 words each, shown beside the final CTA.
+  // End-user outcomes, not architecture - the transports story lives on /api.
   features: [
-    "Three transports, one codebase",
-    "Headless or interactive tools",
-    "Streamable HTTP, one port",
+    "Ranked inbox triage",
+    "Drafts you edit, not approve",
+    "Fill and sign PDFs in-thread",
     "Open source, self-hostable",
   ],
 };
