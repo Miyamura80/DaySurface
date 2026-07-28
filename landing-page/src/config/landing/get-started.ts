@@ -269,9 +269,9 @@ export const connect: {
       name: "Claude",
       logo: "/logos/claude.svg",
       method: "deeplink",
-      note: "Opens Claude with the connector dialog pre-filled - you still confirm. Works in Claude web and Desktop; on Team and Enterprise plans an admin adds it.",
-      // Fallback, rendered under the button: the deep-link format is not
-      // verified against Anthropic's own docs (see utils/deeplink.ts).
+      note: "Opens the “Add custom connector” dialog in Claude. Paste the URL above into “Remote MCP server URL”, name it, and click Add. On Team and Enterprise plans an admin adds it.",
+      // Fallback for anyone the deep link drops on the wrong screen (e.g.
+      // signed out, or a client that strips the hash fragment).
       steps: [
         "Open Claude → Settings → Connectors",
         "Click “Add custom connector”",

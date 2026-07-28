@@ -9,30 +9,22 @@
  * ChatGPT has no install URL scheme at all - it is paste-the-URL only, and
  * additionally requires Developer mode. Do not invent one.
  */
-export function deepLink(
-  id: string,
-  mcpUrl: string,
-  serverName: string,
-  displayName = serverName,
-): string | null {
+export function deepLink(id: string, mcpUrl: string, serverName: string): string | null {
   switch (id) {
     case "claude": {
-      // https://claude.ai/customize/connectors?modal=add-custom-connector&connectorName=&connectorUrl=
-      // Pre-fills the "Add custom connector" dialog; the user still confirms
-      // (Claude shows a "values came from an external link" notice).
+      // https://claude.ai/new?modal=add-custom-connector#settings/customize-connectors
       //
-      // NOT directly verified against Anthropic's docs - support.claude.com and
-      // claude.com/docs both 403 from CI, so this format comes from secondary
-      // sources. The `/customize/connectors` path itself IS corroborated by
-      // code.claude.com/docs/en/mcp. The Claude panel therefore also renders the
-      // manual click-path as a fallback; keep those steps in place unless and
-      // until someone click-tests this link.
-      const params = new URLSearchParams({
-        modal: "add-custom-connector",
-        connectorName: displayName,
-        connectorUrl: mcpUrl,
-      });
-      return `https://claude.ai/customize/connectors?${params.toString()}`;
+      // Click-tested: lands on Connectors with the "Add custom connector"
+      // dialog already open. It does NOT pre-fill - Name and "Remote MCP
+      // server URL" both come up empty - so the copyable URL above the picker
+      // is load-bearing here, not decorative, and the panel says to paste it.
+      //
+      // Note the shape: the modal flag is a QUERY param and the route is a
+      // HASH fragment, so the query has to come before the `#`. An earlier
+      // guess at /customize/connectors?connectorName=&connectorUrl= was wrong
+      // on both the path and the prefill; don't reintroduce it without a
+      // fresh click-test.
+      return "https://claude.ai/new?modal=add-custom-connector#settings/customize-connectors";
     }
     case "cursor": {
       // cursor://anysphere.cursor-deeplink/mcp/install?name=&config=<base64({url})>
