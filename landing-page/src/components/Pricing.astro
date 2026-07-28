@@ -1,5 +1,5 @@
 ---
-import { pricing } from "../config/landing";
+import { pricing, site } from "../config/landing";
 ---
 
 {
@@ -71,6 +71,13 @@ import { pricing } from "../config/landing";
         </div>
 
         <p class="mt-10 text-center text-sm text-fg-muted">
+          Open source and MIT-licensed:
+          <a href={site.githubUrl} class="text-accent underline-offset-4 hover:underline">
+            self-host every feature
+          </a>
+          for nothing.
+        </p>
+        <p class="mt-2 text-center text-sm text-fg-muted">
           <a href="/pricing" class="text-accent underline-offset-4 hover:underline">
             Compare every feature across all tiers &rarr;
           </a>

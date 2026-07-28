@@ -17,6 +17,7 @@ import {
   pricingFaq,
   pricingJourney,
   alwaysFree,
+  selfHost,
 } from "../config/landing";
 
 const origin = (Astro.site ?? new URL(site.url)).origin;
@@ -108,16 +109,6 @@ const jsonLd = [
                     : "border border-border bg-surface-1"
                 }`}
               >
-                {/* Rendered (invisible) on every card so the tier names,
-                    prices, and CTAs stay on a shared baseline across the row. */}
-                <span
-                  aria-hidden={!tier.featured}
-                  class={`mb-3 self-start px-2 py-0.5 text-xs font-bold tracking-widest uppercase ${
-                    tier.featured ? "bg-accent text-accent-fg" : "invisible"
-                  }`}
-                >
-                  Most popular
-                </span>
                 <h2 class="text-lg font-semibold">{tier.name}</h2>
                 <div class="mt-4 flex items-baseline gap-1">
                   <span class="text-4xl font-bold">{tier.price}</span>
@@ -163,13 +154,61 @@ const jsonLd = [
           }
         </div>
 
-        <p class="mt-8 text-center text-sm text-fg-subtle">
-          Self-hosting is free on every tier.
-          <a href={site.githubUrl} class="text-accent underline-offset-4 hover:underline">
-            Clone the repo
-          </a>
-          and run the lot on your own infrastructure, MIT-licensed, no feature flags removed.
-        </p>
+      </div>
+    </section>
+
+    <!-- Self-hosting: a real option, not small print under the paid ladder -->
+    <section class="border-b border-border/60 py-20">
+      <div class="mx-auto max-w-6xl px-6">
+        <div class="grid gap-10 border-2 border-border bg-surface-1 p-8 md:grid-cols-2 sm:p-10">
+          <div>
+            <span class="font-mono text-xs tracking-widest text-accent uppercase">
+              {selfHost.eyebrow}
+            </span>
+            <h2 class="mt-4 text-2xl font-bold tracking-tight text-balance sm:text-3xl">
+              {selfHost.heading}
+            </h2>
+            <p class="mt-4 text-pretty text-fg-muted">{selfHost.body}</p>
+
+            <div class="mt-8 flex flex-wrap gap-3">
+              <a
+                href={selfHost.cta.href}
+                class="inline-flex items-center gap-2 bg-accent px-5 py-2.5 font-semibold text-accent-fg transition hover:bg-accent-strong"
+              >
+                <img src="/logos/github.svg" alt="" class="size-4" />
+                {selfHost.cta.label}
+              </a>
+              <a
+                href={selfHost.secondary.href}
+                class="border-2 border-border px-5 py-2.5 font-semibold text-fg transition hover:border-accent hover:text-accent"
+              >
+                {selfHost.secondary.label}
+              </a>
+            </div>
+          </div>
+
+          <ul class="space-y-4 md:border-l md:border-border/60 md:pl-10">
+            {
+              selfHost.points.map((point) => (
+                <li class="flex items-start gap-3">
+                  <svg
+                    class="mt-0.5 size-4 shrink-0 text-accent"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M20 6L9 17l-5-5" />
+                  </svg>
+                  <span class="text-pretty text-fg">{point}</span>
+                </li>
+              ))
+            }
+          </ul>
+        </div>
       </div>
     </section>
 

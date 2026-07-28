@@ -21,6 +21,12 @@ export interface PricingTier {
   features: string[];
   cta: string;
   href: string;
+  /**
+   * Visual emphasis only (accent border on the card, highlighted column in the
+   * matrix). Deliberately NOT a "most popular" badge: we are not going to
+   * invent social proof, and an unverifiable popularity claim is exactly the
+   * kind of thing this audience notices.
+   */
   featured?: boolean;
   /** Small print under the price (seat minimums, billing notes). */
   note?: string;
@@ -39,7 +45,7 @@ export const pricing: {
   enabled: true,
   heading: "Pricing",
   subhead:
-    "The full Gmail experience is free forever, and always will be. You pay when DaySurface starts working while you are not watching, or when your whole team needs it.",
+    "The full Gmail experience is free forever, and always will be. You pay when DaySurface starts working while you are not watching, or when your whole team needs it. Or self-host the whole thing, every feature, for nothing.",
   principle: "Interactive is free. Autonomous is paid. Organisational is Business.",
   tiers: [
     {
@@ -117,6 +123,33 @@ export const pricing: {
       href: "/#how-it-works",
     },
   ],
+};
+
+/**
+ * Self-hosting: the genuinely free option, on its own terms rather than as
+ * small print under the hosted ladder. Everything on this page ships in the
+ * MIT repo, and entitlement enforcement is off by default in the source, so a
+ * self-hoster is not on "the free tier" - they have the whole product.
+ */
+export const selfHost: {
+  eyebrow: string;
+  heading: string;
+  body: string;
+  points: string[];
+  cta: { label: string; href: string };
+  secondary: { label: string; href: string };
+} = {
+  eyebrow: "Open source",
+  heading: "Or run the whole thing yourself, for nothing",
+  body: `${site.name} is MIT-licensed. Every feature on this page - Follow-up Manager, unlimited memory, SSO, the lot - is in the repo, and the entitlement checks that draw the tiers above are disabled by default in the source. Self-hosting is not a limited edition of the product. It is the product.`,
+  points: [
+    "No licence fee, no seat count, no feature flags removed",
+    "Ships with a Dockerfile and Railway config",
+    "Your mail never touches our servers",
+    "Fork it, audit it, or take it in-house permanently",
+  ],
+  cta: { label: "Get the source", href: site.githubUrl },
+  secondary: { label: "Read the deploy guide", href: site.docsUrl },
 };
 
 /**

@@ -5,7 +5,7 @@
  * surface: llms.txt, llms-full.txt, agents.md and the in-page agent view.
  * Rebranding the site (editing landing.ts) keeps all of these in sync.
  */
-import { site, hero, features, getStarted, faq, compatibility, connect, comparison, pricing, pricingAxes, agentGuide } from "../config/landing";
+import { site, hero, features, getStarted, faq, compatibility, connect, comparison, pricing, pricingAxes, selfHost, agentGuide } from "../config/landing";
 
 /** Strip a trailing slash so we can safely append paths. */
 function trimSlash(url: string): string {
@@ -367,6 +367,15 @@ ${pricing.principle}
 ${pricingAxes.items
   .map((a) => `- **${a.name}** (${a.tier}) - free: ${a.free} Paid: ${a.paid}`)
   .join("\n")}
+
+## Self-hosted (open source)
+
+- Price: **$0**, no licence fee, no seat count.
+- Summary: ${selfHost.body}
+
+Includes:
+${selfHost.points.map((pt) => `- ${pt}`).join("\n")}
+- Source: ${site.githubUrl}
 
 ## Notes
 
