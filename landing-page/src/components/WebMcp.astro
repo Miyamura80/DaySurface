@@ -103,12 +103,18 @@ const payloadJson = JSON.stringify(payload).replace(/</g, "\\u003c");
       docsUrl: string;
       githubUrl: string;
       description: string;
+      // Hand-written mirror of the `payload` object above - an inline script is
+      // a separate context, so it cannot import InstallTarget. Keep the two in
+      // step: this cast still said "deeplink" | "manual" after the config gained
+      // a third method, and nothing caught it until a consumer touched it.
       clients: {
         id: string;
         name: string;
-        method: "deeplink" | "manual";
+        method: "deeplink" | "manual" | "prompt";
         install_url: string | null;
         steps: string[] | null;
+        setup_prompt: string | null;
+        setup_kind: "prompt" | "command" | null;
         note: string | null;
       }[];
       faqs: { q: string; a: string }[];
