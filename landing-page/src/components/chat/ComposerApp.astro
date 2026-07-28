@@ -21,6 +21,19 @@
  * loop restarts. Reduced-motion users never see it (ConvoScroll hides the
  * followup region entirely).
  */
+interface Props {
+  /*
+   * Standalone use (the features panel) rather than inside ConvoScroll. The
+   * serve-in animation below is timed to the hero's shared 15s loop and keeps
+   * the card invisible for its first ~54%, which is right when it's being
+   * scrolled into view - and wrong anywhere else, where it would just read as
+   * a card that's blank most of the time. Standalone shows it outright and
+   * pulses the "Draft ready" dot instead.
+   */
+  standalone?: boolean;
+}
+const { standalone = false } = Astro.props;
+
 const draftBody = `Hi Dana, thanks for the quick turnaround. I've reviewed page 4 and signed; the countersignature is attached.
 
 One flag before we file: the renewal date in §3.2 currently reads Sep 1, but per our SOW it should be Oct 1. Everything else looks right to me.
@@ -32,7 +45,10 @@ Alex`;
 ---
 
 <div
-  class="composer-app h-[276px] w-full max-w-[460px] overflow-hidden rounded-lg border border-black/10 bg-white text-[#202124] shadow-sm"
+  class:list={[
+    "composer-app h-[276px] w-full max-w-[460px] overflow-hidden rounded-lg border border-black/10 bg-white text-[#202124] shadow-sm",
+    standalone && "composer-standalone",
+  ]}
   style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif"
 >
   <div class="flex h-full flex-col">
@@ -40,7 +56,7 @@ Alex`;
       <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg>
       Inbox
       <span class="ml-auto inline-flex items-center gap-1 rounded-full bg-[#e6f4ea] px-2 py-0.5 text-[10px] font-semibold text-[#137333]">
-        <span class="size-1.5 rounded-full bg-[#137333]"></span>
+        <span class="ready-dot size-1.5 rounded-full bg-[#137333]"></span>
         Draft ready
       </span>
     </div>
@@ -93,11 +109,30 @@ Alex`;
     94%, 100% { opacity: 0; transform: translateY(6px) scale(0.99); }
   }
 
+  /* Standalone (features panel): no serve-in - there's no scroll bringing it
+     into view, so it just needs to be there. Declared after .composer-app so
+     it wins at equal specificity. */
+  .composer-standalone {
+    opacity: 1;
+    transform: none;
+    animation: none;
+  }
+  /* Only the standalone card pulses; inside the hero the whole card is already
+     animating in and a second beat would fight it. */
+  .composer-standalone .ready-dot {
+    animation: ready-pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes ready-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.25; }
+  }
+
   /* real editable draft: scrolls internally, accepts a text caret on focus */
   .compose-body { font-family: inherit; }
   .compose-body::placeholder { color: #9aa0a6; }
 
   @media (prefers-reduced-motion: reduce) {
     .composer-app { animation: none; opacity: 1; transform: none; }
+    .ready-dot { animation: none; }
   }
 </style>

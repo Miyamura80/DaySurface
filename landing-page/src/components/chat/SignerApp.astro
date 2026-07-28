@@ -1,0 +1,299 @@
+---
+/*
+ * The MCP UI App (pdf_signer) rendered inside the chat - the human half of the
+ * signing ceremony.
+ *
+ * A faithful reproduction of the REAL App at
+ * `mcp_server/apps/pdf_signer/src/Signer.tsx` (+ its inline `styles.ts`), in
+ * the same spirit as InboxApp/ComposerApp: a sandboxed MCP App ships its own
+ * neutral UI so it renders identically in any host, which is why this carries
+ * the app's own light chrome rather than the site's Hackbox brand. Colors,
+ * copy and control order are lifted from the real app - the amber "Awaiting
+ * your signature" pill, the dashed #d97706 "Sign here" stamp highlight, the
+ * cursive name input, the consent line, and the #0b57d0 Sign button.
+ *
+ * The real app is driven by the user; here we run the ceremony on a CSS loop
+ * (no JS), on the same 15s timeline the hero mocks use:
+ *
+ *   0-15%   review - the pages scroller sits at the top of the document.
+ *   15-22%  scroll down to the signature block, "Sign here" highlighted.
+ *   22-34%  the full legal name types itself into the cursive field.
+ *   38-44%  the consent box ticks; the Sign button leaves its disabled state.
+ *   52-60%  "Signing…" - pdf_signer.sign is in flight.
+ *   62-92%  signed: green badge, the highlight clears, the signature is
+ *           stamped in place, and the ceremony footer is replaced by the
+ *           outcome - the signed copy going back onto the Gmail draft.
+ *
+ * The one thing the loop deliberately cannot show is the model doing any of
+ * it: the ceremony is user-only by construction (Signer.tsx), which is the
+ * whole point of the feature this illustrates.
+ *
+ * Reduced-motion users get the static review state. Decorative; sample content.
+ */
+
+// Body lines of the mock page, as [width, muted] - just enough texture to read
+// as a contract without inviting anyone to squint at it.
+const pageLines: [string, boolean][] = [
+  ["100%", true],
+  ["92%", true],
+  ["96%", true],
+  ["70%", true],
+  ["100%", true],
+  ["88%", true],
+  ["94%", true],
+  ["61%", true],
+];
+---
+
+<div
+  class="signer-app h-[372px] w-full max-w-[460px] overflow-hidden rounded-lg border border-black/10 bg-[#f5f5f5] text-[#1f1f1f] shadow-sm sm:h-[340px]"
+  style="font-family:system-ui,-apple-system,sans-serif"
+>
+  <div class="flex h-full flex-col">
+    <!-- header: filename + the phase badge (pending -> signed) -->
+    <div
+      class="flex shrink-0 items-center justify-between gap-3 border-b border-[#e0e0e0] bg-white px-4 py-2.5"
+    >
+      <span class="whitespace-nowrap text-[14px] font-semibold">terms-v3.pdf</span>
+      <!-- the badge itself is absolute (the two phases cross-fade in place), so
+           this holder is what reserves room for it beside the filename -->
+      <span class="relative flex h-[22px] min-w-[164px] shrink-0 justify-end sm:min-w-[170px]">
+        <span
+          class="badge-pending absolute right-0 whitespace-nowrap rounded-full border border-[#f0d48a] bg-[#fff3d6] px-2.5 py-[3px] text-[12px] leading-none text-[#8a5a00]"
+          style="padding-top:4px;padding-bottom:4px">Awaiting your signature</span
+        >
+        <span
+          class="badge-signed absolute right-0 whitespace-nowrap rounded-full border border-[#b7dfc0] bg-[#e6f4ea] px-2.5 py-[3px] text-[12px] leading-none text-[#0d652d]"
+          style="padding-top:4px;padding-bottom:4px">✓ Signed by Alex Rivera</span
+        >
+      </span>
+    </div>
+
+    <!-- pages scroller: every page renders into one column; we clip to it and
+         scroll down to the stamp placement, as a reviewing user would -->
+    <div class="relative flex-1 overflow-hidden px-4 py-3">
+      <div class="pages-scroll flex flex-col items-center">
+        <div
+          class="relative w-[150px] shrink-0 bg-white shadow-[0_1px_4px_rgba(0,0,0,0.2)]"
+          style="height:194px"
+        >
+          <div class="flex flex-col gap-[6px] px-3 pt-3">
+            <span class="h-[6px] w-[62%] rounded-[1px] bg-[#c9ccd1]"></span>
+            <span class="mb-[2px] h-[3px] w-[34%] rounded-[1px] bg-[#dfe1e5]"></span>
+            {
+              pageLines.map(([w]) => (
+                <span class="h-[3px] rounded-[1px] bg-[#e8eaed]" style={`width:${w}`} />
+              ))
+            }
+          </div>
+
+          <!-- signature block near the foot of the page -->
+          <div class="absolute right-3 left-3" style="bottom:22px">
+            <span
+              class="block text-[6px] font-semibold tracking-[0.08em] text-[#9aa0a6] uppercase"
+              >Signature</span
+            >
+            <div class="relative mt-[3px] h-[24px]">
+              <span
+                class="stamp-highlight absolute inset-0 rounded-[4px] border-2 border-dashed border-[#d97706]"
+                style="background:rgba(251,191,36,0.15)"
+              >
+                <!-- right-aligned so it clears the field's own "Signature"
+                     caption, which sits at the same height on the left -->
+                <span
+                  class="absolute top-[-13px] right-0 rounded-[3px] bg-[#fde68a] px-[4px] py-[1px] text-[7px] leading-[1.4] font-semibold text-[#92400e]"
+                  >Sign here</span
+                >
+              </span>
+              <span
+                class="stamp-ink absolute top-[2px] left-[6px] text-[13px] text-[#1f1f1f]"
+                style="font-family:'Segoe Script','Bradley Hand',cursive">Alex Rivera</span
+              >
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ceremony (review) and the signed outcome occupy the same fixed block,
+         so the swap at 62% doesn't reflow the card -->
+    <!-- taller below sm: the consent line wraps to two at phone width, and both
+         layers are absolute so the block can't grow to absorb it -->
+    <div class="relative h-[190px] shrink-0 border-t border-[#e0e0e0] bg-white sm:h-[158px]">
+      <div class="ceremony absolute inset-0 flex flex-col gap-2 px-4 py-3">
+        <span class="text-[12px] font-semibold text-[#444]">Sign as (full legal name)</span>
+        <div class="flex h-[38px] items-center rounded-md border border-[#dadce0] px-2.5">
+          <span
+            class="typed-name inline-block overflow-hidden align-bottom text-[16px] whitespace-nowrap"
+            style="font-family:'Segoe Script','Bradley Hand',cursive">Alex Rivera</span
+          >
+        </div>
+        <span class="flex items-start gap-2 text-[13px] leading-snug text-[#333]">
+          <span
+            class="consent-box mt-[2px] grid size-[14px] shrink-0 place-items-center rounded-[3px] border border-[#5f6368] bg-white"
+          >
+            <svg
+              class="consent-tick size-[10px] text-[#0b57d0]"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="3.5"
+            >
+              <path d="M4 12.5l5.5 5.5L20 6.5" stroke-linecap="round" stroke-linejoin="round"
+              ></path>
+            </svg>
+          </span>
+          I agree that typing my name constitutes my electronic signature.
+        </span>
+        <div class="flex justify-end gap-2">
+          <span class="rounded-md border border-[#dadce0] px-4 py-2 text-[14px] text-[#1f1f1f]"
+            >Cancel</span
+          >
+          <span
+            class="sign-btn relative grid h-[36px] min-w-[132px] place-items-center rounded-md bg-[#0b57d0] px-5 text-[14px] font-semibold text-white"
+          >
+            <span class="label-sign absolute">Sign document</span>
+            <span class="label-signing absolute">Signing…</span>
+          </span>
+        </div>
+      </div>
+
+      <div
+        class="signed-footer absolute inset-0 flex flex-col justify-center gap-1.5 px-4 py-3 text-[13px]"
+      >
+        <span class="text-[#0d652d]">✓ Signed by Alex Rivera · 2026-07-28 14:22 UTC</span>
+        <span class="text-[#5f6368]">Signed copy attached to your Gmail draft.</span>
+        <span class="mt-1 text-[11px] text-[#9aa0a6]"
+          >The assistant filled the fields. Only you could sign.</span
+        >
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  /* ---- pages scroller: hold at the top, then scroll to the stamp ---- */
+  .pages-scroll {
+    animation: signer-scroll 15s ease-in-out infinite;
+  }
+  @keyframes signer-scroll {
+    0%, 15% { transform: translateY(0); }
+    22%, 92% { transform: translateY(-79px); }
+    97%, 100% { transform: translateY(0); }
+  }
+
+  /* ---- header badge: awaiting -> signed ---- */
+  .badge-pending { animation: badge-pending 15s ease-in-out infinite; }
+  .badge-signed { opacity: 0; animation: badge-signed 15s ease-in-out infinite; }
+  @keyframes badge-pending {
+    0%, 58% { opacity: 1; }
+    62%, 92% { opacity: 0; }
+    96%, 100% { opacity: 1; }
+  }
+  @keyframes badge-signed {
+    0%, 58% { opacity: 0; }
+    62%, 92% { opacity: 1; }
+    96%, 100% { opacity: 0; }
+  }
+
+  /* ---- the stamp: dashed placement highlight clears, the ink lands ---- */
+  .stamp-highlight { animation: highlight-out 15s ease-in-out infinite; }
+  .stamp-ink { opacity: 0; animation: ink-in 15s ease-in-out infinite; }
+  @keyframes highlight-out {
+    0%, 58% { opacity: 1; }
+    62%, 92% { opacity: 0; }
+    96%, 100% { opacity: 1; }
+  }
+  @keyframes ink-in {
+    0%, 58% { opacity: 0; }
+    64%, 92% { opacity: 1; }
+    96%, 100% { opacity: 0; }
+  }
+
+  /* ---- the name types itself into the cursive field ---- */
+  /* The caret is this element's own right border, so it sits exactly at the
+     clip edge - i.e. at the end of the revealed text - without depending on
+     how wide the host's cursive fallback renders the name. The end width only
+     has to be >= the rendered text; over-wide just shows the full name. */
+  .typed-name {
+    width: 0;
+    border-right: 1px solid transparent;
+    animation: type-name 15s ease-in-out infinite;
+  }
+  /* The caret only shows while the clip edge is still crossing the text; once
+     the width overshoots the rendered name it would sit in empty space, so it
+     goes out exactly when typing lands. */
+  @keyframes type-name {
+    0%, 22% { width: 0; border-right-color: transparent; }
+    23% { width: 8px; border-right-color: #1f1f1f; }
+    33% { width: 108px; border-right-color: #1f1f1f; }
+    34%, 92% { width: 120px; border-right-color: transparent; }
+    96%, 100% { width: 0; border-right-color: transparent; }
+  }
+
+  /* ---- consent, then the Sign button leaves its disabled state ---- */
+  .consent-tick { opacity: 0; animation: tick-in 15s ease-in-out infinite; }
+  @keyframes tick-in {
+    0%, 38% { opacity: 0; }
+    44%, 92% { opacity: 1; }
+    96%, 100% { opacity: 0; }
+  }
+  /* mirrors `opacity: canSign ? 1 : 0.5` in Signer.tsx */
+  .sign-btn { opacity: 0.5; animation: sign-enable 15s ease-in-out infinite; }
+  @keyframes sign-enable {
+    0%, 42% { opacity: 0.5; }
+    48%, 92% { opacity: 1; }
+    96%, 100% { opacity: 0.5; }
+  }
+  .label-signing { opacity: 0; animation: label-signing 15s ease-in-out infinite; }
+  .label-sign { animation: label-sign 15s ease-in-out infinite; }
+  @keyframes label-signing {
+    0%, 50% { opacity: 0; }
+    54%, 60% { opacity: 1; }
+    62%, 100% { opacity: 0; }
+  }
+  @keyframes label-sign {
+    0%, 50% { opacity: 1; }
+    54%, 60% { opacity: 0; }
+    62%, 100% { opacity: 1; }
+  }
+
+  /* ---- ceremony -> outcome ---- */
+  .ceremony { animation: ceremony-out 15s ease-in-out infinite; }
+  .signed-footer { opacity: 0; animation: outcome-in 15s ease-in-out infinite; }
+  @keyframes ceremony-out {
+    0%, 58% { opacity: 1; }
+    62%, 92% { opacity: 0; }
+    96%, 100% { opacity: 1; }
+  }
+  @keyframes outcome-in {
+    0%, 58% { opacity: 0; }
+    62%, 92% { opacity: 1; }
+    96%, 100% { opacity: 0; }
+  }
+
+  /* Reduced motion: hold the review state - document scrolled to the stamp,
+     name field empty, Sign still disabled. No ceremony runs on its own. */
+  @media (prefers-reduced-motion: reduce) {
+    .pages-scroll,
+    .badge-pending,
+    .badge-signed,
+    .stamp-highlight,
+    .stamp-ink,
+    .typed-name,
+    .consent-tick,
+    .sign-btn,
+    .label-sign,
+    .label-signing,
+    .ceremony,
+    .signed-footer {
+      animation: none;
+    }
+    .pages-scroll { transform: translateY(-79px); }
+    .badge-signed,
+    .stamp-ink,
+    .consent-tick,
+    .label-signing,
+    .signed-footer { opacity: 0; }
+  }
+</style>

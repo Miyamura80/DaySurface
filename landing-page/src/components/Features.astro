@@ -54,8 +54,10 @@ import FeatureVisual from "./FeatureVisual.astro";
               data-active={i === 0 ? "true" : "false"}
               class="feature-step border-l-2 border-border py-10 pl-6 first:pt-0 lg:py-[16vh]"
             >
-              {/* inline visual on mobile only */}
-              <div class="mb-6 aspect-square w-full border-2 border-accent bg-surface-1 lg:hidden">
+              {/* inline visual on mobile only - height follows the app card
+                  (the tallest is 340px), since a square box at phone width is
+                  shorter than that and would clip the ceremony footer */}
+              <div class="mb-6 w-full border-2 border-accent bg-surface-1 lg:hidden">
                 <FeatureVisual name={feature.visual} />
               </div>
 
