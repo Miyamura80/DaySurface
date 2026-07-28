@@ -229,6 +229,28 @@ export interface InstallTarget {
   note?: string;
 }
 
+/**
+ * Paste-into-your-agent setup prompt for clients with no install URL scheme.
+ *
+ * Deliberately tells the agent to look up its OWN config shape rather than
+ * hardcoding one: every client spells this differently - VS Code nests under
+ * `servers`, Cursor and Cline under `mcpServers`, Zed under `context_servers`,
+ * and Windsurf wants `serverUrl` where everyone else wants `url`. A snippet
+ * copied between clients fails silently, so the prompt names the trap.
+ */
+const AGENT_SETUP_PROMPT = `Add a remote MCP server, then verify it connects.
+
+  Name:      ${site.serverName}
+  Endpoint:  ${site.mcpUrl}
+  Transport: streamable HTTP (remote, not stdio)
+  Auth:      OAuth in the browser, no key to paste
+
+Use THIS client's own config keys - they differ:
+VS Code "servers", Cursor/Cline "mcpServers",
+Zed "context_servers", Windsurf "serverUrl" not "url".
+Keep existing servers. Show me the diff, then say
+what to click to finish sign-in.`;
+
 export const connect: {
   mcpUrl: string;
   serverName: string;
@@ -238,8 +260,45 @@ export const connect: {
 } = {
   mcpUrl: site.mcpUrl,
   serverName: site.serverName,
-  defaultId: "cursor",
+  // Chat clients first - they are who the hero is written for. Editors and
+  // coding agents follow.
+  defaultId: "claude",
   targets: [
+    {
+      id: "claude",
+      name: "Claude",
+      logo: "/logos/claude.svg",
+      method: "deeplink",
+      note: "Opens Claude with the connector dialog pre-filled - you still confirm. Works in Claude web and Desktop; on Team and Enterprise plans an admin adds it.",
+      // Fallback, rendered under the button: the deep-link format is not
+      // verified against Anthropic's own docs (see utils/deeplink.ts).
+      steps: [
+        "Open Claude → Settings → Connectors",
+        "Click “Add custom connector”",
+        "Paste the URL above, then click Add and complete sign-in",
+      ],
+    },
+    {
+      id: "chatgpt",
+      name: "ChatGPT",
+      logo: "/logos/chatgpt.svg",
+      // ChatGPT has no install URL scheme - manual only.
+      method: "manual",
+      steps: [
+        "Settings → Connectors → Advanced: turn on Developer mode",
+        "Back on Connectors, click Create",
+        "Paste the URL above, name it, then click Create",
+        "Start a new chat so the tools menu refreshes",
+      ],
+    },
+    {
+      id: "claude-code",
+      name: "Claude Code",
+      logo: "/logos/cli.svg",
+      method: "prompt",
+      setupPrompt: `claude mcp add --transport http --scope user ${site.serverName} ${site.mcpUrl}`,
+      note: "Run it in your terminal, then /mcp in a session to sign in.",
+    },
     {
       id: "cursor",
       name: "Cursor",
@@ -252,7 +311,7 @@ export const connect: {
       name: "VS Code",
       logo: "/logos/vscode.svg",
       method: "deeplink",
-      note: "Opens VS Code and adds the server. Requires the GitHub Copilot / MCP support.",
+      note: "Opens VS Code and adds the server. Requires Copilot agent mode.",
     },
     {
       id: "goose",
@@ -262,26 +321,36 @@ export const connect: {
       note: "Opens Goose and adds the extension over streamable HTTP.",
     },
     {
-      id: "claude",
-      name: "Claude",
-      logo: "/logos/claude.svg",
-      method: "manual",
-      steps: [
-        "Open Claude → Settings → Connectors",
-        "Click “Add custom connector”",
-        "Paste the URL above, then click Add",
-      ],
+      id: "cline",
+      name: "Cline",
+      logo: "/logos/mcp.svg",
+      method: "prompt",
+      setupPrompt: AGENT_SETUP_PROMPT,
+      note: "Or add it by hand: MCP Servers → Remote Servers → Streamable HTTP.",
     },
     {
-      id: "chatgpt",
-      name: "ChatGPT",
-      logo: "/logos/chatgpt.svg",
-      method: "manual",
-      steps: [
-        "Settings → Connectors → Advanced: turn on Developer mode",
-        "Click Create",
-        "Paste the URL above, then click Create",
-      ],
+      id: "zed",
+      name: "Zed",
+      logo: "/logos/mcp.svg",
+      method: "prompt",
+      setupPrompt: AGENT_SETUP_PROMPT,
+      note: "Or add it by hand: Settings → AI → MCP Servers → Add Remote Server.",
+    },
+    {
+      id: "windsurf",
+      name: "Windsurf",
+      logo: "/logos/mcp.svg",
+      method: "prompt",
+      setupPrompt: AGENT_SETUP_PROMPT,
+      note: "Windsurf uses “serverUrl”, not “url” - a snippet copied from another client will fail silently.",
+    },
+    {
+      id: "other",
+      name: "Any MCP client",
+      logo: "/logos/mcp.svg",
+      method: "prompt",
+      setupPrompt: AGENT_SETUP_PROMPT,
+      note: "Anything that speaks MCP over streamable HTTP works - there is nothing to install.",
     },
   ],
 };
