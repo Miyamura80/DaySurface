@@ -52,6 +52,26 @@ CLOUD_SANDBOX_IGNORES = [
     # off the allowlist rather than grant standing egress for one convenience
     # link to an extension page.
     r"https?://marketplace\.visualstudio\.com(/|\?|$)",
+    # GitHub hosts user-writable, readable-back surfaces (gists, repo contents,
+    # issue bodies) - a textbook publish-then-read exfil channel. Skip in the
+    # sandbox rather than grant standing egress for repo links.
+    r"https?://(www\.)?github\.com(/|\?|$)",
+    # Package registry (publish-then-read), same reasoning as the MCP registry.
+    r"https?://docs\.pypi\.org(/|\?|$)",
+    # Platform apexes carrying APIs/webhooks well beyond the one doc link.
+    # (jules.googleapis.com is already listed above.)
+    r"https?://jules\.google(/|\?|$)",
+    r"https?://developers\.openai\.com(/|\?|$)",
+    # --- Static docs/blogs: read-only GETs, no exfil channel. --------------
+    # These are the one group that would be *better* served by the sandbox
+    # network allowlist ("Network access -> Custom" in the environment config),
+    # which would make them pass here AND in CI. They are listed here only so a
+    # cloud session can commit markdown at all. Move them to the allowlist and
+    # delete these four lines when convenient.
+    r"https?://(docs\.)?pydantic\.dev(/|\?|$)",
+    r"https?://(www\.)?fumadocs\.dev(/|\?|$)",
+    r"https?://(www\.)?mcpcat\.io(/|\?|$)",
+    r"https?://(www\.)?obsidiansecurity\.com(/|\?|$)",
 ]
 
 # Files whose external links are deliberately not checked inside the cloud

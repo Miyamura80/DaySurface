@@ -139,6 +139,10 @@ celerybeat.pid
 # Environments
 .env
 .prod.env
+# Local MCP client config - holds credential paths. Template: .mcp.json.example
+.mcp.json
+# Google Search Console service-account key (see manual_docs/google_search_console.md)
+gsc-service-account.json
 .venv
 env/
 venv/
