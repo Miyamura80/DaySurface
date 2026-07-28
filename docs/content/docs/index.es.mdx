@@ -1,58 +1,112 @@
 ---
-title: Inicio Rapido
-description: Comienza con MCP Template
+title: DaySurface
+description: Un servidor MCP para Gmail - clasifica tu bandeja de entrada, redacta respuestas en un compositor real y rellena y firma PDF adjuntos desde cualquier cliente MCP.
 ---
 
-MCP Template te ofrece tres formas de interactuar con el mismo conjunto de herramientas:
+import { Inbox, PenLine, FileSignature, Terminal, Bot, Globe, Rocket, Ship, Webhook } from 'lucide-react';
 
-- **CLI** - Ejecuta comandos en tu terminal
-- **MCP** - Conecta asistentes de IA como Claude directamente
-- **REST API** - Llama a endpoints por HTTP con autenticacion
+**Clasifica, redacta y firma sin salir del chat.** DaySurface pone una bandeja
+de entrada priorizada y un compositor de correo real dentro de Claude, ChatGPT o
+el agente que uses. Tu agente clasifica y escribe; tu editas y envias.
 
-Elige la interfaz que mejor se adapte a tu flujo de trabajo, o usa las tres.
-
-## Instalacion
-
-import { Step, Steps } from 'fumadocs-ui/components/steps';
-
-<Steps>
-<Step>
-
-### Instalar desde el codigo fuente
-
-```bash
-git clone https://github.com/Miyamura80/DaySurface.git
-cd DaySurface
-uv sync
-```
-
-</Step>
-<Step>
-
-### Verificar la instalacion
-
-```bash
-uv run daysurface --version
-uv run daysurface --help
-```
-
-</Step>
-<Step>
-
-### Probar un comando
-
-```bash
-uv run daysurface greet Alice
-# Hello, Alice!
-```
-
-</Step>
-</Steps>
-
-## Elige tu interfaz
+Se conecta por HTTP en streaming, asi que no hay nada que instalar: anades una
+URL a tu cliente y concedes acceso a Gmail una sola vez.
 
 <Cards>
-  <Card title="CLI" href="/docs/cli" />
-  <Card title="MCP Server" href="/docs/mcp" />
-  <Card title="REST API" href="/docs/api" />
+  <Card
+    icon={<Rocket />}
+    title="Inicio Rapido"
+    href="/docs/quickstart"
+    description="Conecta tu cliente y haz tu primera clasificacion en menos de un minuto."
+  />
 </Cards>
+
+## Que hace
+
+<Cards>
+  <Card
+    icon={<Inbox />}
+    title="Bandeja priorizada"
+    href="/docs/mcp/tools"
+    description="Ordena los hilos recientes por lo que necesita atencion. La clasificacion es codigo determinista, no un modelo."
+  />
+  <Card
+    icon={<PenLine />}
+    title="Borradores que editas"
+    href="/docs/mcp/tools"
+    description="Las respuestas llegan como borradores reales de Gmail en un compositor interactivo. Tu agente escribe; tu envias."
+  />
+  <Card
+    icon={<FileSignature />}
+    title="Rellena y firma PDF"
+    href="/docs/mcp/pdf-forms"
+    description="Rellena los campos de un PDF adjunto y recibelo para firmarlo: un paso que solo tu puedes completar."
+  />
+  <Card
+    icon={<Webhook />}
+    title="Notificaciones push"
+    href="/docs/gmail-webhooks"
+    description="Suscribe un endpoint HTTPS para recibir eventos firmados cuando llegue correo nuevo."
+  />
+</Cards>
+
+34 herramientas en total, todas a traves de la API oficial de Gmail. Consulta la
+[referencia de herramientas](/docs/mcp/tools).
+
+## Conectalo
+
+<Cards>
+  <Card
+    icon={<Bot />}
+    title="Servidor MCP"
+    href="/docs/mcp"
+    description="Anade el servidor a Claude, ChatGPT, Cursor, VS Code, Goose o cualquier cliente MCP."
+  />
+  <Card
+    icon={<Globe />}
+    title="API REST"
+    href="/docs/api"
+    description="Llama a las mismas herramientas como endpoints HTTP autenticados desde tu codigo."
+  />
+  <Card
+    icon={<Terminal />}
+    title="CLI"
+    href="/docs/cli"
+    description="Opera un despliegue propio desde tu terminal con el binario daysurface."
+  />
+</Cards>
+
+Cada herramienta es una funcion pura en un registro compartido expuesto por los
+tres transportes, asi que el comportamiento nunca diverge entre ellos.
+
+## Alojalo tu mismo
+
+<Cards>
+  <Card
+    icon={<Ship />}
+    title="Despliegue"
+    href="/docs/deployment"
+    description="Ejecuta el servidor completo en tu propia infraestructura con tus credenciales de Google OAuth."
+  />
+</Cards>
+
+## Privacidad
+
+Nosotros nunca enviamos tu correo a un modelo de IA. DaySurface no ejecuta
+inferencia de LLM sobre el contenido de Gmail, y la priorizacion de la bandeja es
+codigo determinista. El correo solo llega al cliente de IA que tu conectaste,
+bajo los terminos de ese cliente. El acceso usa el scope `gmail.modify` de
+Google: puede leer, etiquetar, redactar y enviar, pero no puede borrar tu correo
+de forma permanente.
+
+## Licencia y precios
+
+DaySurface es open source bajo la
+[licencia MIT](https://github.com/Miyamura80/DaySurface/blob/main/LICENSE): libre
+de usar, modificar y auto-alojar para siempre, **sin coste de instalacion ni de
+licencia**.
+
+Si prefieres no gestionarlo tu mismo, hay alojamiento gestionado (**Hosted Pro**,
+$20/mes) y planes **Team** con SSO, registros de auditoria, licencias
+comerciales/OEM y SLA de disponibilidad. El desglose completo esta en la
+[seccion de precios](https://daysurface.com/#pricing) del sitio del producto.

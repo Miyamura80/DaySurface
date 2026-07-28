@@ -1,30 +1,48 @@
 ---
 title: Overview
-description: Connect AI assistants to use your tools via MCP
+description: Connect Gmail to Claude, ChatGPT, or any MCP client
 ---
 
-The MCP server lets AI assistants call your tools directly. Set it up once and any MCP-compatible client can use all available tools without manual copy-pasting.
+The MCP server is how DaySurface gets into your chat. Once connected, your
+assistant can rank your inbox, read threads, draft and send replies in a real
+composer, and fill and sign PDF attachments - 34 tools, all through the official
+Gmail API.
 
-**Local clients** (Claude Code, Cursor, VS Code) spawn the server over **stdio** - no HTTP server or port configuration needed. **Cloud clients** (claude.ai, Cowork, ChatGPT) run in a vendor's cloud and connect to your deployed **streamable-HTTP** endpoint at `/mcp` as a remote connector.
+**Remote (recommended)** clients connect to the deployed **streamable-HTTP**
+endpoint at `/mcp` - nothing to install, one URL to add. **Local stdio** is
+supported for development against a checkout.
+
+```
+https://mcp.daysurface.com/mcp
+```
 
 ## Quick Start
 
-1. [Set up your client](/docs/mcp/setup) (Claude Desktop, Claude Code, Cursor, or VS Code)
-2. Browse the [available tools](/docs/mcp/tools)
-3. Ask your AI assistant to use them
+1. [Set up your client](/docs/mcp/setup) - one-click for Cursor, VS Code, and Goose; paste the URL for Claude and ChatGPT
+2. Connect Gmail with `gmail_connect` and approve the Google sign-in
+3. Ask for what you want: _"what needs my attention today?"_
+
+<Cards>
+  <Card title="Setup" href="/docs/mcp/setup" description="Per-client configuration, remote and stdio." />
+  <Card title="Tools" href="/docs/mcp/tools" description="All 34 tools and their parameters." />
+  <Card title="OAuth 2.1" href="/docs/mcp/oauth" description="Zero-provisioning connections from Claude and friends." />
+  <Card title="PDF Forms" href="/docs/mcp/pdf-forms" description="Fill and sign attachments in-thread." />
+  <Card title="Debugging" href="/docs/mcp/debugging" description="When a client will not connect or a tool misbehaves." />
+</Cards>
 
 ## Connect a cloud client
 
-Running in claude.ai, Cowork, or ChatGPT? Add your deployment as a remote
-connector:
+Running in claude.ai, Cowork, or ChatGPT? Add the server as a remote connector:
 
 <Cards>
   <Card title="Claude Web & Cowork" href="/docs/mcp/claude-web-cowork" />
   <Card title="ChatGPT" href="/docs/mcp/chatgpt" />
 </Cards>
 
-<Cards>
-  <Card title="Setup" href="/docs/mcp/setup" />
-  <Card title="Tools" href="/docs/mcp/tools" />
-  <Card title="Debugging" href="/docs/mcp/debugging" />
-</Cards>
+## Interactive apps
+
+Some tools render an MCP App - a sandboxed iframe UI - in clients that support
+it: the ranked inbox dashboard, the draft composer, the PDF signing surface, and
+the settings panel. In clients that do not, the same tools return plain
+structured output, so nothing breaks. The [tool reference](/docs/mcp/tools)
+marks which ones have a UI.

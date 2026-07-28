@@ -1,58 +1,92 @@
 ---
 title: Quick Start
-description: Install MCP Template and run your first command
+description: Connect DaySurface to your MCP client and run your first inbox triage
 ---
 
-MCP Template gives you three ways to interact with the same set of tools:
+There is nothing to install. DaySurface runs as a remote streamable-HTTP MCP
+server, so connecting is a matter of adding one URL to your client and granting
+Gmail access once.
 
-- **CLI** - Run commands in your terminal
-- **MCP** - Connect AI assistants like Claude directly
-- **REST API** - Call endpoints over HTTP with authentication
-
-Pick the interface that fits your workflow, or use all three.
-
-## Installation
+```
+https://mcp.daysurface.com/mcp
+```
 
 import { Step, Steps } from 'fumadocs-ui/components/steps';
 
 <Steps>
 <Step>
 
-### Install from source
+### Add the server to your client
+
+Cursor, VS Code, and Goose take a one-click install link from the
+[connect box](https://daysurface.com/#connect) on the product site. Claude and
+ChatGPT take the URL above pasted into their connector settings.
+
+Per-client click-paths - including local stdio for development - are in
+[MCP Setup](/docs/mcp/setup).
+
+</Step>
+<Step>
+
+### Connect your Gmail account
+
+Ask your assistant to connect Gmail, or call `gmail_connect` directly. It
+returns a Google sign-in link; approving it links the account to your session.
+
+Access uses Google's `gmail.modify` scope - read, label, draft, and send, but
+never a permanent delete. Call `gmail_status` to check the connection and
+`gmail_disconnect` to revoke it, which also erases the stored tokens.
+
+</Step>
+<Step>
+
+### Triage your inbox
+
+Ask for what you actually want:
+
+```text
+What needs my attention in my inbox today?
+```
+
+Your assistant calls `gmail_curate_inbox`, which ranks recent threads with a
+deterministic score and renders an inbox dashboard right in the chat.
+
+</Step>
+<Step>
+
+### Draft a reply
+
+```text
+Reply to Sarah's email about the contract - say we can meet Thursday.
+```
+
+The reply lands in a real Gmail draft in an interactive composer. Edit it there,
+then send. Your assistant never sends without you.
+
+</Step>
+</Steps>
+
+## Prefer to self-host?
+
+The whole server is open source and ships with a Dockerfile and Railway config.
+Run it on your own infrastructure with your own Google OAuth credentials:
 
 ```bash
 git clone https://github.com/Miyamura80/DaySurface.git
 cd DaySurface
 uv sync
+uv run daysurface-serve
 ```
 
-</Step>
-<Step>
-
-### Verify the installation
-
-```bash
-uv run daysurface --version
-uv run daysurface --help
-```
-
-</Step>
-<Step>
-
-### Try a command
-
-```bash
-uv run daysurface greet Alice
-# Hello, Alice!
-```
-
-</Step>
-</Steps>
+That single process serves both the REST API and the MCP endpoint at `/mcp`.
+See [Deployment](/docs/deployment) for hosting and
+[OAuth 2.1](/docs/mcp/oauth) for wiring up client authentication.
 
 ## Next steps
 
 <Cards>
-  <Card title="CLI" href="/docs/cli" />
-  <Card title="MCP Server" href="/docs/mcp" />
-  <Card title="REST API" href="/docs/api" />
+  <Card title="MCP Server" href="/docs/mcp" description="Client setup, tools, and debugging." />
+  <Card title="Tools" href="/docs/mcp/tools" description="All 34 tools and what they take." />
+  <Card title="PDF Forms" href="/docs/mcp/pdf-forms" description="Fill and sign PDF attachments in-thread." />
+  <Card title="REST API" href="/docs/api" description="Call the same tools over HTTP." />
 </Cards>

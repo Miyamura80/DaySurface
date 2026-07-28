@@ -1,67 +1,175 @@
 ---
 title: Tools
-description: Call tools via the REST API
+description: Call the Gmail, PDF, and webhook tools over the REST API
 ---
 
-All tools are available as POST endpoints. Requires the `services:execute` scope.
+Every tool in the [MCP surface](/docs/mcp/tools) is also a POST endpoint - same
+pure function, same input and output schemas, no behavioral drift between
+transports. Requires the `services:execute` scope.
 
 ```
 POST /api/v1/services/{tool_name}
 ```
 
-## greet
+`user_id` is filled in from the authenticated principal, so never send it in the
+body.
 
-Greet a user by name.
+<Callout type="info">
+Tools that change state (`gmail_compose`, `gmail_send`, `gmail_update_draft`,
+`gmail_archive_thread`, the `pdf_*` and `webhook_*` writers, and the rest of the
+mutating set) **require an `Idempotency-Key` header**. The response is replayed
+on retries with the same key, and the same key with a different payload is a
+`422`. See [Idempotency](/docs/api/idempotency).
+</Callout>
+
+The full request and response schema for every tool is in the generated OpenAPI
+document at `/openapi.json`. The examples below cover the common paths.
+
+## gmail_status
+
+Check whether an account is linked.
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/services/greet \
+curl -X POST http://localhost:8000/api/v1/services/gmail_status \
   -H "Authorization: Bearer sk_live_..." \
   -H "Content-Type: application/json" \
-  -d '{"name": "Alice", "shout": true, "times": 1}'
+  -d '{}'
+```
+
+**Response:**
+
+```json
+{
+  "connected": true,
+  "email": "you@example.com",
+  "scopes": ["https://www.googleapis.com/auth/gmail.modify"],
+  "granted_at": "2025-01-15T10:30:00+00:00"
+}
+```
+
+## gmail_curate_inbox
+
+Rank recent inbox threads by a deterministic score.
+
+```bash
+curl -X POST http://localhost:8000/api/v1/services/gmail_curate_inbox \
+  -H "Authorization: Bearer sk_live_..." \
+  -H "Content-Type: application/json" \
+  -d '{"limit": 10}'
 ```
 
 **Request body:**
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `name` | string | _(required)_ | Name to greet |
-| `shout` | boolean | `false` | Uppercase the greeting |
-| `times` | integer | `1` | Repetition count |
+| `query` | string | _(none)_ | Gmail search query to narrow the set |
+| `limit` | integer | `10` | Threads to rank (1-100) |
 
-**Response:**
+The MCP transport renders this as an inbox dashboard; over REST you get the same
+ranked payload as JSON.
 
-```json
-{ "message": "HELLO, ALICE!", "times": 1 }
-```
+## gmail_list_inbox
 
-## config_show
-
-Show the full project configuration.
+List recent messages, optionally filtered by a Gmail search query.
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/services/config_show \
+curl -X POST http://localhost:8000/api/v1/services/gmail_list_inbox \
   -H "Authorization: Bearer sk_live_..." \
   -H "Content-Type: application/json" \
-  -d '{}'
+  -d '{"query": "from:sarah@acme.com is:unread", "limit": 25}'
 ```
 
-**Request body:** empty `{}`
+**Request body:**
 
-**Response:**
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `query` | string | _(none)_ | Gmail search query |
+| `limit` | integer | `25` | Messages to return (1-500) |
 
-```json
-{
-  "config": {
-    "llm_config": { "cache_enabled": true },
-    "logging": { "verbose": false, "level": "INFO" },
-    "server": { "host": "0.0.0.0", "port": 8000 }
-  }
-}
+## gmail_get_thread
+
+Fetch a thread with full message bodies.
+
+```bash
+curl -X POST http://localhost:8000/api/v1/services/gmail_get_thread \
+  -H "Authorization: Bearer sk_live_..." \
+  -H "Content-Type: application/json" \
+  -d '{"thread_id": "18f0c...", "strip_quoted_replies": true}'
 ```
 
-## config_get
+**Request body:**
 
-Get a single configuration value by dot-separated key.
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `thread_id` | string | _(required)_ | Thread to fetch |
+| `include_attachment_data` | boolean | `false` | Inline raw attachment bytes |
+| `strip_quoted_replies` | boolean | `false` | Drop quoted history from replies |
+
+Attachments always carry `filename`, `mime_type`, `size_bytes`, and
+`attachment_id`; fetch the bytes on demand with `gmail_get_attachment`.
+
+## gmail_compose
+
+Create a draft. Mutating - send an `Idempotency-Key`.
+
+```bash
+curl -X POST http://localhost:8000/api/v1/services/gmail_compose \
+  -H "Authorization: Bearer sk_live_..." \
+  -H "Idempotency-Key: 0f1c2b3a-..." \
+  -H "Content-Type: application/json" \
+  -d '{
+        "to": "sarah@acme.com",
+        "subject": "Contract - Thursday works",
+        "body": "Thursday at 2pm suits us. Sending an agenda ahead of time."
+      }'
+```
+
+**Request body:**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `to` | string | _(required)_ | Comma-separated recipients |
+| `subject` | string | _(required)_ | Subject line |
+| `body` | string | _(required)_ | Message body |
+| `cc` / `bcc` | string | _(none)_ | Comma-separated address lists |
+| `in_reply_to_thread_id` | string | _(none)_ | Thread to attach the draft to |
+| `attachments` | array | `[]` | `{ filename, mime_type, data_base64 }` |
+
+**Response:** the draft's saved state - `draft_id`, `thread_id`, recipients,
+subject, a body preview, and the attachment list.
+
+## gmail_send
+
+Send a draft that already exists. Mutating - send an `Idempotency-Key`.
+
+```bash
+curl -X POST http://localhost:8000/api/v1/services/gmail_send \
+  -H "Authorization: Bearer sk_live_..." \
+  -H "Idempotency-Key: 7d2e9f01-..." \
+  -H "Content-Type: application/json" \
+  -d '{"draft_id": "r-482..."}'
+```
+
+**Request body:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `draft_id` | string | The draft to send |
+
+There is no "compose and send in one call" endpoint. Sending always references a
+draft, so the content exists and is reviewable before it goes out.
+
+## Operational tools
+
+The server also exposes its own maintenance services over the same route shape:
+
+| Tool | Description |
+|------|-------------|
+| `config_show` | Show the full configuration |
+| `config_get` | Get a single value by dot-separated key |
+| `config_set` | Write a config override (mutating) |
+| `doctor` | Run environment health checks |
+| `doctor_fix` | Run health checks and auto-fix what it can (mutating) |
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/services/config_get \
@@ -70,67 +178,6 @@ curl -X POST http://localhost:8000/api/v1/services/config_get \
   -d '{"key": "llm_config.cache_enabled"}'
 ```
 
-**Request body:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `key` | string | Dot-separated config path |
-
-**Response:**
-
 ```json
 { "key": "llm_config.cache_enabled", "value": true }
-```
-
-## config_set
-
-Set a configuration override. The value is coerced to the appropriate type (bool, int, float, or string).
-
-```bash
-curl -X POST http://localhost:8000/api/v1/services/config_set \
-  -H "Authorization: Bearer sk_live_..." \
-  -H "Content-Type: application/json" \
-  -d '{"key": "logging.verbose", "value": "true"}'
-```
-
-**Request body:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `key` | string | Dot-separated config path |
-| `value` | string | New value (auto-coerced) |
-
-**Response:**
-
-```json
-{ "key": "logging.verbose", "coerced_value": true }
-```
-
-## doctor
-
-Run project health checks. Optionally auto-fix issues.
-
-```bash
-curl -X POST http://localhost:8000/api/v1/services/doctor \
-  -H "Authorization: Bearer sk_live_..." \
-  -H "Content-Type: application/json" \
-  -d '{"fix": false}'
-```
-
-**Request body:**
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `fix` | boolean | `false` | Auto-fix fixable issues |
-
-**Response:**
-
-```json
-{
-  "checks": [
-    { "name": "Python version", "status": "pass", "message": "3.12.0" },
-    { "name": "Deps synced", "status": "warn", "message": "dependencies out of sync", "fixable": true }
-  ],
-  "has_failures": false
-}
 ```

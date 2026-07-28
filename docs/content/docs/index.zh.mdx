@@ -1,58 +1,108 @@
 ---
-title: 快速入门
-description: 开始使用 MCP 模板
+title: DaySurface
+description: 面向 Gmail 的 MCP 服务器 - 在任意 MCP 客户端中整理优先级收件箱、在真实撰写器中起草回复，并填写和签署 PDF 附件。
 ---
 
-MCP Template 提供三种方式与同一组工具进行交互:
+import { Inbox, PenLine, FileSignature, Terminal, Bot, Globe, Rocket, Ship, Webhook } from 'lucide-react';
 
-- **CLI** - 在终端中运行命令
-- **MCP** - 直接连接 Claude 等 AI 助手
-- **REST API** - 通过 HTTP 调用带认证的端点
+**整理、起草、签署，全程不离开对话。** DaySurface 把一个按优先级排序的收件箱和一个
+真实的邮件撰写器放进 Claude、ChatGPT 或你惯用的智能体里。智能体负责整理和撰写，
+你负责编辑和发送。
 
-选择适合你工作流的接口，或三种都用。
-
-## 安装
-
-import { Step, Steps } from 'fumadocs-ui/components/steps';
-
-<Steps>
-<Step>
-
-### 从源码安装
-
-```bash
-git clone https://github.com/Miyamura80/DaySurface.git
-cd DaySurface
-uv sync
-```
-
-</Step>
-<Step>
-
-### 验证安装
-
-```bash
-uv run daysurface --version
-uv run daysurface --help
-```
-
-</Step>
-<Step>
-
-### 尝试一个命令
-
-```bash
-uv run daysurface greet Alice
-# Hello, Alice!
-```
-
-</Step>
-</Steps>
-
-## 选择你的接口
+它通过流式 HTTP 连接，因此无需安装任何东西：在客户端里添加一个 URL，
+再授权一次 Gmail 访问即可。
 
 <Cards>
-  <Card title="CLI" href="/docs/cli" />
-  <Card title="MCP Server" href="/docs/mcp" />
-  <Card title="REST API" href="/docs/api" />
+  <Card
+    icon={<Rocket />}
+    title="快速入门"
+    href="/docs/quickstart"
+    description="连接你的客户端，在一分钟内完成第一次收件箱整理。"
+  />
 </Cards>
+
+## 它能做什么
+
+<Cards>
+  <Card
+    icon={<Inbox />}
+    title="优先级收件箱"
+    href="/docs/mcp/tools"
+    description="按需要处理的程度对近期会话排序。排序是确定性代码，而不是模型。"
+  />
+  <Card
+    icon={<PenLine />}
+    title="可编辑的草稿"
+    href="/docs/mcp/tools"
+    description="回复会写入真实的 Gmail 草稿并在交互式撰写器中打开。智能体撰写，你来发送。"
+  />
+  <Card
+    icon={<FileSignature />}
+    title="在会话中填写并签署 PDF"
+    href="/docs/mcp/pdf-forms"
+    description="填写 PDF 附件的表单字段，然后交回给你签署 - 这一步只有你能完成。"
+  />
+  <Card
+    icon={<Webhook />}
+    title="推送通知"
+    href="/docs/gmail-webhooks"
+    description="订阅一个 HTTPS 端点，在新邮件到达时接收带签名的事件。"
+  />
+</Cards>
+
+共 34 个工具，全部通过 Gmail 官方 API 实现。参见完整的
+[工具参考](/docs/mcp/tools)。
+
+## 连接方式
+
+<Cards>
+  <Card
+    icon={<Bot />}
+    title="MCP 服务器"
+    href="/docs/mcp"
+    description="把服务器添加到 Claude、ChatGPT、Cursor、VS Code、Goose 或任意 MCP 客户端。"
+  />
+  <Card
+    icon={<Globe />}
+    title="REST API"
+    href="/docs/api"
+    description="在自己的代码中以带认证的 HTTP 端点调用同一批工具。"
+  />
+  <Card
+    icon={<Terminal />}
+    title="CLI"
+    href="/docs/cli"
+    description="用 daysurface 命令行在终端里运维自托管部署。"
+  />
+</Cards>
+
+每个工具都是共享注册表中的一个纯函数，以相同方式暴露给三种传输方式，
+因此行为不会在不同接口之间产生偏差。
+
+## 自行部署
+
+<Cards>
+  <Card
+    icon={<Ship />}
+    title="部署"
+    href="/docs/deployment"
+    description="使用你自己的 Google OAuth 凭据，在自己的基础设施上运行完整服务器。"
+  />
+</Cards>
+
+## 隐私
+
+我们绝不会把你的邮件发送给 AI 模型。DaySurface 不对 Gmail 内容运行任何 LLM 推理，
+收件箱排序是确定性代码。邮件只会传给你自己连接的 AI 客户端，并遵循该客户端自身的
+条款。访问使用 Google 的 `gmail.modify` 权限范围：可以读取、加标签、起草和发送，
+但无法永久删除你的邮件。
+
+## 许可与定价
+
+DaySurface 基于
+[MIT 许可证](https://github.com/Miyamura80/DaySurface/blob/main/LICENSE)开源，
+可永久免费使用、修改和自托管，**没有安装费，也没有许可费**。
+
+如果你不想自己运维，还有托管服务（**Hosted Pro**，每月 $20）以及包含 SSO、审计日志、
+商业/OEM 许可和可用性 SLA 的 **Team** 方案。完整对比见产品站的
+[定价部分](https://daysurface.com/#pricing)。

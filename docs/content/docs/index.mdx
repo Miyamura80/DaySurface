@@ -1,59 +1,111 @@
 ---
-title: MCP Template
-description: One codebase, three interfaces - CLI, MCP server, and REST API over a shared service registry.
+title: DaySurface
+description: An MCP server for Gmail - triage a ranked inbox, draft replies in a real composer, and fill and sign PDF attachments from any MCP client.
 ---
 
-import { Terminal, Bot, Globe, Rocket, Ship } from 'lucide-react';
+import { Inbox, PenLine, FileSignature, Terminal, Bot, Globe, Rocket, Ship, Webhook } from 'lucide-react';
 
-Write your logic once as a pure service, and MCP Template exposes it everywhere -
-a terminal command, an MCP connection for AI assistants like Claude, and an
-authenticated HTTP API. Same behavior, three transports, no duplication.
+**Triage, draft, sign - without leaving chat.** DaySurface puts a ranked inbox
+and a real email composer inside Claude, ChatGPT, or whichever agent you use.
+Your agent triages and writes; you edit and send.
+
+It connects over streamable HTTP, so there is nothing to install - you add a
+URL to your client and grant Gmail access once.
 
 <Cards>
   <Card
     icon={<Rocket />}
     title="Quick Start"
     href="/docs/quickstart"
-    description="Install the template and run your first command in under a minute."
+    description="Connect your client and run your first triage in under a minute."
   />
 </Cards>
 
-## Choose your interface
+## What it does
 
 <Cards>
   <Card
-    icon={<Terminal />}
-    title="CLI"
-    href="/docs/cli"
-    description="Run commands in your terminal with the daysurface binary."
+    icon={<Inbox />}
+    title="Ranked inbox triage"
+    href="/docs/mcp/tools"
+    description="Rank recent threads by what needs attention, then work the list. Ranking is deterministic code, not a model."
   />
+  <Card
+    icon={<PenLine />}
+    title="Drafts you edit, not approve"
+    href="/docs/mcp/tools"
+    description="Replies land in a real Gmail draft in an interactive composer. Your agent writes it; you press send."
+  />
+  <Card
+    icon={<FileSignature />}
+    title="Fill and sign PDFs in-thread"
+    href="/docs/mcp/pdf-forms"
+    description="Fill a PDF attachment's form fields and hand it back for signing - a step only you can complete."
+  />
+  <Card
+    icon={<Webhook />}
+    title="Push notifications"
+    href="/docs/gmail-webhooks"
+    description="Subscribe an HTTPS endpoint to signed events when new mail arrives."
+  />
+</Cards>
+
+34 tools in total, all through the official Gmail API. See the full
+[tool reference](/docs/mcp/tools).
+
+## Connect it
+
+<Cards>
   <Card
     icon={<Bot />}
     title="MCP Server"
     href="/docs/mcp"
-    description="Connect AI assistants like Claude directly over MCP."
+    description="Add the server to Claude, ChatGPT, Cursor, VS Code, Goose, or any MCP client."
   />
   <Card
     icon={<Globe />}
     title="REST API"
     href="/docs/api"
-    description="Call authenticated HTTP endpoints from any client."
+    description="Call the same tools as authenticated HTTP endpoints from your own code."
+  />
+  <Card
+    icon={<Terminal />}
+    title="CLI"
+    href="/docs/cli"
+    description="Operate a self-hosted deployment from your terminal with the daysurface binary."
   />
 </Cards>
 
-## Deploy it
+Every tool is one pure function in a shared registry exposed over all three
+transports, so behavior never drifts between them.
+
+## Run it yourself
 
 <Cards>
   <Card
     icon={<Ship />}
     title="Deployment"
     href="/docs/deployment"
-    description="Run the full server on your own infrastructure."
+    description="Self-host the full server on your own infrastructure with your own Google OAuth credentials."
   />
 </Cards>
 
+## Privacy
+
+Your email is never sent to an AI model by us. DaySurface runs no LLM inference
+on Gmail content, and the inbox ranking is deterministic code. Mail goes only to
+the AI client you connected, under that client's own terms. Access uses Google's
+`gmail.modify` scope - it can read, label, draft, and send, but it cannot delete
+your mail permanently.
+
 ## Licensing & pricing
 
-MCP Template is open source under the [MIT license](https://github.com/Miyamura80/DaySurface/blob/main/LICENSE) - free to use, modify, and self-host forever, with **no setup fee and no license cost**. The full server runs on your own infrastructure.
+DaySurface is open source under the
+[MIT license](https://github.com/Miyamura80/DaySurface/blob/main/LICENSE) - free
+to use, modify, and self-host forever, with **no setup fee and no license cost**.
 
-Optional managed hosting and team support are available as paid tiers (hosted deployment, monitoring, SSO/audit logs, SLA, and commercial/OEM licensing). The full breakdown lives on the product landing page, with a machine-readable manifest at `/pricing.md` for agents comparing options.
+Managed hosting (**Hosted Pro**, $20/mo) and **Team** plans with SSO, audit logs,
+commercial/OEM licensing, and an uptime SLA are available if you would rather not
+run it yourself. Full breakdown on the
+[pricing section](https://daysurface.com/#pricing) of the product site, with a
+machine-readable manifest at `/pricing.md` for agents comparing options.

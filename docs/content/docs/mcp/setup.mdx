@@ -6,19 +6,31 @@ description: Configure your MCP client to connect to the server
 ## Remote (recommended)
 
 The server runs as a single process (`daysurface-serve`) that exposes both the
-HTTP API and the MCP streamable-HTTP endpoint at `/mcp`. Most modern MCP
-clients (Claude Cowork/Desktop 0.7+, Cursor, etc.) can connect directly:
+HTTP API and the MCP streamable-HTTP endpoint at `/mcp`. The hosted deployment
+lives at:
+
+```
+https://mcp.daysurface.com/mcp
+```
+
+Cursor, VS Code, and Goose take a one-click install link from the
+[connect box](https://daysurface.com/#connect) on the product site. Claude and
+ChatGPT take that URL pasted into their connector settings. Clients that read a
+config file (Claude Cowork/Desktop 0.7+, Cursor, etc.) can connect directly:
 
 ```json
 {
   "mcpServers": {
     "daysurface": {
-      "url": "https://YOUR-DEPLOYMENT/mcp",
+      "url": "https://mcp.daysurface.com/mcp",
       "headers": { "X-API-KEY": "sk_..." }
     }
   }
 }
 ```
+
+Self-hosting? Swap in your own deployment's `/mcp` URL - everything below works
+the same.
 
 Authentication accepts an OAuth 2.1 access token (see [OAuth 2.1](/docs/mcp/oauth)
 for zero-provisioning connections from Claude and other clients), a Bearer JWT

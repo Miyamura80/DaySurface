@@ -1,132 +1,177 @@
 ---
 title: Tools
-description: Available MCP tools and how to use them
+description: The 34 Gmail, PDF, and webhook tools your assistant gets once connected
 ---
 
-Once connected, your AI assistant has access to these tools:
+Once connected, your assistant has 34 tools, all backed by the official Gmail
+API. Tools marked **UI** render an interactive MCP App in clients that support
+it (an inbox dashboard, a draft composer, a signing surface) and fall back to
+plain structured output everywhere else.
+
+Every tool takes a `user_id` that the server injects from the authenticated
+principal - clients never pass it.
+
+## Connection
 
 | Tool | Description |
 |------|-------------|
-| `greet` | Greet a user by name |
-| `config_show` | Show the full configuration |
-| `config_get` | Get a single config value |
-| `config_set` | Set a config override |
-| `doctor` | Run project health checks |
+| `gmail_connect` | Begin the Google OAuth flow. Returns a sign-in URL and a state token. |
+| `gmail_status` | Whether an account is linked, plus its address, scopes, and grant time. |
+| `gmail_disconnect` | Revoke and erase the linked account's stored tokens. |
 
-## greet
+## Inbox & threads
 
-Greet a user by name, optionally shouting.
+| Tool | Description |
+|------|-------------|
+| `gmail_curate_inbox` **UI** | Rank recent inbox threads by a deterministic score and render the inbox dashboard. |
+| `gmail_list_inbox` | List recent inbox messages, optionally filtered by a Gmail search query. |
+| `gmail_get_thread` **UI** | Fetch a thread with full message bodies. |
+| `gmail_get_attachment` | Fetch the raw base64 bytes of one attachment or inline image. |
+| `gmail_mark_thread_read` | Remove the `UNREAD` label from a thread. |
+| `gmail_archive_thread` | Remove `INBOX` from a thread and mark it dismissed in the curation ledger. |
+| `gmail_mark_thread_done` | Apply the `MCP/Done` label so the thread drops out of the curated inbox. |
+| `gmail_unmark_thread_done` | Undo mark-done by removing the `MCP/Done` label. |
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `name` | string | _(required)_ | Name to greet |
-| `shout` | boolean | `false` | Uppercase the greeting |
-| `times` | integer | `1` | Repetition count |
+## Triage ledger
 
-**Example:**
+Banked triage judgments, so the same thread is not re-reasoned every morning.
 
-**Input:**
-```json
-{ "name": "Alice", "shout": true, "times": 1 }
-```
+| Tool | Description |
+|------|-------------|
+| `inbox_get_curation` **UI** | Read banked triage verdicts plus coverage. Cheap - fetches no bodies, runs no reasoning. |
+| `inbox_search` | Search recent threads headlessly (no UI) for a thorough triage pass. |
+| `inbox_save_curation` | Bank triage judgments for one or more threads into the ledger. |
 
-**Result:**
-```json
-{ "message": "HELLO, ALICE!", "times": 1 }
-```
+## Drafts & sending
 
-## config_show
+| Tool | Description |
+|------|-------------|
+| `gmail_compose` **UI** | Create a new draft and open the interactive composer. |
+| `gmail_reply_to_thread` **UI** | Create a reply draft on an existing thread. |
+| `gmail_update_draft` **UI** | Patch fields on a draft. Omitted fields are preserved; `null` clears them. |
+| `gmail_get_draft` | Fetch a single draft by id. |
+| `gmail_list_drafts` | List the account's drafts. |
+| `gmail_discard_draft` | Delete a draft by id. |
+| `gmail_send` | Send a previously composed draft. |
+| `gmail_add_attachment` | Attach one file to an existing draft, leaving body and recipients untouched. |
+| `gmail_remove_attachment` | Remove one file from a draft by its `attachment_id`. |
 
-Show the full project configuration. No parameters.
+<Callout type="info">
+Drafts are written, not sent. `gmail_send` only ever sends a draft that already
+exists, so the user reviews the text in the composer before anything leaves the
+account.
+</Callout>
 
-**Example:**
+## PDF forms & signing
 
-**Input:**
-```json
-{}
-```
+See [PDF Forms](/docs/mcp/pdf-forms) for the full workflow.
 
-**Result:**
-```json
-{
-  "config": {
-    "llm_config": { "cache_enabled": true },
-    "logging": { "verbose": false, "level": "INFO" }
-  }
-}
-```
+| Tool | Description |
+|------|-------------|
+| `pdf_open` **UI** | Open a PDF into a server-side editing session and return its fields and a `doc_id`. |
+| `pdf_edit` | Apply a batch of edits to an open session (fill fields, place text, and so on). |
+| `pdf_request_signature` **UI** | Lock the document and hand it to the user to sign. |
+| `pdf_export` | Deliver the finished document - v1 attaches it to an existing Gmail draft. |
 
-## config_get
+<Callout type="warn">
+The signature itself is a step only the user can complete by typing their own
+name in the signing UI. The assistant fills fields; it cannot sign on the user's
+behalf.
+</Callout>
 
-Get a single configuration value by dot-separated key.
+## Push notifications & settings
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `key` | string | Dot-separated config path |
+See [Gmail Webhooks](/docs/gmail-webhooks) for the event payloads and signature
+scheme.
 
-**Example:**
+| Tool | Description |
+|------|-------------|
+| `webhook_settings` **UI** | Open settings: Gmail connection status and webhook subscriptions. |
+| `webhook_subscribe` | Register an HTTPS endpoint to receive signed webhook events. |
+| `webhook_list` | List the caller's subscriptions. Secrets are never returned. |
+| `webhook_rotate_secret` | Issue a new signing secret, invalidating the old one. |
+| `webhook_unsubscribe` | Deactivate a subscription so it stops receiving events. |
+| `gmail_watch_start` | Subscribe the account's inbox to Gmail push notifications. |
+| `gmail_watch_stop` | Cancel the account's push-notification watch. |
 
-**Input:**
-```json
-{ "key": "llm_config.cache_enabled" }
-```
+## Parameters for the common tools
 
-**Result:**
-```json
-{ "key": "llm_config.cache_enabled", "value": true }
-```
+The rest of the surface is discoverable from each tool's schema - your client
+reads it over MCP. These are the ones worth knowing by hand.
 
-## config_set
-
-Set a configuration override. The value is auto-coerced to the appropriate type.
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `key` | string | Dot-separated config path |
-| `value` | string | New value (auto-coerced to bool/int/float/string) |
-
-**Example:**
-
-**Input:**
-```json
-{ "key": "logging.verbose", "value": "true" }
-```
-
-**Result:**
-```json
-{ "key": "logging.verbose", "coerced_value": true }
-```
-
-## doctor
-
-Run project health checks. Optionally auto-fix fixable issues.
+### gmail_curate_inbox
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `fix` | boolean | `false` | Auto-fix fixable issues |
+| `query` | string | _(none)_ | Gmail search query to narrow the set |
+| `limit` | integer | `10` | Threads to rank (1-100) |
 
-**Example:**
+Ranking is a deterministic heuristic score, not a model - no LLM inference runs
+over your mail. For a considered triage, prefer `inbox_get_curation` (banked
+verdicts) and go deeper with `inbox_search` + `inbox_save_curation` when coverage
+shows uncurated or stale threads.
 
-**Input:**
+### gmail_list_inbox
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `query` | string | _(none)_ | Gmail search query, e.g. `from:sarah@acme.com is:unread` |
+| `limit` | integer | `25` | Messages to return (1-500) |
+
+### gmail_get_thread
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `thread_id` | string | _(required)_ | Thread to fetch |
+| `include_attachment_data` | boolean | `false` | Inline raw attachment bytes. Off by default to keep payloads small |
+| `strip_quoted_replies` | boolean | `false` | Drop quoted history from each reply, keeping only new text |
+
+### gmail_compose
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `to` | string | _(required)_ | Comma-separated recipients |
+| `subject` | string | _(required)_ | Subject line |
+| `body` | string | _(required)_ | Message body |
+| `cc` / `bcc` | string | _(none)_ | Comma-separated address lists |
+| `in_reply_to_thread_id` | string | _(none)_ | Thread to attach the draft to |
+| `attachments` | array | `[]` | Files as `{ filename, mime_type, data_base64 }` |
+
+Returns the draft's saved state - `draft_id`, `thread_id`, recipients, subject, a
+body preview, and the attachment list - so there is no follow-up `gmail_get_draft`
+needed to confirm what was written.
+
+### gmail_reply_to_thread
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `thread_id` | string | _(required)_ | Thread to reply on |
+| `body` | string | _(placeholder)_ | Reply text; the composer can fill it on the next turn |
+| `subject` | string | `Re: <original>` | Derived from the thread's last message |
+| `to` | string | _(derived)_ | Defaults to the other party in the thread, never the account owner |
+| `cc` / `bcc` | string | _(none)_ | Used verbatim when supplied; no de-duplication against thread participants |
+| `attachments` | array | `[]` | Same shape as `gmail_compose` |
+
+### gmail_send
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `draft_id` | string | The draft to send |
+
+## Error handling
+
+A failed tool call returns an error the assistant can act on rather than a
+crash:
+
 ```json
-{ "fix": false }
+{ "error": "Gmail account not connected. Call gmail_connect first." }
 ```
 
-**Result:**
-```json
-{
-  "checks": [
-    { "name": "Python version", "status": "pass", "message": "3.12.0" },
-    { "name": "Deps synced", "status": "warn", "message": "dependencies out of sync", "fixable": true }
-  ],
-  "has_failures": false
-}
-```
+## Keeping this list honest
 
-## Error Handling
-
-If a tool call fails, the AI client receives an error message and can adjust:
-
-```json
-{ "error": "Key not found: nonexistent.key" }
-```
+The tool surface has one source of truth: the `@service` registry in the Python
+package. `make gen_tool_surface` snapshots it to
+`landing-page/src/config/tool-surface.generated.json`, which is what the landing
+page and the pre-connect [server card](https://daysurface.com/.well-known/mcp/server-card.json)
+advertise. When you add or rename a service, regenerate that snapshot and update
+the tables above in the same change.
