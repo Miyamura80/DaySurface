@@ -5,8 +5,8 @@ const VISIBLE = 5;
 const extraCount = Math.max(0, faq.items.length - VISIBLE);
 ---
 
-<section id="faq" class="scroll-mt-20 border-t border-border/60 py-24">
-  <div class="mx-auto max-w-3xl px-6">
+<section id="faq" class="scroll-mt-20 border-t border-border/60 py-16 sm:py-24">
+  <div class="mx-auto max-w-3xl px-4 sm:px-6">
     <h2 class="text-center text-3xl font-bold tracking-tight sm:text-4xl">
       {faq.heading}
     </h2>
@@ -14,9 +14,9 @@ const extraCount = Math.max(0, faq.items.length - VISIBLE);
     <div class="mt-12 divide-y divide-border border-2 border-border bg-surface-1" data-faq-list>
       {
         faq.items.map((item, i) => (
-          <details class="group px-6" data-faq-extra={i >= VISIBLE ? "true" : undefined}>
+          <details class="group px-4 sm:px-6" data-faq-extra={i >= VISIBLE ? "true" : undefined}>
             <summary
-              class="flex cursor-pointer list-none items-center justify-between py-5 font-medium"
+              class="flex min-h-12 cursor-pointer list-none items-center justify-between gap-4 py-4 font-medium"
             >
               {item.q}
               <svg

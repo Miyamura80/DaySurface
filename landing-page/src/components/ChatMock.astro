@@ -27,7 +27,7 @@ const maskStyle = (logo: string) =>
   `-webkit-mask:url('${logo}') center/contain no-repeat;mask:url('${logo}') center/contain no-repeat;`;
 ---
 
-<div class="mx-auto w-full max-w-md" data-chatmock>
+<div class="mx-auto w-full min-w-0 max-w-md" data-chatmock>
   <!-- Client toggle (Hackbox style) -->
   <div
     class="mb-3 grid grid-cols-4 border-2 border-border bg-surface-1"
@@ -44,7 +44,7 @@ const maskStyle = (logo: string) =>
           aria-selected={c.id === defaultId ? "true" : "false"}
           tabindex={c.id === defaultId ? 0 : -1}
           data-client-tab={c.id}
-          class="client-tab flex items-center justify-center gap-1.5 border-r-2 border-border px-2 py-2 text-xs font-medium text-fg-muted transition last:border-r-0 hover:text-fg aria-selected:bg-accent aria-selected:text-accent-fg"
+          class="client-tab flex min-h-11 items-center justify-center gap-1.5 border-r-2 border-border px-2 text-xs font-medium text-fg-muted transition last:border-r-0 hover:text-fg aria-selected:bg-accent aria-selected:text-accent-fg"
         >
           <span class="size-4 shrink-0 bg-current" style={maskStyle(c.logo)} aria-hidden="true" />
           <span class="hidden sm:inline">{c.name}</span>

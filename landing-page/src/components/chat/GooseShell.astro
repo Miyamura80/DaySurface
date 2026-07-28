@@ -12,12 +12,12 @@ import ConvoScroll from "./ConvoScroll.astro";
 
 <div class="overflow-hidden rounded-xl border border-[#3f434b] bg-[#22252a] text-[#e3e6ea] shadow-2xl shadow-black/50">
   <!-- frameless top: goose glyph -->
-  <div class="flex items-center gap-2 px-4 py-2.5">
+  <div class="flex items-center gap-2 px-3 py-2.5 sm:px-4">
     <span class="size-4 bg-[#e3e6ea]" style="-webkit-mask:url('/logos/goose.svg') center/contain no-repeat;mask:url('/logos/goose.svg') center/contain no-repeat" aria-hidden="true"></span>
     <span class="text-sm font-semibold lowercase tracking-wide text-[#e3e6ea]">goose</span>
   </div>
 
-  <div class="space-y-3.5 px-4 pb-2">
+  <div class="space-y-3.5 px-3 pb-2 sm:px-4">
     <!-- user bubble (right, inverted) -->
     <div class="flex justify-end">
       <p class="max-w-[85%] rounded-xl bg-white px-4 py-2.5 text-sm text-[#22252a]">
@@ -67,10 +67,10 @@ import ConvoScroll from "./ConvoScroll.astro";
   </div>
 
   <!-- composer card -->
-  <div class="px-4 pb-4">
+  <div class="px-3 pb-4 sm:px-4">
     <div class="rounded-lg border border-[#3f434b] bg-[#22252a] p-2.5">
       <div class="flex items-center gap-2">
-        <span class="flex-1 px-1 text-sm text-[#878787]">Ask goose anything…</span>
+        <span class="min-w-0 flex-1 truncate px-1 text-sm text-[#878787]">Ask goose anything…</span>
         <span class="grid size-7 place-items-center rounded-full bg-[#474e57] text-[#e3e6ea]">
           <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"></path></svg>
         </span>
