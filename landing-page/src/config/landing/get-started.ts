@@ -209,13 +209,23 @@ export const compatibility: { heading: string; clients: Client[] } = {
  * only supported flow.
  */
 export interface InstallTarget {
-  id: "claude" | "chatgpt" | "cursor" | "vscode" | "goose";
+  id: string;
   name: string;
   logo: string;
-  method: "deeplink" | "manual";
+  /**
+   * How this client gets connected:
+   * - "deeplink" - a one-click install URL scheme (Cursor / VS Code / Goose).
+   * - "manual"   - no URL scheme; the user pastes into a settings screen, so we
+   *                spell out the click-path (Claude / ChatGPT web).
+   * - "prompt"   - agentic clients that can configure themselves; we hand the
+   *                user a prompt to paste into the agent instead of a click-path.
+   */
+  method: "deeplink" | "manual" | "prompt";
   /** For manual targets: the click-path to paste the URL. */
   steps?: string[];
-  /** Optional note rendered under a deep-link button. */
+  /** For prompt targets: the text the user pastes into their agent. */
+  setupPrompt?: string;
+  /** Optional note rendered under a deep-link button or setup prompt. */
   note?: string;
 }
 

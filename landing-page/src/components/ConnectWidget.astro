@@ -78,6 +78,9 @@ const selected = enriched.find((t) => t.id === defaultId) ?? enriched[0];
               {t.method === "deeplink" && (
                 <span class="font-mono text-[10px] uppercase tracking-wider text-accent">1-click</span>
               )}
+              {t.method === "prompt" && (
+                <span class="font-mono text-[10px] uppercase tracking-wider text-fg-subtle">prompt</span>
+              )}
             </button>
           </li>
         ))
@@ -103,6 +106,24 @@ const selected = enriched.find((t) => t.id === defaultId) ?? enriched[0];
                 />
                 Add to {t.name}
               </a>
+              {t.note && <p class="mt-2.5 text-xs leading-relaxed text-fg-subtle">{t.note}</p>}
+            </>
+          ) : t.method === "prompt" && t.setupPrompt ? (
+            <>
+              <p class="text-xs leading-relaxed text-fg-subtle">
+                Paste this into {t.name} - it will add the server for you.
+              </p>
+              <div class="mt-2 flex items-stretch border border-border bg-bg">
+                <pre class="flex-1 overflow-x-auto px-3 py-2.5 font-mono text-xs leading-relaxed text-fg-muted">{t.setupPrompt}</pre>
+                <button
+                  type="button"
+                  class="copy-btn grid shrink-0 place-items-center border-l border-border px-3 text-fg-muted transition hover:bg-surface-2 hover:text-accent"
+                  data-code={t.setupPrompt}
+                  aria-label={`Copy the ${t.name} setup prompt`}
+                >
+                  <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
+                </button>
+              </div>
               {t.note && <p class="mt-2.5 text-xs leading-relaxed text-fg-subtle">{t.note}</p>}
             </>
           ) : (

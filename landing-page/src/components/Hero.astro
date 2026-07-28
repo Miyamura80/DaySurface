@@ -1,6 +1,6 @@
 ---
 import { hero, site } from "../config/landing";
-import CtaButtons from "./CtaButtons.astro";
+import ConnectWidget from "./ConnectWidget.astro";
 import ChatMock from "./ChatMock.astro";
 ---
 
@@ -35,7 +35,11 @@ import ChatMock from "./ChatMock.astro";
         {hero.subhead}
       </p>
 
-      <CtaButtons class="mt-9 justify-center lg:justify-start" />
+      <!-- Primary CTA: connect your client. The repo and docs links live in the
+           header only - they are not the conversion action for an end user. -->
+      <div class="mx-auto mt-9 w-full max-w-md lg:mx-0">
+        <ConnectWidget />
+      </div>
     </div>
 
     <!-- Right: chat UI mock rendering the MCP App -->

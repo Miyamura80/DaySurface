@@ -37,28 +37,6 @@ export const nav: {
   cta: { label: "Get started", href: "/#how-it-works" },
 };
 
-export interface Cta {
-  label: string;
-  href: string;
-  /** Optional logo (in public/logos/) rendered inside the button. */
-  logo?: string;
-}
-
-/**
- * The primary conversion CTAs, rendered identically by the hero and the final
- * CTA (see CtaButtons.astro). Edit once, both sections update.
- *
- * The project is open source and self-hostable, so the repo is the primary
- * CTA. (Claude/ChatGPT have no one-click install deep link - adding a remote
- * MCP server there is a manual paste-the-URL flow - so a "real" deep-linked
- * "Add to Claude" button isn't possible. Editor clients like Cursor/VS Code
- * do support deep links if you ever want to add those.)
- */
-export const ctas: { primary: Cta; secondary: Cta } = {
-  primary: { label: "View on GitHub", href: site.githubUrl, logo: "/logos/github.svg" },
-  secondary: { label: "Read the docs", href: site.docsUrl },
-};
-
 export const footer: { columns: FooterColumn[]; copyright: string } = {
   columns: [
     {
