@@ -5,7 +5,7 @@
  * surface: llms.txt, llms-full.txt, agents.md and the in-page agent view.
  * Rebranding the site (editing landing.ts) keeps all of these in sync.
  */
-import { site, hero, features, getStarted, faq, compatibility, connect, comparison, pricing, agentGuide } from "../config/landing";
+import { site, hero, features, faq, compatibility, connect, comparison, pricing, agentGuide } from "../config/landing";
 
 /** Strip a trailing slash so we can safely append paths. */
 function trimSlash(url: string): string {
@@ -65,13 +65,19 @@ export function buildLlmsFullTxt(origin: string): string {
   const featureBlock = features.items
     .map((f) => `### ${f.title}\n${f.body}`)
     .join("\n\n");
-  const transportBlock = getStarted.transports
-    .map(
-      (t) =>
-        `### ${t.label}\n` +
-        `**${t.setupTitle}** - ${t.setupBody}\n\n` +
-        `**${t.callTitle}** - ${t.callBody}`,
-    )
+  // Per-client connect instructions. Replaces the old three-transports block:
+  // an agent needs to know how its host gets wired up, not how the codebase is
+  // layered. The CLI/HTTP story survives under "What it is" and on /api.
+  const connectBlock = connect.targets
+    .map((t) => {
+      const how =
+        t.method === "deeplink"
+          ? "One-click install link on the site."
+          : t.method === "prompt"
+            ? "Paste the setup prompt from the site into the client."
+            : (t.steps ?? []).map((s, i) => `${i + 1}. ${s}`).join("\n");
+      return `### ${t.name}\n${how}${t.note ? `\n${t.note}` : ""}`;
+    })
     .join("\n\n");
   const faqBlock = faq.items.map((i) => `### ${i.q}\n${i.a}`).join("\n\n");
   const clients = compatibility.clients.map((c) => c.name).join(", ");
@@ -112,11 +118,12 @@ discover and call its tools.
 
 ${whenToUseSection()}
 
-## ${getStarted.heading}
+## Connecting
 
-${getStarted.subhead}
+Add the streamable-HTTP endpoint ${site.mcpUrl} to any MCP client. Nothing to
+install locally. Server name: \`${site.serverName}\`.
 
-${transportBlock}
+${connectBlock}
 
 ## Features
 

@@ -36,8 +36,11 @@ import ChatMock from "./ChatMock.astro";
       </p>
 
       <!-- Primary CTA: connect your client. The repo and docs links live in the
-           header only - they are not the conversion action for an end user. -->
-      <div class="mx-auto mt-9 w-full max-w-md lg:mx-0">
+           header only - they are not the conversion action for an end user.
+           #connect is the target for the nav CTA, the pricing CTAs, and the
+           /compare and /vs/* pages, which used to point at the removed
+           "How it works" section. -->
+      <div id="connect" class="mx-auto mt-9 w-full max-w-md scroll-mt-24 lg:mx-0">
         <ConnectWidget />
       </div>
     </div>

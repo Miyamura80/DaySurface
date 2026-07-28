@@ -23,7 +23,6 @@ export const nav: {
     // Absolute anchors (with leading "/") so they also work from sub-pages
     // like /compare and /vs/* - a bare "#features" would only resolve on home.
     { label: "Features", href: "/#features" },
-    { label: "How it works", href: "/#how-it-works" },
     { label: "Compare", href: "/compare" },
     { label: "API", href: "/api" },
     { label: "Docs", href: site.docsUrl },
@@ -34,7 +33,7 @@ export const nav: {
     label: "Open source",
     title: "Open source & self-hostable, view on GitHub",
   },
-  cta: { label: "Get started", href: "/#how-it-works" },
+  cta: { label: "Get started", href: "/#connect" },
 };
 
 export const footer: { columns: FooterColumn[]; copyright: string } = {
@@ -43,7 +42,6 @@ export const footer: { columns: FooterColumn[]; copyright: string } = {
       heading: "Product",
       links: [
         { label: "Features", href: "/#features" },
-        { label: "How it works", href: "/#how-it-works" },
         { label: "Compare", href: "/compare" },
         // The #pricing section only renders when pricing.enabled - don't link a dead anchor otherwise.
         // Absolute (/#pricing) so it also resolves from sub-pages like /compare and /vs/*.

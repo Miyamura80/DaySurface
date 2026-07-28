@@ -116,7 +116,7 @@ export const pricing: { enabled: boolean; heading: string; subhead: string; tier
         "Priority support",
       ],
       cta: "Start free trial",
-      href: "/#how-it-works",
+      href: "/#connect",
       featured: true,
     },
     {
@@ -130,7 +130,7 @@ export const pricing: { enabled: boolean; heading: string; subhead: string; tier
         "Dedicated support & onboarding",
       ],
       cta: "Contact sales",
-      href: "/#how-it-works",
+      href: "/#connect",
     },
   ],
 };

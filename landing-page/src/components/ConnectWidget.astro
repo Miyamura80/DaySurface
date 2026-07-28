@@ -171,6 +171,36 @@ const selected = enriched.find((t) => t.id === defaultId) ?? enriched[0];
 </div>
 
 <script>
+  // Clipboard handler for every `.copy-btn` in this widget (the MCP URL and
+  // the per-client setup prompt). This used to live in CodeBlock.astro and was
+  // inherited only because GetStarted rendered a CodeBlock on the same page;
+  // when that section was removed the handler would have vanished with it and
+  // both copy buttons would have failed silently. It lives here now, next to
+  // the only thing that uses it.
+  const CHECK_ICON =
+    '<svg class="size-4 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>';
+
+  function initCopy() {
+    document.querySelectorAll<HTMLButtonElement>(".copy-btn").forEach((btn) => {
+      // The widget renders in both the hero and the final CTA, and this runs
+      // again on astro:page-load - guard so one click doesn't fire twice.
+      if (btn.dataset.copyReady === "true") return;
+      btn.dataset.copyReady = "true";
+      btn.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(btn.dataset.code ?? "");
+          const original = btn.innerHTML;
+          btn.innerHTML = CHECK_ICON;
+          window.setTimeout(() => {
+            btn.innerHTML = original;
+          }, 1500);
+        } catch {
+          // Clipboard API unavailable (e.g. non-secure context) - fail quietly.
+        }
+      });
+    });
+  }
+
   function initConnect() {
     document.querySelectorAll<HTMLElement>("[data-connect]").forEach((root) => {
       // Idempotent: skip roots already wired so a repeat call (e.g.
@@ -232,5 +262,9 @@ const selected = enriched.find((t) => t.id === defaultId) ?? enriched[0];
   }
 
   initConnect();
-  document.addEventListener("astro:page-load", initConnect);
+  initCopy();
+  document.addEventListener("astro:page-load", () => {
+    initConnect();
+    initCopy();
+  });
 </script>
