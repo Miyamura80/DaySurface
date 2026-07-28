@@ -110,7 +110,7 @@ export const pricing: {
     },
     {
       name: "Scaling",
-      price: "$99",
+      price: "$199",
       cadence: "/mo",
       description:
         "Same product, far more headroom. For teams running agents against their mail all day rather than a few times an hour.",

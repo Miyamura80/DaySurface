@@ -15,6 +15,7 @@ import {
   pricing,
   repoName,
   pricingAxes,
+  pricingMatrix,
   pricingFaq,
   pricingJourney,
   alwaysFree,
@@ -23,6 +24,10 @@ import {
 } from "../config/landing";
 
 const origin = (Astro.site ?? new URL(site.url)).origin;
+
+// Shown in the disclosure label so people know the size of what they are
+// opening. Derived, so adding a matrix row updates the copy.
+const capabilityCount = pricingMatrix.reduce((n, g) => n + g.rows.length, 0);
 
 const pageTitle = `Pricing - ${site.name}`;
 const pageDescription = pricing.subhead;
@@ -363,9 +368,30 @@ const jsonLd = [
           <p class="mt-4 text-lg text-fg-muted">No footnotes, no "contact us to find out".</p>
         </div>
 
-        <div class="mt-14">
-          <PricingTable />
-        </div>
+        <details id="compare-tiers-details" class="group mt-12 border-2 border-border bg-surface-1">
+          <summary
+            class="flex cursor-pointer list-none items-center justify-between gap-4 px-6 py-5 font-medium transition hover:text-accent"
+          >
+            <span>
+              Compare all {capabilityCount} capabilities across {pricing.tiers.length} tiers
+            </span>
+            <svg
+              class="size-5 shrink-0 text-fg-muted transition-transform group-open:rotate-45"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              aria-hidden="true"
+            >
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+          </summary>
+
+          <div class="border-t border-border px-6 pt-8 pb-8">
+            <PricingTable />
+          </div>
+        </details>
       </div>
     </section>
 
@@ -440,3 +466,16 @@ const jsonLd = [
 
   <Footer />
 </Base>
+
+<script>
+  // A deep link to the matrix (/pricing#compare-tiers) should arrive open.
+  function openMatrixOnHash() {
+    if (window.location.hash !== "#compare-tiers") return;
+    const el = document.getElementById("compare-tiers-details");
+    if (el instanceof HTMLDetailsElement) el.open = true;
+  }
+
+  openMatrixOnHash();
+  window.addEventListener("hashchange", openMatrixOnHash);
+  document.addEventListener("astro:page-load", openMatrixOnHash);
+</script>

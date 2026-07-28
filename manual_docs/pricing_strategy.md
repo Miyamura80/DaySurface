@@ -264,7 +264,7 @@ whoever you are.
 
 | | Free | Team | Scaling | Enterprise |
 | --- | --- | --- | --- | --- |
-| Price | $0 | $29/mo | $99/mo | Custom |
+| Price | $0 | $29/mo | $199/mo | Custom |
 | Members | 1 | 5 incl, $6/mo after | 25 incl, $5/mo after | Unlimited |
 | Tool calls / day | 500 | 5,000 | 50,000 | Custom |
 | Concurrent sessions | 1 | 5 | 25 | Custom |
