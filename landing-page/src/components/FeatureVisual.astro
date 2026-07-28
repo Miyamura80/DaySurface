@@ -13,7 +13,7 @@ const { name } = Astro.props;
 {
   /* Three transports, zero duplication */
   name === "transports" && (
-    <div class="flex h-full flex-col justify-center gap-6 p-6" aria-hidden="true">
+    <div class="flex h-full flex-col justify-center gap-4 p-4 sm:gap-6 sm:p-6" aria-hidden="true">
       <div class="grid grid-cols-3 gap-3 font-mono text-xs">
         {["CLI", "MCP", "HTTP"].map((t) => (
           <div class="border border-accent/50 bg-bg px-2 py-3 text-center text-accent">
@@ -38,11 +38,11 @@ const { name } = Astro.props;
 {
   /* Headless or interactive */
   name === "interactive" && (
-    <div class="flex h-full flex-col justify-center p-6" aria-hidden="true">
+    <div class="flex h-full flex-col justify-center p-4 sm:p-6" aria-hidden="true">
       <div class="border-2 border-accent bg-bg">
-        <div class="flex items-center justify-between border-b border-border px-3 py-2">
-          <span class="text-xs font-semibold text-fg">Curated Inbox</span>
-          <span class="font-mono text-[10px] uppercase tracking-wider text-accent">ui://daysurface/gmail_inbox</span>
+        <div class="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
+          <span class="shrink-0 text-xs font-semibold text-fg">Curated Inbox</span>
+          <span class="min-w-0 truncate font-mono text-[10px] uppercase tracking-wider text-accent">ui://daysurface/gmail_inbox</span>
         </div>
         <div class="inline-flex items-center gap-1.5 border-b border-border px-3 py-2 font-mono text-[11px] text-fg-muted">
           <svg class="size-3 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 8l4 4-4 4m6 0h6" stroke-linecap="round" stroke-linejoin="round" /></svg>

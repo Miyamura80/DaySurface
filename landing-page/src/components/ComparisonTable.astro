@@ -24,7 +24,7 @@ const MARK: Record<MatrixCell["state"], { glyph: string; cls: string; label: str
 };
 ---
 
-<div class="overflow-x-auto">
+<div class="-mx-4 overflow-x-auto overscroll-x-contain px-4 sm:mx-0 sm:px-0" tabindex="0" role="region" aria-label="Capability comparison, scrollable">
   <table class="w-full min-w-[640px] border-collapse text-left">
     <thead>
       <tr class="border-b-2 border-border">
@@ -86,4 +86,5 @@ const MARK: Record<MatrixCell["state"], { glyph: string; cls: string; label: str
   </table>
 </div>
 
+<p class="mt-3 text-xs text-fg-subtle sm:hidden" aria-hidden="true">Scroll the table sideways to see every column.</p>
 <p class="mt-4 text-xs text-fg-subtle">{comparison.disclaimer}</p>

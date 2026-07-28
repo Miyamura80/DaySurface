@@ -42,6 +42,25 @@ html {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  /* Stop iOS Safari inflating type when the phone is turned sideways. */
+  -webkit-text-size-adjust: 100%;
+}
+
+/*
+ * Mobile guard rail. Individual components are responsible for shrinking
+ * (min-w-0 on flex/grid children, overflow-x-auto on wide code/tables) - this
+ * only stops a future unclamped child from turning the whole document into a
+ * sideways-scrolling page. `clip` rather than `hidden` so the sticky nav keeps
+ * working (an `overflow: hidden` ancestor would kill position: sticky).
+ */
+body {
+  overflow-x: clip;
+}
+
+/* Long unbroken strings (URLs, OAuth scopes) in prose must never widen the
+   page. Scoped to inline code - code inside <pre> is meant to scroll, not wrap. */
+:not(pre) > code {
+  overflow-wrap: anywhere;
 }
 
 /* Respect users who don't want motion: kill the typed-terminal animation. */

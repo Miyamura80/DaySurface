@@ -6,10 +6,13 @@ import { site, nav } from "../config/landing";
   class="sticky top-0 z-50 border-b border-border/60 bg-bg/80 backdrop-blur-md"
 >
   <nav
-    class="mx-auto flex h-16 max-w-6xl items-center justify-between px-6"
+    class="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-3 sm:gap-3 sm:px-6"
     aria-label="Primary"
   >
-    <a href="#top" class="flex items-center gap-2 font-semibold tracking-tight">
+    <a
+      href="#top"
+      class="flex shrink-0 items-center gap-2 py-2 font-semibold tracking-tight"
+    >
       {/* The canonical brand mark, same asset the favicon and og.png use - not
           a letter tile. It is multi-colour, so it renders as an <img> rather
           than a CSS mask like the monochrome client logos. */}
@@ -30,13 +33,13 @@ import { site, nav } from "../config/landing";
       }
     </div>
 
-    <div class="flex items-center gap-3">
+    <div class="flex items-center gap-2 sm:gap-3">
       <a
         href={nav.github.href}
         target="_blank"
         rel="noopener noreferrer"
         title={nav.github.title}
-        class="group inline-flex items-center gap-2 border border-accent/40 px-3 py-2 text-sm font-medium text-fg-muted transition hover:border-accent hover:bg-surface-1 hover:text-fg"
+        class="group hidden min-h-11 items-center gap-2 border border-accent/40 px-3 text-sm font-medium text-fg-muted transition hover:border-accent hover:bg-surface-1 hover:text-fg sm:inline-flex"
       >
         <span
           class="size-[18px] shrink-0 bg-fg-muted transition group-hover:bg-accent"
@@ -48,10 +51,146 @@ import { site, nav } from "../config/landing";
 
       <a
         href={nav.cta.href}
-        class="bg-accent px-4 py-2 text-sm font-semibold text-accent-fg transition hover:bg-accent-strong"
+        class="inline-flex min-h-11 items-center whitespace-nowrap bg-accent px-2.5 text-xs font-semibold text-accent-fg transition hover:bg-accent-strong sm:px-4 sm:text-sm"
       >
         {nav.cta.label}
       </a>
+
+      <!-- Mobile menu trigger. The primary links are display:none under md, so
+           without this panel they'd be unreachable on a phone. -->
+      <button
+        type="button"
+        class="grid size-11 shrink-0 place-items-center border border-border text-fg-muted transition hover:border-accent hover:text-fg md:hidden"
+        aria-expanded="false"
+        aria-controls="mobile-nav"
+        aria-label="Open menu"
+        data-nav-toggle
+      >
+        <svg
+          class="size-5"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          aria-hidden="true"
+          data-nav-icon-open
+        >
+          <path d="M4 7h16M4 12h16M4 17h16"></path>
+        </svg>
+        <svg
+          class="hidden size-5"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          aria-hidden="true"
+          data-nav-icon-close
+        >
+          <path d="M6 6l12 12M18 6L6 18"></path>
+        </svg>
+      </button>
     </div>
   </nav>
+
+  <!-- Mobile disclosure panel -->
+  <div
+    id="mobile-nav"
+    class="hidden border-t border-border/60 bg-bg md:hidden"
+    data-nav-panel
+  >
+    <ul class="mx-auto max-w-6xl px-3 py-2 sm:px-6">
+      {
+        nav.links.map((link) => (
+          <li>
+            <a
+              href={link.href}
+              class="flex min-h-12 items-center border-b border-border/40 text-base text-fg-muted transition hover:text-fg"
+            >
+              {link.label}
+            </a>
+          </li>
+        ))
+      }
+      <li class="sm:hidden">
+        <a
+          href={nav.github.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="flex min-h-12 items-center gap-2 border-b border-border/40 text-base text-fg-muted transition hover:text-fg"
+        >
+          <span
+            class="size-[18px] shrink-0 bg-fg-muted"
+            style="-webkit-mask:url('/logos/github.svg') center/contain no-repeat;mask:url('/logos/github.svg') center/contain no-repeat;"
+            aria-hidden="true"
+          />
+          {nav.github.label}
+        </a>
+      </li>
+    </ul>
+  </div>
 </header>
+
+<script>
+  function initNav() {
+    document.querySelectorAll<HTMLElement>("[data-nav-toggle]").forEach((toggle) => {
+      // Idempotent: skip triggers already wired (e.g. a repeat astro:page-load).
+      if (toggle.dataset.navReady === "true") return;
+      toggle.dataset.navReady = "true";
+
+      const header = toggle.closest("header");
+      const panel = header?.querySelector<HTMLElement>("[data-nav-panel]");
+      const iconOpen = toggle.querySelector<HTMLElement>("[data-nav-icon-open]");
+      const iconClose = toggle.querySelector<HTMLElement>("[data-nav-icon-close]");
+      if (!panel) return;
+
+      const setOpen = (open: boolean) => {
+        // Closing sets display:none on the panel, so anything focused inside it
+        // would be stranded on a hidden subtree and focus would fall to <body>.
+        // Every close path can hit this - Escape, tapping an in-page link like
+        // "/#features", or crossing the md breakpoint - so the hand-back lives
+        // here rather than in one handler. Guarded on the toggle actually being
+        // rendered: it is md:hidden, so on desktop there is nothing to focus.
+        const reclaimFocus =
+          !open && panel.contains(document.activeElement) && toggle.offsetParent !== null;
+
+        panel.classList.toggle("hidden", !open);
+        toggle.setAttribute("aria-expanded", String(open));
+        toggle.setAttribute("aria-label", open ? "Close menu" : "Open menu");
+        iconOpen?.classList.toggle("hidden", open);
+        iconClose?.classList.toggle("hidden", !open);
+
+        if (reclaimFocus) toggle.focus();
+      };
+
+      toggle.addEventListener("click", () =>
+        setOpen(toggle.getAttribute("aria-expanded") !== "true"),
+      );
+      // Every link in the header, not just the ones inside the sheet: the brand
+      // ("#top") and the CTA ("/#connect") are same-document jumps on the home
+      // page, so nothing reloads and a sheet left open would sit on top of the
+      // destination with aria-expanded still true.
+      header
+        ?.querySelectorAll("a")
+        .forEach((a) => a.addEventListener("click", () => setOpen(false)));
+      // Guarded on the sheet being open so an unrelated Escape elsewhere on the
+      // page never moves focus; setOpen handles handing focus back.
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && toggle.getAttribute("aria-expanded") === "true") {
+          setOpen(false);
+        }
+      });
+      // Never leave the panel open past the md breakpoint - the desktop links
+      // take over there and the toggle itself disappears.
+      window
+        .matchMedia("(min-width: 768px)")
+        .addEventListener("change", (e) => {
+          if (e.matches) setOpen(false);
+        });
+    });
+  }
+
+  initNav();
+  document.addEventListener("astro:page-load", initNav);
+</script>
