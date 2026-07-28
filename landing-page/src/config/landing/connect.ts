@@ -53,17 +53,27 @@ export interface InstallTarget {
   name: string;
   logo: string;
   /**
-   * How this client gets connected:
-   * - "deeplink" - a one-click install URL scheme (Cursor / VS Code / Goose).
-   * - "manual"   - no URL scheme; the user pastes into a settings screen, so we
-   *                spell out the click-path (Claude / ChatGPT web).
-   * - "prompt"   - agentic clients that can configure themselves; we hand the
-   *                user a prompt to paste into the agent instead of a click-path.
+   * How this host gets connected:
+   * - "deeplink" - a one-click install URL (Claude / Cursor / VS Code / Goose).
+   * - "manual"   - no install URL; the user pastes into a settings screen, so we
+   *                spell out the click-path. ChatGPT only, and it additionally
+   *                needs Developer mode switched on first.
+   * - "prompt"   - agentic hosts that can configure themselves; we hand the user
+   *                something to paste instead of a click-path. See `setupKind`,
+   *                because "paste this" means different things per host.
    */
   method: "deeplink" | "manual" | "prompt";
+  /**
+   * For prompt targets, what `setupPrompt` actually is:
+   * - "prompt"  (default) - natural language to paste into the agent's chat.
+   * - "command" - a shell command to run in a terminal. Claude Code takes one
+   *               line rather than a paragraph, and telling someone to "paste
+   *               this into Claude Code" would send them to the wrong place.
+   */
+  setupKind?: "prompt" | "command";
   /** For manual targets: the click-path to paste the URL. */
   steps?: string[];
-  /** For prompt targets: the text the user pastes into their agent. */
+  /** For prompt targets: the text the user pastes (see `setupKind`). */
   setupPrompt?: string;
   /** Optional note rendered under a deep-link button or setup prompt. */
   note?: string;
@@ -142,6 +152,7 @@ export const connect: {
       name: "Claude Code",
       logo: "/logos/cli.svg",
       method: "prompt",
+      setupKind: "command",
       setupPrompt: `claude mcp add --transport http --scope user ${site.serverName} ${site.mcpUrl}`,
       note: "Run it in your terminal, then /mcp in a session to sign in.",
     },

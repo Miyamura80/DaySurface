@@ -73,8 +73,10 @@ export function buildLlmsFullTxt(origin: string): string {
       const how =
         t.method === "deeplink"
           ? "One-click install link on the site."
-          : t.method === "prompt"
-            ? "Paste the setup prompt from the site into the client."
+          : t.method === "prompt" && t.setupPrompt
+            ? // Inline the actual text - an agent reading this cannot go and
+              // fetch "the setup prompt from the site".
+              `${t.setupKind === "command" ? "Run this in a terminal" : "Paste this into the agent"}:\n\n${t.setupPrompt}`
             : (t.steps ?? []).map((s, i) => `${i + 1}. ${s}`).join("\n");
       return `### ${t.name}\n${how}${t.note ? `\n${t.note}` : ""}`;
     })
@@ -149,11 +151,20 @@ Works with every MCP client, including: ${clients}.
 1. Copy the MCP server URL: ${site.mcpUrl}
 2. Add it to your client (server name \`${site.serverName}\`):
 ${connect.targets
-  .map((t) =>
-    t.method === "deeplink"
-      ? `   - ${t.name}: one-click install (deep link supported).`
-      : `   - ${t.name}: ${(t.steps ?? []).join(" → ")}`,
-  )
+  .map((t) => {
+    // Every method needs its own branch. Falling through to `steps` left the
+    // five prompt targets emitting a bare "   - Cline: " with no instructions.
+    if (t.method === "deeplink") return `   - ${t.name}: one-click install (deep link supported).`;
+    if (t.method === "prompt" && t.setupPrompt) {
+      // A one-line command is worth inlining; the multi-line prompt is not -
+      // it would repeat ~450 chars four times in what is meant to be a quick
+      // reference. The full text is under "Connecting" above, same document.
+      return t.setupKind === "command"
+        ? `   - ${t.name}: run \`${t.setupPrompt}\``
+        : `   - ${t.name}: paste the setup prompt shown under "Connecting" above.`;
+    }
+    return `   - ${t.name}: ${(t.steps ?? []).join(" → ")}`;
+  })
   .join("\n")}
 3. Your agent discovers the tools automatically and calls them with typed inputs.
 

@@ -84,7 +84,9 @@ const selected = enriched.find((t) => t.id === defaultId) ?? enriched[0];
                 <span class="font-mono text-[10px] uppercase tracking-wider text-accent">1-click</span>
               )}
               {t.method === "prompt" && (
-                <span class="font-mono text-[10px] uppercase tracking-wider text-fg-subtle">prompt</span>
+                <span class="font-mono text-[10px] uppercase tracking-wider text-fg-subtle">
+                  {t.setupKind === "command" ? "command" : "prompt"}
+                </span>
               )}
             </button>
           </li>
@@ -137,7 +139,9 @@ const selected = enriched.find((t) => t.id === defaultId) ?? enriched[0];
           ) : t.method === "prompt" && t.setupPrompt ? (
             <>
               <p class="text-xs leading-relaxed text-fg-subtle">
-                Paste this into {t.name} - it will add the server for you.
+                {t.setupKind === "command"
+                  ? `Run this in your terminal - it adds the server to ${t.name}.`
+                  : `Paste this into ${t.name} - it will add the server for you.`}
               </p>
               <div class="mt-2 flex items-stretch border border-border bg-bg">
                 <pre class="max-h-64 flex-1 overflow-y-auto whitespace-pre-wrap break-words px-3 py-2.5 font-mono text-xs leading-relaxed text-fg-muted">{t.setupPrompt}</pre>
@@ -186,13 +190,20 @@ const selected = enriched.find((t) => t.id === defaultId) ?? enriched[0];
       // again on astro:page-load - guard so one click doesn't fire twice.
       if (btn.dataset.copyReady === "true") return;
       btn.dataset.copyReady = "true";
+      // Cache the resting icon ONCE. Reading innerHTML at click time breaks on a
+      // rapid second click: the checkmark is already showing, so it gets saved
+      // as the "original" and the button keeps it forever.
+      const restingIcon = btn.innerHTML;
+      let revertTimer = 0;
       btn.addEventListener("click", async () => {
         try {
           await navigator.clipboard.writeText(btn.dataset.code ?? "");
-          const original = btn.innerHTML;
           btn.innerHTML = CHECK_ICON;
-          window.setTimeout(() => {
-            btn.innerHTML = original;
+          // Restart the clock so the second click still shows feedback for the
+          // full duration instead of the first timer cutting it short.
+          window.clearTimeout(revertTimer);
+          revertTimer = window.setTimeout(() => {
+            btn.innerHTML = restingIcon;
           }, 1500);
         } catch {
           // Clipboard API unavailable (e.g. non-secure context) - fail quietly.

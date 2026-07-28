@@ -39,6 +39,11 @@ const payload = {
     method: t.method,
     install_url: t.method === "deeplink" ? deepLink(t.id, site.mcpUrl, site.serverName) : null,
     steps: t.steps ?? null,
+    // Prompt targets carry their setup text here; without it an agent asking
+    // get_install_instructions for Claude Code / Cline / Zed / Windsurf gets a
+    // bare URL and nothing to act on.
+    setup_prompt: t.setupPrompt ?? null,
+    setup_kind: t.setupKind ?? null,
     note: t.note ?? null,
   })),
   faqs: faq.items.map((f) => ({ q: f.q, a: f.a })),
@@ -167,6 +172,19 @@ const payloadJson = JSON.stringify(payload).replace(/</g, "\\u003c");
               `One-click install for ${client.name}: ${client.install_url}${note}`,
               { client_id: client.id, install_url: client.install_url, mcp_url: data.mcpUrl },
             );
+          }
+          if (client.method === "prompt" && client.setup_prompt) {
+            const how =
+              client.setup_kind === "command"
+                ? `Run this in a terminal to add ${data.serverName} to ${client.name}:`
+                : `Paste this into ${client.name} to add ${data.serverName}:`;
+            const note = client.note ? `\nNote: ${client.note}` : "";
+            return textResult(`${how}\n\n${client.setup_prompt}${note}`, {
+              client_id: client.id,
+              mcp_url: data.mcpUrl,
+              setup_prompt: client.setup_prompt,
+              setup_kind: client.setup_kind,
+            });
           }
           const steps = (client.steps ?? []).map((s, i) => `${i + 1}. ${s}`).join("\n");
           return textResult(
