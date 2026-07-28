@@ -146,11 +146,22 @@ import { site, nav } from "../config/landing";
       if (!panel) return;
 
       const setOpen = (open: boolean) => {
+        // Closing sets display:none on the panel, so anything focused inside it
+        // would be stranded on a hidden subtree and focus would fall to <body>.
+        // Every close path can hit this - Escape, tapping an in-page link like
+        // "/#features", or crossing the md breakpoint - so the hand-back lives
+        // here rather than in one handler. Guarded on the toggle actually being
+        // rendered: it is md:hidden, so on desktop there is nothing to focus.
+        const reclaimFocus =
+          !open && panel.contains(document.activeElement) && toggle.offsetParent !== null;
+
         panel.classList.toggle("hidden", !open);
         toggle.setAttribute("aria-expanded", String(open));
         toggle.setAttribute("aria-label", open ? "Close menu" : "Open menu");
         iconOpen?.classList.toggle("hidden", open);
         iconClose?.classList.toggle("hidden", !open);
+
+        if (reclaimFocus) toggle.focus();
       };
 
       toggle.addEventListener("click", () =>
@@ -163,15 +174,12 @@ import { site, nav } from "../config/landing";
       header
         ?.querySelectorAll("a")
         .forEach((a) => a.addEventListener("click", () => setOpen(false)));
+      // Guarded on the sheet being open so an unrelated Escape elsewhere on the
+      // page never moves focus; setOpen handles handing focus back.
       document.addEventListener("keydown", (e) => {
-        if (e.key !== "Escape") return;
-        if (toggle.getAttribute("aria-expanded") !== "true") return;
-        // Escape hides the panel, so focus sitting on a link inside it would be
-        // stranded on a hidden subtree - hand it back to the trigger. Only when
-        // focus was actually in there, so an unrelated Escape doesn't grab it.
-        const refocus = panel.contains(document.activeElement);
-        setOpen(false);
-        if (refocus) toggle.focus();
+        if (e.key === "Escape" && toggle.getAttribute("aria-expanded") === "true") {
+          setOpen(false);
+        }
       });
       // Never leave the panel open past the md breakpoint - the desktop links
       // take over there and the toggle itself disappears.
