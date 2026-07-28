@@ -13,10 +13,10 @@ import { site, nav } from "../config/landing";
       href="#top"
       class="flex shrink-0 items-center gap-2 py-2 font-semibold tracking-tight"
     >
-      <span
-        class="grid size-7 shrink-0 place-items-center bg-accent font-mono text-sm font-bold text-accent-fg"
-        >{site.name.charAt(0)}</span
-      >
+      {/* The canonical brand mark, same asset the favicon and og.png use - not
+          a letter tile. It is multi-colour, so it renders as an <img> rather
+          than a CSS mask like the monochrome client logos. */}
+      <img src="/favicon.svg" alt="" width="28" height="28" class="size-7 shrink-0" />
       <span>{site.name}</span>
     </a>
 
@@ -168,9 +168,9 @@ import { site, nav } from "../config/landing";
         setOpen(toggle.getAttribute("aria-expanded") !== "true"),
       );
       // Every link in the header, not just the ones inside the sheet: the brand
-      // ("#top") and the CTA ("/#how-it-works") are same-document jumps on the
-      // home page, so nothing reloads and a sheet left open would sit on top of
-      // the destination with aria-expanded still true.
+      // ("#top") and the CTA ("/#connect") are same-document jumps on the home
+      // page, so nothing reloads and a sheet left open would sit on top of the
+      // destination with aria-expanded still true.
       header
         ?.querySelectorAll("a")
         .forEach((a) => a.addEventListener("click", () => setOpen(false)));

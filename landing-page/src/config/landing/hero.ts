@@ -17,9 +17,9 @@ export const hero: {
   // Optional eyebrow pill (launch/funding/release). Set to "" to hide.
   eyebrow: "",
   // Keep the headline short (< ~44 chars) and benefit/identity-driven.
-  headline: "Give your AI agent real tools.",
+  headline: "Triage, draft, sign - without leaving chat.",
   subhead:
-    "DaySurface is a Model Context Protocol server you can ship today. One service registry, exposed identically over CLI, MCP, and HTTP, so any agent that speaks MCP can call it.",
+    "A real email composer and a ranked inbox, right inside Claude, ChatGPT, or your favorite agent. Your agent triages and writes; you edit and send.",
 };
 
 /**

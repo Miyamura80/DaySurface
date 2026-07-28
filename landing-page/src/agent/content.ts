@@ -5,7 +5,7 @@
  * surface: llms.txt, llms-full.txt, agents.md and the in-page agent view.
  * Rebranding the site (editing landing.ts) keeps all of these in sync.
  */
-import { site, hero, features, getStarted, faq, compatibility, connect, comparison, pricing, agentGuide } from "../config/landing";
+import { site, hero, features, faq, compatibility, connect, comparison, pricing, agentGuide } from "../config/landing";
 
 /** Strip a trailing slash so we can safely append paths. */
 function trimSlash(url: string): string {
@@ -65,16 +65,24 @@ export function buildLlmsFullTxt(origin: string): string {
   const featureBlock = features.items
     .map((f) => `### ${f.title}\n${f.body}`)
     .join("\n\n");
-  const transportBlock = getStarted.transports
-    .map(
-      (t) =>
-        `### ${t.label}\n` +
-        `**${t.setupTitle}** - ${t.setupBody}\n\n` +
-        `**${t.callTitle}** - ${t.callBody}`,
-    )
+  // Per-client connect instructions. Replaces the old three-transports block:
+  // an agent needs to know how its host gets wired up, not how the codebase is
+  // layered. The CLI/HTTP story survives under "What it is" and on /api.
+  const connectBlock = connect.targets
+    .map((t) => {
+      const how =
+        t.method === "deeplink"
+          ? "One-click install link on the site."
+          : t.method === "prompt" && t.setupPrompt
+            ? // Inline the actual text - an agent reading this cannot go and
+              // fetch "the setup prompt from the site".
+              `${t.setupKind === "command" ? "Run this in a terminal" : "Paste this into the agent"}:\n\n${t.setupPrompt}`
+            : (t.steps ?? []).map((s, i) => `${i + 1}. ${s}`).join("\n");
+      return `### ${t.name}\n${how}${t.note ? `\n${t.note}` : ""}`;
+    })
     .join("\n\n");
   const faqBlock = faq.items.map((i) => `### ${i.q}\n${i.a}`).join("\n\n");
-  const clients = compatibility.clients.map((c) => c.name).join(", ");
+  const clients = compatibility.hosts.map((h) => h.name).join(", ");
 
   const pillarsBlock = comparison.pillars
     .map((p) => `- **${p.title}**: ${p.body}`)
@@ -112,11 +120,12 @@ discover and call its tools.
 
 ${whenToUseSection()}
 
-## ${getStarted.heading}
+## Connecting
 
-${getStarted.subhead}
+Add the streamable-HTTP endpoint ${site.mcpUrl} to any MCP client. Nothing to
+install locally. Server name: \`${site.serverName}\`.
 
-${transportBlock}
+${connectBlock}
 
 ## Features
 
@@ -142,11 +151,20 @@ Works with every MCP client, including: ${clients}.
 1. Copy the MCP server URL: ${site.mcpUrl}
 2. Add it to your client (server name \`${site.serverName}\`):
 ${connect.targets
-  .map((t) =>
-    t.method === "deeplink"
-      ? `   - ${t.name}: one-click install (deep link supported).`
-      : `   - ${t.name}: ${(t.steps ?? []).join(" → ")}`,
-  )
+  .map((t) => {
+    // Every method needs its own branch. Falling through to `steps` left the
+    // five prompt targets emitting a bare "   - Cline: " with no instructions.
+    if (t.method === "deeplink") return `   - ${t.name}: one-click install (deep link supported).`;
+    if (t.method === "prompt" && t.setupPrompt) {
+      // A one-line command is worth inlining; the multi-line prompt is not -
+      // it would repeat ~450 chars four times in what is meant to be a quick
+      // reference. The full text is under "Connecting" above, same document.
+      return t.setupKind === "command"
+        ? `   - ${t.name}: run \`${t.setupPrompt}\``
+        : `   - ${t.name}: paste the setup prompt shown under "Connecting" above.`;
+    }
+    return `   - ${t.name}: ${(t.steps ?? []).join(" → ")}`;
+  })
   .join("\n")}
 3. Your agent discovers the tools automatically and calls them with typed inputs.
 

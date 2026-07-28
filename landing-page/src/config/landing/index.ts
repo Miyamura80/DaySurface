@@ -13,6 +13,6 @@
 export * from "./site";
 export * from "./hero";
 export * from "./nav";
-export * from "./get-started";
+export * from "./connect";
 export * from "./comparison";
 export * from "./content";

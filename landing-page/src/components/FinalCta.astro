@@ -1,6 +1,6 @@
 ---
 import { finalCta } from "../config/landing";
-import CtaButtons from "./CtaButtons.astro";
+import ConnectWidget from "./ConnectWidget.astro";
 ---
 
 <section class="relative overflow-hidden border-t border-border/60 py-16 sm:py-24">
@@ -18,7 +18,11 @@ import CtaButtons from "./CtaButtons.astro";
         {finalCta.subhead}
       </p>
 
-      <CtaButtons class="mt-9 justify-center lg:justify-start" />
+      <!-- Same connect-your-client CTA as the hero: one conversion action on
+           the page. GitHub / docs stay in the header. -->
+      <div class="mx-auto mt-9 w-full max-w-md lg:mx-0">
+        <ConnectWidget />
+      </div>
     </div>
 
     <!-- Right: flagship features -->
