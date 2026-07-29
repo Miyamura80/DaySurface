@@ -81,7 +81,12 @@ const selected = enriched.find((t) => t.id === defaultId) ?? enriched[0];
                 aria-hidden="true"></span>
               <span class="flex-1">{t.name}</span>
               {t.method === "deeplink" && (
-                <span class="font-mono text-[10px] uppercase tracking-wider text-accent">1-click</span>
+                /* A deep link that prefills nothing (ChatGPT) opens the dialog
+                   but does not finish the job - saying "1-click" there would
+                   promise a connector the visitor still has to type in. */
+                <span class="font-mono text-[10px] uppercase tracking-wider text-accent">
+                  {t.prefills === false ? "shortcut" : "1-click"}
+                </span>
               )}
               {t.method === "prompt" && (
                 <span class="font-mono text-[10px] uppercase tracking-wider text-fg-subtle">
@@ -111,16 +116,17 @@ const selected = enriched.find((t) => t.id === defaultId) ?? enriched[0];
                   style={`-webkit-mask:url('${t.logo}') center/contain no-repeat;mask:url('${t.logo}') center/contain no-repeat;`}
                   aria-hidden="true"
                 />
-                Add to {t.name}
+                {t.prefills === false ? `Open ${t.name} connector setup` : `Add to ${t.name}`}
               </a>
               {t.note && <p class="mt-2.5 text-xs leading-relaxed text-fg-subtle">{t.note}</p>}
-              {/* A deep-link target may ALSO carry steps, used as the manual
-                  fallback when the link is unverified or the scheme is blocked. */}
+              {/* A deep-link target may ALSO carry steps: the manual fallback
+                  when the link is blocked, and - for a link that prefills
+                  nothing - the rest of the flow, so the summary says so. */}
               {t.steps && t.steps.length > 0 && (
                 <details class="mt-3 group">
                   <summary class="cursor-pointer list-none text-xs text-fg-subtle transition hover:text-accent">
                     <span class="underline decoration-dotted underline-offset-4">
-                      Didn't work? Add it manually
+                      {t.prefills === false ? "Full click-path" : "Didn't work? Add it manually"}
                     </span>
                   </summary>
                   <ol class="mt-2.5 space-y-2.5">

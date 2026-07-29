@@ -38,6 +38,10 @@ const payload = {
     name: t.name,
     method: t.method,
     install_url: t.method === "deeplink" ? deepLink(t.id, site.mcpUrl, site.serverName) : null,
+    // Whether that install_url arrives with the fields filled in. ChatGPT's
+    // does not, and an agent told "one-click install" would report the job
+    // finished while the dialog on screen is still empty.
+    prefills: t.method === "deeplink" ? t.prefills !== false : null,
     steps: t.steps ?? null,
     // Prompt targets carry their setup text here; without it an agent asking
     // get_install_instructions for Claude Code / Cline / Zed / Windsurf gets a
@@ -112,6 +116,7 @@ const payloadJson = JSON.stringify(payload).replace(/</g, "\\u003c");
         name: string;
         method: "deeplink" | "manual" | "prompt";
         install_url: string | null;
+        prefills: boolean | null;
         steps: string[] | null;
         setup_prompt: string | null;
         setup_kind: "prompt" | "command" | null;
@@ -142,9 +147,15 @@ const payloadJson = JSON.stringify(payload).replace(/</g, "\\u003c");
           "List the AI agent clients this MCP server can be installed into, and whether each supports one-click install or manual setup.",
         inputSchema: { type: "object", properties: {} },
         async execute() {
-          const lines = data.clients.map(
-            (c) => `- ${c.name} (${c.id}): ${c.method === "deeplink" ? "one-click install" : "manual setup"}`,
-          );
+          const lines = data.clients.map((c) => {
+            const how =
+              c.method !== "deeplink"
+                ? "manual setup"
+                : c.prefills
+                  ? "one-click install"
+                  : "deep link to the setup dialog, URL still pasted by hand";
+            return `- ${c.name} (${c.id}): ${how}`;
+          });
           return textResult(
             `Supported clients:\n${lines.join("\n")}`,
             { clients: data.clients.map((c) => ({ id: c.id, name: c.name, method: c.method })) },
@@ -174,9 +185,22 @@ const payloadJson = JSON.stringify(payload).replace(/</g, "\\u003c");
           }
           if (client.method === "deeplink" && client.install_url) {
             const note = client.note ? `\nNote: ${client.note}` : "";
+            // A link that prefills nothing is half the answer: without the URL
+            // and the remaining steps the agent hands over a blank dialog.
+            const rest = client.prefills
+              ? ""
+              : `\nThis link only opens the setup dialog - the fields come up empty.` +
+                `\nMCP server URL to paste: ${data.mcpUrl}\n` +
+                (client.steps ?? []).map((s, i) => `${i + 1}. ${s}`).join("\n");
             return textResult(
-              `One-click install for ${client.name}: ${client.install_url}${note}`,
-              { client_id: client.id, install_url: client.install_url, mcp_url: data.mcpUrl },
+              `${client.prefills ? "One-click install" : "Setup shortcut"} for ${client.name}: ${client.install_url}${rest}${note}`,
+              {
+                client_id: client.id,
+                install_url: client.install_url,
+                prefills: client.prefills,
+                mcp_url: data.mcpUrl,
+                steps: client.prefills ? null : client.steps,
+              },
             );
           }
           if (client.method === "prompt" && client.setup_prompt) {

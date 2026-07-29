@@ -68,16 +68,24 @@ export function buildLlmsFullTxt(origin: string): string {
   // Per-client connect instructions. Replaces the old three-transports block:
   // an agent needs to know how its host gets wired up, not how the codebase is
   // layered. The CLI/HTTP story survives under "What it is" and on /api.
+  const numbered = (steps?: string[]) =>
+    (steps ?? []).map((s, i) => `${i + 1}. ${s}`).join("\n");
   const connectBlock = connect.targets
     .map((t) => {
-      const how =
-        t.method === "deeplink"
-          ? "One-click install link on the site."
-          : t.method === "prompt" && t.setupPrompt
-            ? // Inline the actual text - an agent reading this cannot go and
-              // fetch "the setup prompt from the site".
-              `${t.setupKind === "command" ? "Run this in a terminal" : "Paste this into the agent"}:\n\n${t.setupPrompt}`
-            : (t.steps ?? []).map((s, i) => `${i + 1}. ${s}`).join("\n");
+      let how: string;
+      if (t.method === "deeplink" && t.prefills !== false) {
+        how = "One-click install link on the site.";
+      } else if (t.method === "deeplink") {
+        // A deep link that prefills nothing gets the click-path too: the dialog
+        // it opens is empty, so filling it in is still the work.
+        how = `Install link on the site opens the setup dialog with empty fields; finish it by hand:\n${numbered(t.steps)}`;
+      } else if (t.method === "prompt" && t.setupPrompt) {
+        // Inline the actual text - an agent reading this cannot go and fetch
+        // "the setup prompt from the site".
+        how = `${t.setupKind === "command" ? "Run this in a terminal" : "Paste this into the agent"}:\n\n${t.setupPrompt}`;
+      } else {
+        how = numbered(t.steps);
+      }
       return `### ${t.name}\n${how}${t.note ? `\n${t.note}` : ""}`;
     })
     .join("\n\n");
@@ -154,7 +162,10 @@ ${connect.targets
   .map((t) => {
     // Every method needs its own branch. Falling through to `steps` left the
     // five prompt targets emitting a bare "   - Cline: " with no instructions.
-    if (t.method === "deeplink") return `   - ${t.name}: one-click install (deep link supported).`;
+    if (t.method === "deeplink" && t.prefills !== false)
+      return `   - ${t.name}: one-click install (deep link supported).`;
+    // ChatGPT's deep link only opens the dialog, so it falls through to the
+    // steps below rather than claiming an install the visitor hasn't done.
     if (t.method === "prompt" && t.setupPrompt) {
       // A one-line command is worth inlining; the multi-line prompt is not -
       // it would repeat ~450 chars four times in what is meant to be a quick
