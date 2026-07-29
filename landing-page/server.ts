@@ -10,6 +10,8 @@
 import { createServer, type ServerResponse } from "node:http";
 import sirv from "sirv";
 
+import { isDocsPath, proxyDocs } from "./docs-proxy.ts";
+
 import { buildAgentsMd } from "./src/agent/content.ts";
 import { site } from "./src/config/landing";
 
@@ -129,6 +131,16 @@ const server = createServer((req, res) => {
     pathname = new URL(req.url ?? "/", "http://localhost").pathname;
   } catch {
     pathname = "";
+  }
+
+  // Ahead of everything else: sirv runs with `single: true`, so without this
+  // the SPA fallback would answer every docs URL with the landing page at a
+  // 200 instead of proxying it.
+  if (isDocsPath(pathname)) {
+    // proxyDocs never rejects - it reports failures on `res` itself. An escaping
+    // rejection here would kill the process serving the whole marketing site.
+    void proxyDocs(req, res);
+    return;
   }
 
   const negotiable = isCanonical(pathname) && (method === "GET" || method === "HEAD");

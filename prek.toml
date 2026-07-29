@@ -43,6 +43,7 @@ hooks = [
     # as a reference table and an "N tools" count, neither of which can be
     # generated. Triggers on the registry AND on docs prose, so a hand-edit to
     # either side is caught.
+    { id = "check-docs-links", name = "check docs content links resolve to real pages", entry = "uv run python scripts/check_docs_links.py", language = "system", pass_filenames = false, files = "^(docs/content/.*\\.mdx|docs/lib/source\\.ts|docs/next\\.config\\.mjs)$" },
     { id = "check-tool-surface-docs", name = "check docs tool tables & counts match the @service registry", entry = "uv run python scripts/check_tool_surface_docs.py", language = "system", pass_filenames = false, files = "^(services/.*\\.py|mcp_server/server\\.py|docs/content/.*\\.mdx)$" },
 ]
 

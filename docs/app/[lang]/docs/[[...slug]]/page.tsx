@@ -1,4 +1,4 @@
-import { getPageImage, source } from "@/lib/source";
+import { getPageImage, isTranslated, source } from "@/lib/source";
 import {
   DocsBody,
   DocsDescription,
@@ -10,6 +10,8 @@ import { getMDXComponents } from "@/mdx-components";
 import type { Metadata } from "next";
 import { createRelativeLink } from "fumadocs-ui/mdx";
 import { LLMCopyButton, ViewOptions } from "@/components/ai/page-actions";
+import { i18n } from "@/lib/i18n";
+import { SITE_NAME, absoluteUrl } from "@/lib/site";
 
 export default async function Page({
   params,
@@ -22,8 +24,8 @@ export default async function Page({
 
   const MDX = page.data.body;
   const gitConfig = {
-    user: "username",
-    repo: "repo",
+    user: "Miyamura80",
+    repo: "DaySurface",
     branch: "main",
   };
 
@@ -64,11 +66,44 @@ export async function generateMetadata({
   const page = source.getPage(slug, lang);
   if (!page) notFound();
 
+  // Only advertise a locale that actually has a translation. `getPage` falls
+  // back to English rather than returning null, so a naive loop would declare
+  // `hreflang="zh"` for a page serving English - a misdeclaration, and on all
+  // but the three translated pages. A page with no translations ends up with
+  // just its own entry plus x-default, which is the correct signal.
+  const languages: Record<string, string> = {};
+  for (const locale of i18n.languages) {
+    const localized = source.getPage(slug, locale);
+    if (localized && isTranslated(localized, locale)) {
+      languages[locale] = absoluteUrl(localized.url);
+    }
+  }
+
   return {
     title: page.data.title,
     description: page.data.description,
+    alternates: {
+      canonical: absoluteUrl(page.url),
+      languages: {
+        ...languages,
+        "x-default": absoluteUrl(
+          source.getPage(slug, i18n.defaultLanguage)?.url ?? page.url,
+        ),
+      },
+    },
     openGraph: {
-      images: getPageImage(page).url,
+      type: "article",
+      siteName: `${SITE_NAME} docs`,
+      title: page.data.title,
+      description: page.data.description,
+      url: absoluteUrl(page.url),
+      images: absoluteUrl(getPageImage(page).url),
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: page.data.title,
+      description: page.data.description,
+      images: absoluteUrl(getPageImage(page).url),
     },
   };
 }

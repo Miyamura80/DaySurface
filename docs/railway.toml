@@ -15,10 +15,16 @@ builder = "RAILPACK"
 buildCommand = "bun run build"
 
 [deploy]
-# `next start` binds 0.0.0.0 and reads $PORT automatically.
-startCommand = "bun run start"
-# Home ("/") 308-redirects to the default locale; hit /en directly for a 200.
-healthcheckPath = "/en"
+# Bind IPv6 (`::`), not the Next default of 0.0.0.0: Railway's private network
+# is IPv6-only, and the landing page reaches this service over it via
+# `DOCS_UPSTREAM`. Binding IPv4-only makes every proxied docs request fail.
+# `$PORT` is set explicitly on the service so the proxy has a fixed port to
+# target - see the DOCS_UPSTREAM note in landing-page/railway.toml.
+startCommand = "bun run start --hostname :: --port $PORT"
+# Must be a path that returns 200, not a redirect. Under
+# `hideLocale: "default-locale"` both "/" and "/en" 307 toward the canonical
+# docs root, so only "/docs" answers directly.
+healthcheckPath = "/docs"
 healthcheckTimeout = 120
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 5

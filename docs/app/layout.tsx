@@ -1,10 +1,14 @@
 import "./global.css";
 import type { Metadata } from "next";
+import { SITE_URL } from "@/lib/site";
 
 // Title and description mirror the landing page's `site` config
 // (landing-page/src/config/landing/site.ts) so search results and link
 // previews describe the same product on both sites.
 export const metadata: Metadata = {
+  // Without this, Next resolves relative metadata URLs against localhost and
+  // warns - which is how canonical tags and OG images silently break in prod.
+  metadataBase: new URL(SITE_URL),
   title: {
     default: "DaySurface Documentation",
     template: "%s | DaySurface Docs",
