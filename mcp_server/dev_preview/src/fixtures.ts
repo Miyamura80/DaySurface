@@ -226,12 +226,14 @@ export function dispatch(name: string, args: Record<string, unknown>): ToolResul
         url: String(args.url ?? ""),
         event_types: (args.event_types as string[] | null) ?? null,
         active: true,
-        secret: "whsec_fixture_9c3ae10b4f27",
+        // Deliberately word-shaped, not random hex: a high-entropy-looking
+        // placeholder trips secret scanners on every commit that touches it.
+        secret: "whsec_example_subscribe",
       });
     case "settings.rotate_secret":
       return ok({
         id: String(args.subscription_id ?? "sub-7f21"),
-        secret: "whsec_fixture_rotated_4d81f2",
+        secret: "whsec_example_rotated",
       });
     case "settings.unsubscribe":
       return ok({ unsubscribed: true });
