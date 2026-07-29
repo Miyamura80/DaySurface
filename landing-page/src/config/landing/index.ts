@@ -15,4 +15,6 @@ export * from "./hero";
 export * from "./nav";
 export * from "./connect";
 export * from "./comparison";
+export * from "./pricing";
+export * from "./pricing-matrix";
 export * from "./content";
