@@ -99,8 +99,19 @@ async function main(): Promise<void> {
   // Fit the frame to the app's content the way a real host does: the app emits
   // ui/notifications/size-changed (autoResize) with its measured height, and we
   // size the iframe to it instead of leaving a fixed box with dead whitespace.
+  //
+  // MAXH caps that growth, as a real client does for a card rendered inline in a
+  // conversation - past the cap the card keeps its height and scrolls internally
+  // rather than pushing the rest of the thread off screen. Uncapped by default;
+  // set MAXH=... at build time for an app that measures very tall (pdf_signer
+  // asks for ~2000px because its viewer pane grows with the document).
+  const capRaw = (window as unknown as { __MAX_HEIGHT__?: number }).__MAX_HEIGHT__;
+  const maxHeight =
+    typeof capRaw === "number" && Number.isFinite(capRaw) && capRaw > 0 ? capRaw : Infinity;
   bridge.onsizechange = ({ height }) => {
-    if (height && height > 0) iframe.style.height = `${Math.ceil(height)}px`;
+    if (height && height > 0) {
+      iframe.style.height = `${Math.min(Math.ceil(height), maxHeight)}px`;
+    }
   };
 
   bridge.oninitialized = async () => {
