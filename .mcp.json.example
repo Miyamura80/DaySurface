@@ -6,16 +6,6 @@
         "daysurface-mcp"
       ],
       "env": {}
-    },
-    "gsc": {
-      "command": "uvx",
-      "args": [
-        "mcp-search-console"
-      ],
-      "env": {
-        "GSC_CREDENTIALS_PATH": "/absolute/path/to/gsc-service-account.json",
-        "GSC_SKIP_OAUTH": "true"
-      }
     }
   }
 }
