@@ -260,7 +260,11 @@ const selected = enriched.find((t) => t.id === defaultId) ?? enriched[0];
         // Modified clicks mean "open elsewhere, keep this page". Hijacking them
         // would swallow that, so copy without preventing the default.
         if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) {
-          navigator.clipboard?.writeText(url).catch(() => {});
+          // Fire-and-forget, so the browser's own navigation is untouched -
+          // which also means nothing here may throw into the click handler.
+          // Every hop is optional: a missing clipboard object, a missing
+          // method, and a non-Promise return each have to be survivable.
+          navigator.clipboard?.writeText?.(url)?.catch(() => {});
           return;
         }
         e.preventDefault();
