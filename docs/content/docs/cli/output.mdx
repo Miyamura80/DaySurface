@@ -42,8 +42,11 @@ daysurface --debug config get nonexistent.key
 Preview what a command would do without executing it:
 
 ```bash
-daysurface --dry-run greet Alice
-# [DRY RUN] Would greet Alice
+daysurface --dry-run config set logging.verbose true
+# [DRY RUN] Would set logging.verbose = 'true'
+
+daysurface --dry-run secrets delete STALE_KEY
+# [DRY RUN] Would delete secret STALE_KEY
 ```
 
 Useful for verifying destructive operations before running them for real.
@@ -53,6 +56,6 @@ Useful for verifying destructive operations before running them for real.
 Control how much output you see:
 
 ```bash
-daysurface --verbose greet Alice    # extra details
-daysurface --quiet greet Alice      # minimal output
+daysurface --verbose doctor         # extra details
+daysurface --quiet secrets list     # minimal output
 ```

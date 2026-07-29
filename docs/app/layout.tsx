@@ -1,9 +1,16 @@
 import "./global.css";
 import type { Metadata } from "next";
 
+// Title and description mirror the landing page's `site` config
+// (landing-page/src/config/landing/site.ts) so search results and link
+// previews describe the same product on both sites.
 export const metadata: Metadata = {
-  title: "MCP Template Documentation",
-  description: "Batteries-included Python template with CLI, MCP, and REST API interfaces",
+  title: {
+    default: "DaySurface Documentation",
+    template: "%s | DaySurface Docs",
+  },
+  description:
+    "An MCP server for Gmail: triage a ranked inbox, draft replies in a real composer, and fill and sign PDF attachments - inside Claude, ChatGPT, or any MCP client.",
   icons: {
     icon: [
       {

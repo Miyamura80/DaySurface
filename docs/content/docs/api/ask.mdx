@@ -92,11 +92,11 @@ generated answer is included as a `SearchSummary` entry at index 0:
 ## Example
 
 ```bash
-curl -N "http://localhost:8080/ask?query=How+do+I+set+up+the+MCP+server%3F"
+curl -N "https://api.daysurface.com/ask?query=How+do+I+set+up+the+MCP+server%3F"
 ```
 
 ```bash
-curl -X POST http://localhost:8080/ask \
+curl -X POST https://api.daysurface.com/ask \
   -H "Content-Type: application/json" \
   -d '{"query": "How do I set up the MCP server?", "streaming": false}'
 ```

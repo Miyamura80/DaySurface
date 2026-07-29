@@ -3,25 +3,6 @@ title: Commands
 description: All available CLI commands
 ---
 
-## greet
-
-Greet someone by name.
-
-```bash
-daysurface greet Alice
-# Hello, Alice!
-
-daysurface greet Alice --shout
-# HELLO, ALICE!
-
-daysurface greet Bob --shout --times 3
-```
-
-| Option | Short | Default | Description |
-|--------|-------|---------|-------------|
-| `--shout` | `-s` | `false` | Uppercase the greeting |
-| `--times` | `-t` | `1` | Repetition count |
-
 ## config
 
 Inspect and modify configuration.
@@ -37,6 +18,42 @@ daysurface config set logging.verbose false      # set an override
 | `show` | Display the full configuration |
 | `get <key>` | Get a single value by dot-separated key |
 | `set <key> <value>` | Write an override to `.global_config.yaml` |
+
+## secrets
+
+Keep API keys and OAuth credentials in your **OS keyring** instead of a plaintext
+file on disk.
+
+```bash
+daysurface secrets list                        # masked by default
+daysurface secrets set GOOGLE_CLIENT_SECRET    # prompts, or pipe with --stdin
+daysurface secrets get OPENAI_API_KEY --reveal # show the full value
+daysurface secrets import --file .env.prod     # load a .env into the keyring
+daysurface secrets delete STALE_KEY
+```
+
+| Subcommand | Description |
+|------------|-------------|
+| `list` | List known secrets, values masked |
+| `set <key> [value]` | Write a secret. Pass `-` or `--stdin` to read the value from stdin |
+| `get <key>` | Read a secret, masked unless `--reveal` |
+| `delete <key>` | Remove a secret. Deleting an absent key is a no-op success |
+| `import` | Read a `.env` file (or stdin) into the keyring (`--file`, `--stdin`, `--interactive`) |
+| `export` | Print keyring contents in `.env` form, masked unless `--reveal` |
+
+<Callout type="warn">
+The server does **not** read the keyring. `common/global_config.py` loads secrets
+from `.env`, so `secrets set` alone will not make a credential visible to
+`daysurface-serve`. The keyring is the safe place to hold them; `.env` is what
+the process reads. To go from one to the other:
+
+```bash
+daysurface secrets export --reveal > .env
+```
+
+For a hosted deployment, set the variables in your platform's environment
+instead - see [Deployment](/docs/deployment).
+</Callout>
 
 ## doctor
 
@@ -79,3 +96,21 @@ daysurface telemetry enable     # opt back in
 ```
 
 You can also set `CLI_TELEMETRY_DISABLED=1` to disable.
+
+## security
+
+Show security ratings and links to the Snyk and Socket.dev assessments.
+
+```bash
+daysurface security
+```
+
+## greet
+
+A no-op smoke-test command kept for verifying an install end to end. It is not
+part of the product surface.
+
+```bash
+daysurface greet Alice
+# Hello, Alice!
+```

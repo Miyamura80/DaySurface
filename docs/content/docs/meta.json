@@ -3,10 +3,10 @@
   "pages": [
     "index",
     "quickstart",
-    "cli",
     "mcp",
     "api",
     "gmail-webhooks",
+    "cli",
     "deployment"
   ]
 }
