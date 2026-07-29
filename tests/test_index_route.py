@@ -42,6 +42,38 @@ class TestRootIndex:
         # Registry crawlers and browser-based agents read it cross-origin.
         assert self._client().get("/").headers.get("access-control-allow-origin") == "*"
 
+    def test_root_varies_on_accept(self):
+        # The host sits behind a CDN; without Vary the first cached response is
+        # served to everyone, handing agents HTML or browsers JSON.
+        client = self._client()
+        assert client.get("/").headers.get("vary") == "Accept"
+        html_resp = client.get("/", headers={"accept": "text/html"})
+        assert html_resp.headers.get("vary") == "Accept"
+
+    def test_every_advertised_endpoint_resolves(self):
+        # An endpoint map that points at a 404 is worse than no map: it sends an
+        # agent down a dead path with full confidence. Walk what we advertise.
+        client = self._client()
+        for name, url in client.get("/").json()["endpoints"].items():
+            path = url.replace("http://testserver", "")
+            assert client.get(path).status_code != 404, f"{name} -> {path}"
+
+    def test_oauth_endpoints_are_advertised_only_when_configured(self, monkeypatch):
+        # The OAuth documents 404 when AuthKit is unconfigured, so advertising
+        # them would contradict `mcp.authentication` in the same document.
+        body = self._client().get("/").json()
+        assert "oauth_protected_resource" not in body["endpoints"]
+        assert "oauth2" not in body["mcp"]["authentication"]["schemes"]
+
+        monkeypatch.setattr(index, "authkit_domain", lambda: "https://auth.example.com")
+        body = self._client().get("/").json()
+        assert body["endpoints"]["oauth_protected_resource"].endswith(
+            "/.well-known/oauth-protected-resource/mcp"
+        )
+        auth = body["mcp"]["authentication"]
+        assert auth["schemes"] == ["oauth2", "api_key"]
+        assert auth["authorization_servers"] == ["https://auth.example.com"]
+
     def test_root_prefers_the_configured_public_host(self, monkeypatch):
         # Absolute URLs must match what OAuth binds tokens to, not the request
         # origin, which behind a proxy can be the internal hostname.
@@ -100,9 +132,17 @@ class TestNotFoundFallback:
         did_you_mean = body["error"]["details"]["did_you_mean"]
         assert did_you_mean.endswith("/.well-known/mcp/server-card.json")
 
-    def test_near_miss_paths_suggest_the_closest_endpoint(self):
-        body = self._client().get("/helth").json()
-        assert body["error"]["details"]["did_you_mean"].endswith("/health")
+    def test_unrecognized_paths_get_no_suggestion(self):
+        # No fuzzy matching: a wrong guess sends an agent down a dead path with
+        # full confidence, which is worse than the endpoint map alone.
+        body = self._client().get("/.well-known/security.txt").json()
+        assert "did_you_mean" not in body["error"]["details"]
+
+    def test_404_is_cors_readable(self):
+        # The browser-based agent that probed a wrong path is who the hint is
+        # for; without this it reads an opaque CORS failure instead.
+        resp = self._client().get("/definitely-not-a-route")
+        assert resp.headers.get("access-control-allow-origin") == "*"
 
     def test_fallback_does_not_shadow_the_mcp_mount(self):
         # /mcp is still FastMCP's; unauthenticated callers get the JSON-RPC 401
@@ -111,6 +151,15 @@ class TestNotFoundFallback:
         assert resp.status_code == 401
         assert resp.json()["error"]["code"] == -32001
         assert "www-authenticate" in resp.headers
+
+    def test_mcp_transport_surface_keeps_its_own_404(self):
+        # Registration is by status code, so a 404 raised inside the transport
+        # would land here. The transport owns that surface: a stale session must
+        # not be answered with a landing document.
+        assert index._is_mcp_path("/mcp") is True
+        assert index._is_mcp_path("/mcp/session") is True
+        # No segment boundary would make /mcpfoo look like the transport.
+        assert index._is_mcp_path("/mcpfoo") is False
 
     def test_real_routes_are_untouched(self):
         assert self._client().get("/health").status_code == 200

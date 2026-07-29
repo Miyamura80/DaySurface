@@ -18,12 +18,13 @@ self-contained page, everything else - agents, ``curl``, registry crawlers -
 gets JSON.
 """
 
-import difflib
 import html
+from pathlib import Path
+from string import Template
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from starlette.responses import Response
 
 from api_server.auth.authkit_auth import authkit_domain
@@ -33,8 +34,12 @@ router = APIRouter(tags=["index"])
 
 MCP_PATH = "/mcp"
 
+_LANDING_TEMPLATE = Path(__file__).with_name("_landing.html")
+
 # Everything a caller can usefully reach, keyed by the name used in the JSON
-# `endpoints` object. Also the corpus the 404 handler fuzzy-matches against.
+# `endpoints` object. Kept honest by ``test_every_advertised_endpoint_resolves``,
+# which walks this map against the live app - an entry that 404s is worse than
+# no entry at all.
 _ENDPOINTS: dict[str, str] = {
     "mcp": MCP_PATH,
     "health": "/health",
@@ -43,24 +48,31 @@ _ENDPOINTS: dict[str, str] = {
     "server_card": "/.well-known/mcp/server-card.json",
     "agent_card": "/.well-known/agent-card.json",
     "api_catalog": "/.well-known/api-catalog",
+}
+
+# Served only when OAuth is configured; the route 404s otherwise, so
+# advertising it unconditionally would contradict `mcp.authentication`.
+_OAUTH_ENDPOINTS: dict[str, str] = {
     "oauth_protected_resource": "/.well-known/oauth-protected-resource/mcp",
+    "oauth_authorization_server": "/.well-known/oauth-authorization-server/mcp",
 }
 
 # Paths MCP clients, registries, and agents guess at, mapped to what this
 # server actually serves. Legacy HTTP+SSE transport paths (/sse, /messages)
 # dominate: clients written against the pre-streamable-HTTP spec probe them
 # first. Matched after normalization (lowercased, trailing slash stripped).
+#
+# Nothing under /mcp belongs here: MCPAuthMiddleware sits outside this mount
+# and answers every path starting with /mcp itself, so those rows would be
+# unreachable - and :func:`not_found_handler` leaves that surface alone.
 _ALIASES: dict[str, str] = {
     "/sse": MCP_PATH,
-    "/mcp/sse": MCP_PATH,
     "/messages": MCP_PATH,
     "/message": MCP_PATH,
     "/stream": MCP_PATH,
     "/api/mcp": MCP_PATH,
     "/v1/mcp": MCP_PATH,
-    "/mcp/v1": MCP_PATH,
     "/rpc": MCP_PATH,
-    "/mcp.json": "/.well-known/mcp/server-card.json",
     "/.well-known/mcp": "/.well-known/mcp/server-card.json",
     "/.well-known/mcp.json": "/.well-known/mcp/server-card.json",
     "/.well-known/agent.json": "/.well-known/agent-card.json",
@@ -69,6 +81,13 @@ _ALIASES: dict[str, str] = {
     "/swagger": "/docs",
     "/redoc": "/docs",
 }
+
+
+def _endpoints() -> dict[str, str]:
+    """Paths to advertise, given what this deployment actually serves."""
+    if authkit_domain():
+        return {**_ENDPOINTS, **_OAUTH_ENDPOINTS}
+    return dict(_ENDPOINTS)
 
 
 def _base_url(request: Request) -> str:
@@ -105,7 +124,9 @@ def _authentication() -> dict:
     auth: dict = {"required": True, "schemes": schemes}
     if domain:
         auth["authorization_servers"] = [domain]
-        auth["protected_resource_metadata"] = _ENDPOINTS["oauth_protected_resource"]
+        auth["protected_resource_metadata"] = _OAUTH_ENDPOINTS[
+            "oauth_protected_resource"
+        ]
     auth["api_key_header"] = "X-Api-Key"
     return auth
 
@@ -152,7 +173,7 @@ def index_document(request: Request) -> dict:
             "authentication": _authentication(),
             "tools": _tool_names(),
         },
-        "endpoints": {name: f"{base}{path}" for name, path in _ENDPOINTS.items()},
+        "endpoints": {name: f"{base}{path}" for name, path in _endpoints().items()},
         "links": {
             "website": b.website_url,
             "repository": b.repository_url,
@@ -166,57 +187,33 @@ def _prefers_html(request: Request) -> bool:
 
 
 def _landing_page(doc: dict) -> str:
-    """Self-contained HTML mirror of the index document (no external assets)."""
+    """Self-contained HTML mirror of the index document (no external assets).
+
+    The markup lives in ``_landing.html`` next door rather than in a Python
+    string: an f-string would need every CSS brace doubled, and one missed
+    escape is a runtime error on a public, unauthenticated endpoint.
+    """
     e = html.escape
     endpoint_rows = "\n".join(
-        f'<li><a href="{e(doc["endpoints"][name])}">{e(name.replace("_", " "))}</a>'
-        f"<code>{e(path)}</code></li>"
-        for name, path in _ENDPOINTS.items()
+        f'<li><a href="{e(url)}">{e(name.replace("_", " "))}</a>'
+        f"<code>{e(urlsplit(url).path)}</code></li>"
+        for name, url in doc["endpoints"].items()
     )
     tools = doc["mcp"]["tools"]
-    tool_list = ", ".join(e(name) for name in tools) or "none registered"
     add_command = (
         f"claude mcp add --transport http {_client_name(doc['title'])} "
         f"{doc['mcp']['url']}"
     )
-    return f"""<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{e(doc["title"])} - MCP server</title>
-<style>
-  :root {{ color-scheme: dark light; }}
-  body {{ margin: 0 auto; padding: 3rem 1.5rem; max-width: 46rem;
-         font: 16px/1.6 ui-sans-serif, system-ui, sans-serif; }}
-  code {{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-          font-size: 0.9em; }}
-  pre {{ padding: 0.9rem 1rem; overflow-x: auto; border-radius: 8px;
-         background: rgba(127, 127, 127, 0.14); }}
-  ul {{ list-style: none; padding: 0; }}
-  li {{ display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: baseline;
-        padding: 0.35rem 0; }}
-  li code {{ opacity: 0.65; }}
-  .tools {{ opacity: 0.75; font-size: 0.9em; }}
-</style>
-</head>
-<body>
-<h1>{e(doc["title"])}</h1>
-<p>{e(doc["description"])}</p>
-<h2>Connect</h2>
-<p>Streamable-HTTP MCP endpoint - authentication required.</p>
-<pre><code>{e(doc["mcp"]["url"])}</code></pre>
-<pre><code>{e(add_command)}</code></pre>
-<h2>Endpoints</h2>
-<ul>
-{endpoint_rows}
-</ul>
-<h2>Tools ({len(tools)})</h2>
-<p class="tools">{tool_list}</p>
-<p><a href="{e(doc["links"]["website"])}">{e(doc["links"]["website"])}</a></p>
-</body>
-</html>
-"""
+    return Template(_LANDING_TEMPLATE.read_text(encoding="utf-8")).substitute(
+        title=e(doc["title"]),
+        description=e(doc["description"]),
+        mcp_url=e(doc["mcp"]["url"]),
+        add_command=e(add_command),
+        endpoint_rows=endpoint_rows,
+        tool_count=len(tools),
+        tool_list=", ".join(e(name) for name in tools) or "none registered",
+        website=e(doc["links"]["website"]),
+    )
 
 
 # HEAD is spelled out because FastAPI, unlike plain Starlette, does not imply it
@@ -225,24 +222,32 @@ def _landing_page(doc: dict) -> str:
 def index(request: Request) -> Response:
     """Describe this host to whoever - or whatever - lands on it."""
     doc = index_document(request)
+    # `Vary: Accept` is not optional: this host sits behind a CDN, and without
+    # it the first response cached for "/" is served to everyone - agents get
+    # the browser's HTML, or browsers get the agent's JSON.
+    # `Access-Control-Allow-Origin` matches the well-known documents this points
+    # at: registry crawlers and browser-based agents read them cross-origin.
+    headers = {"Vary": "Accept", "Access-Control-Allow-Origin": "*"}
     if _prefers_html(request):
-        return HTMLResponse(_landing_page(doc))
-    # Registry crawlers and browser-based agents read this cross-origin, same
-    # as the well-known discovery documents it points at.
-    return JSONResponse(doc, headers={"Access-Control-Allow-Origin": "*"})
+        return HTMLResponse(_landing_page(doc), headers=headers)
+    return JSONResponse(doc, headers=headers)
 
 
 def _suggest(path: str) -> str | None:
-    """The endpoint a caller probing ``path`` most likely wanted, if any."""
+    """The endpoint a caller probing ``path`` most likely wanted, if any.
+
+    A table lookup, deliberately: agents don't typo, they guess *structurally*
+    (a transport path from an older spec, a registry's favourite filename), and
+    fuzzy matching answers those no better while confidently mis-routing
+    near-misses it has no business answering at all.
+    """
     normalized = path.rstrip("/").lower() or "/"
-    if normalized in _ALIASES:
-        return _ALIASES[normalized]
-    if normalized.startswith(MCP_PATH):
-        # /mcp/anything is a client guessing at a sub-path; FastMCP serves the
-        # whole session on /mcp itself.
-        return MCP_PATH
-    close = difflib.get_close_matches(normalized, list(_ENDPOINTS.values()), n=1)
-    return close[0] if close else None
+    return _ALIASES.get(normalized)
+
+
+def _is_mcp_path(path: str) -> bool:
+    """True for the MCP transport surface: ``/mcp`` and anything beneath it."""
+    return path == MCP_PATH or path.startswith(f"{MCP_PATH}/")
 
 
 async def not_found_handler(request: Request, exc: Exception) -> Response:
@@ -252,7 +257,17 @@ async def not_found_handler(request: Request, exc: Exception) -> Response:
     what actually receives unmatched paths. The body uses the API's error
     envelope, so ``ErrorHandlerMiddleware`` passes it through and stamps the
     request ID on it.
+
+    Registration is by status code, so this also sees any ``HTTPException(404)``
+    raised *inside* the MCP transport. Today FastMCP emits its protocol 404s
+    (terminated or unknown session) as direct responses, so none arrive here -
+    but the transport owns that surface either way, and answering a stale
+    session with a landing document would be a protocol error. Hence the guard:
+    /mcp keeps the bare 404.
     """
+    if _is_mcp_path(request.url.path):
+        return PlainTextResponse("Not Found", status_code=404)
+
     base = _base_url(request)
     suggestion = _suggest(request.url.path)
     message = f"No handler for {request.method} {request.url.path}."
@@ -267,6 +282,11 @@ async def not_found_handler(request: Request, exc: Exception) -> Response:
 
     body = {
         "error": {"code": "not_found", "message": message, "details": details},
-        "endpoints": {name: f"{base}{path}" for name, path in _ENDPOINTS.items()},
+        "endpoints": {name: f"{base}{path}" for name, path in _endpoints().items()},
     }
-    return JSONResponse(body, status_code=404)
+    # Same CORS grant as the index: the browser-based agent that probed a wrong
+    # path is exactly who the hint is for, and without this it reads an opaque
+    # CORS failure instead.
+    return JSONResponse(
+        body, status_code=404, headers={"Access-Control-Allow-Origin": "*"}
+    )

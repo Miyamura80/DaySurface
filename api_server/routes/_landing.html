@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>$title - MCP server</title>
+<style>
+  :root { color-scheme: dark light; }
+  body { margin: 0 auto; padding: 3rem 1.5rem; max-width: 46rem;
+         font: 16px/1.6 ui-sans-serif, system-ui, sans-serif; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+         font-size: 0.9em; }
+  pre { padding: 0.9rem 1rem; overflow-x: auto; border-radius: 8px;
+        background: rgba(127, 127, 127, 0.14); }
+  ul { list-style: none; padding: 0; }
+  li { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: baseline;
+       padding: 0.35rem 0; }
+  li code { opacity: 0.65; }
+  .tools { opacity: 0.75; font-size: 0.9em; }
+</style>
+</head>
+<body>
+<h1>$title</h1>
+<p>$description</p>
+<h2>Connect</h2>
+<p>Streamable-HTTP MCP endpoint - authentication required.</p>
+<pre><code>$mcp_url</code></pre>
+<pre><code>$add_command</code></pre>
+<h2>Endpoints</h2>
+<ul>
+$endpoint_rows
+</ul>
+<h2>Tools ($tool_count)</h2>
+<p class="tools">$tool_list</p>
+<p><a href="$website">$website</a></p>
+</body>
+</html>
