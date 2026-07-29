@@ -219,7 +219,15 @@ export function dispatch(name: string, args: Record<string, unknown>): ToolResul
     case "settings.get":
       return ok(SETTINGS_SNAPSHOT);
     case "settings.subscribe":
-      return ok({ id: "sub-new01", secret: "whsec_fixture_9c3ae10b4f27" });
+      // Full models.webhooks.WebhookSubscribeResult - echo back the submitted
+      // url/event_types the way the real tool does, not just the new secret.
+      return ok({
+        id: "sub-new01",
+        url: String(args.url ?? ""),
+        event_types: (args.event_types as string[] | null) ?? null,
+        active: true,
+        secret: "whsec_fixture_9c3ae10b4f27",
+      });
     case "settings.rotate_secret":
       return ok({
         id: String(args.subscription_id ?? "sub-7f21"),
