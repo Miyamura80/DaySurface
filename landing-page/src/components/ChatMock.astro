@@ -7,7 +7,13 @@
  * renders its own UI regardless of host, so the card stays brand-cyan everywhere.
  *
  * The toggle itself stays in the site's Hackbox style (it's our control, not a
- * client's). Each shell is full, separate markup; the toggle only flips visibility.
+ * client's). Each shell is full, separate markup.
+ *
+ * The toggle does not own the selection - it writes the page-level client state
+ * (src/lib/client-state.ts), which the features frames and the connect widget
+ * read too. Which shell is visible is decided in CSS off <html data-client>, so
+ * a stored choice is already correct at first paint; the script below only
+ * keeps the ARIA state in step and handles input.
  */
 import { heroChat } from "../config/landing";
 import ClaudeShell from "./chat/ClaudeShell.astro";
@@ -47,18 +53,41 @@ const maskStyle = (logo: string) =>
     }
   </div>
 
-  <!-- Shells; only the active one is shown. Each is the tabpanel for its toggle
-       tab (role/aria-labelledby), so the active panel is exposed to assistive
-       tech rather than hidden. -->
+  <!-- Shells; only the active one is shown, decided in CSS off the page-level
+       data-client (see the style block) rather than a `hidden` attribute set by
+       JS - otherwise a stored non-default choice would flash the default first.
+       Each is the tabpanel for its toggle tab (role/aria-labelledby). -->
   <div>
-    <div role="tabpanel" id="panel-claude" aria-labelledby="tab-claude" tabindex="0" data-shell="claude" hidden={defaultId !== "claude"}><ClaudeShell /></div>
-    <div role="tabpanel" id="panel-chatgpt" aria-labelledby="tab-chatgpt" tabindex="0" data-shell="chatgpt" hidden={defaultId !== "chatgpt"}><ChatGptShell /></div>
-    <div role="tabpanel" id="panel-goose" aria-labelledby="tab-goose" tabindex="0" data-shell="goose" hidden={defaultId !== "goose"}><GooseShell /></div>
-    <div role="tabpanel" id="panel-vscode" aria-labelledby="tab-vscode" tabindex="0" data-shell="vscode" hidden={defaultId !== "vscode"}><VsCodeShell /></div>
+    <div role="tabpanel" id="panel-claude" aria-labelledby="tab-claude" tabindex="0" data-shell="claude"><ClaudeShell /></div>
+    <div role="tabpanel" id="panel-chatgpt" aria-labelledby="tab-chatgpt" tabindex="0" data-shell="chatgpt"><ChatGptShell /></div>
+    <div role="tabpanel" id="panel-goose" aria-labelledby="tab-goose" tabindex="0" data-shell="goose"><GooseShell /></div>
+    <div role="tabpanel" id="panel-vscode" aria-labelledby="tab-vscode" tabindex="0" data-shell="vscode"><VsCodeShell /></div>
   </div>
 </div>
 
+<style>
+  /* display:none also takes the inactive panels out of the a11y tree, which is
+     what the tabs pattern wants for an unselected tabpanel. */
+  [data-shell] { display: none; }
+  :root[data-client="claude"] [data-shell="claude"],
+  :root[data-client="chatgpt"] [data-shell="chatgpt"],
+  :root[data-client="goose"] [data-shell="goose"],
+  :root[data-client="vscode"] [data-shell="vscode"] { display: block; }
+
+  /* The selected tab's styling has to come from the same source, or a stored
+     choice would paint the wrong tab highlighted until the script runs. */
+  :root[data-client="claude"] .client-tab[data-client-tab="claude"],
+  :root[data-client="chatgpt"] .client-tab[data-client-tab="chatgpt"],
+  :root[data-client="goose"] .client-tab[data-client-tab="goose"],
+  :root[data-client="vscode"] .client-tab[data-client-tab="vscode"] {
+    background: var(--color-accent);
+    color: var(--color-accent-fg);
+  }
+</style>
+
 <script>
+  import { onClient, setClient } from "../lib/client-state";
+
   function initChatMock() {
     document.querySelectorAll<HTMLElement>("[data-chatmock]").forEach((root) => {
       // Idempotent: skip roots already wired (e.g. a repeat astro:page-load).
@@ -68,24 +97,21 @@ const maskStyle = (logo: string) =>
       const tabs = Array.from(
         root.querySelectorAll<HTMLButtonElement>(".client-tab"),
       );
-      const shells = root.querySelectorAll<HTMLElement>("[data-shell]");
 
-      // Activate a tab: roving tabindex (only the selected tab is in the tab
-      // order) + aria-selected + show the matching panel.
-      const select = (tab: HTMLButtonElement) => {
-        const id = tab.dataset.clientTab;
+      // Visibility is CSS's job now; this only mirrors the state into ARIA -
+      // roving tabindex (only the selected tab is in the tab order) plus
+      // aria-selected. It runs for the current client and on every change, so
+      // a selection made in the connect widget lands here too.
+      onClient((id) => {
         tabs.forEach((t) => {
-          const on = t === tab;
+          const on = t.dataset.clientTab === id;
           t.setAttribute("aria-selected", String(on));
           t.tabIndex = on ? 0 : -1;
         });
-        shells.forEach((s) => {
-          s.hidden = s.dataset.shell !== id;
-        });
-      };
+      });
 
       tabs.forEach((tab, i) => {
-        tab.addEventListener("click", () => select(tab));
+        tab.addEventListener("click", () => setClient(tab.dataset.clientTab!));
         // WAI-ARIA tabs keyboard pattern: Left/Right move (and activate) the
         // adjacent tab; Home/End jump to the first/last.
         tab.addEventListener("keydown", (e) => {
@@ -96,7 +122,7 @@ const maskStyle = (logo: string) =>
           else if (e.key === "End") next = tabs.length - 1;
           else return;
           e.preventDefault();
-          select(tabs[next]);
+          setClient(tabs[next].dataset.clientTab!);
           tabs[next].focus();
         });
       });
