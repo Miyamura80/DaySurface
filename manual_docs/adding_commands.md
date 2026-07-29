@@ -7,8 +7,9 @@ Which shape you export decides whether the file becomes one command or a group.
 
 ## Single command
 
-Export a `main()` function. The file name becomes the command name, and the
-docstring becomes its help text.
+Export a `main()` function. The file name becomes the command name - with
+underscores turned into hyphens, so `my_tool.py` is invoked as `my-tool` - and
+the docstring becomes its help text.
 
 ```python
 # src/cli/commands/hello.py
@@ -27,8 +28,8 @@ uv run daysurface hello World   # Hello, World!
 
 ## Subcommand group
 
-Export `app = typer.Typer()`. The file name becomes the group name and each
-`@app.command()` becomes a subcommand under it.
+Export `app = typer.Typer()`. The file name becomes the group name - hyphenated
+the same way - and each `@app.command()` becomes a subcommand under it.
 
 ```python
 # src/cli/commands/db.py
