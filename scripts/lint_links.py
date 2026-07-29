@@ -59,6 +59,12 @@ CLOUD_SANDBOX_IGNORES = [
     # off the allowlist rather than grant standing egress for one convenience
     # link to an extension page.
     r"https?://marketplace\.visualstudio\.com(/|\?|$)",
+    # One-click MCP install deep links in the README's client table. Both hosts
+    # are programmable surfaces an attacker could push data into and read back
+    # (claude.ai is a chat product; vscode.dev is a full web IDE), so they stay
+    # off the allowlist and are skipped in the sandbox only.
+    r"https?://(www\.)?claude\.ai(/|\?|$)",
+    r"https?://(www\.)?vscode\.dev(/|\?|$)",
 ]
 
 # Files whose external links are deliberately not checked inside the cloud
