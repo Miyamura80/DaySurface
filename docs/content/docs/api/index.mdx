@@ -41,6 +41,55 @@ Every tool follows the same shape - `POST /api/v1/services/{tool_name}` with the
 tool's input model as the body. The generated OpenAPI document lives at
 `/openapi.json`.
 
+## Discovery
+
+The root path describes the deployment to whoever - or whatever - lands on it.
+No authentication required.
+
+```bash
+curl https://mcp.daysurface.com/
+```
+
+```json
+{
+  "title": "DaySurface",
+  "protocol": "mcp",
+  "instructions": "This host serves the Model Context Protocol at https://mcp.daysurface.com/mcp ...",
+  "mcp": {
+    "url": "https://mcp.daysurface.com/mcp",
+    "transport": "streamable-http",
+    "authentication": { "required": true, "schemes": ["oauth2", "api_key"] },
+    "tools": ["gmail_list_inbox", "gmail_compose", "..."]
+  },
+  "endpoints": { "mcp": "...", "health": "...", "server_card": "..." }
+}
+```
+
+Browsers (`Accept: text/html`) get a small landing page with the same content.
+
+Unknown paths return a `404` carrying the same `endpoints` map plus a
+`did_you_mean` hint, so a client probing a legacy transport path - `/sse`,
+`/messages` - is told where the endpoint actually lives:
+
+```json
+{
+  "error": {
+    "code": "not_found",
+    "message": "No handler for GET /sse. Did you mean https://mcp.daysurface.com/mcp?",
+    "details": { "path": "/sse", "did_you_mean": "https://mcp.daysurface.com/mcp" },
+    "request_id": "eee3ed63ac4b4651ab3911c47a21603e"
+  },
+  "endpoints": {
+    "mcp": "https://mcp.daysurface.com/mcp",
+    "health": "https://mcp.daysurface.com/health",
+    "server_card": "https://mcp.daysurface.com/.well-known/mcp/server-card.json"
+  }
+}
+```
+
+`endpoints` sits beside `error`, carrying the same entries as the discovery
+response above. `did_you_mean` is present only when a known alias matches.
+
 ## Health Check
 
 No authentication required.

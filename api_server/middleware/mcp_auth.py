@@ -28,7 +28,19 @@ from common import global_config
 from db.engine import use_db_session
 from src.utils.current_user import reset_current_user, set_current_user
 
-_MCP_PATH_PREFIX = "/mcp"
+_MCP_PATH = "/mcp"
+
+
+def is_mcp_path(path: str) -> bool:
+    """True for the MCP transport surface: ``/mcp`` and anything beneath it.
+
+    Matched on the path *segment*, not the raw prefix: ``/mcpfoo`` is an
+    ordinary unknown path, and answering it with an authentication challenge
+    would tell a caller that a transport lives there when none does. The
+    landing-document 404 handler shares this predicate, so the auth boundary
+    and the routing boundary can't disagree about where /mcp ends.
+    """
+    return path == _MCP_PATH or path.startswith(f"{_MCP_PATH}/")
 
 
 class MCPAuthMiddleware:
@@ -38,7 +50,7 @@ class MCPAuthMiddleware:
         self.app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http" or not scope["path"].startswith(_MCP_PATH_PREFIX):
+        if scope["type"] != "http" or not is_mcp_path(scope["path"]):
             await self.app(scope, receive, send)
             return
 
