@@ -50,24 +50,28 @@ export const features: { heading: string; subhead: string; items: Feature[] } = 
   // end-user outcomes - the transports story lives in the comparison pillars
   // and on /api, and the visuals here must not restage the hero chat mock
   // (which already renders the composer and the ranked inbox).
+  //
+  // The diagram carries each claim (see components/diagrams/), so the body is
+  // its caption, not its transcript: one sentence, ~15 words, hard ceiling.
+  // If a sentence explains the picture, cut it - the picture failed or the
+  // sentence is redundant.
   heading: "Every action lands somewhere you can edit.",
-  subhead:
-    "Replies open in a real composer, triage banks what your agent already read, and PDFs get filled for you to sign. Nothing leaves your account until you send it.",
+  subhead: "Your agent drafts, triages and fills. You edit and send.",
   items: [
     {
       visual: "composer",
       title: "Drafts you edit, not approve",
-      body: "Replies land in a real Gmail draft with a composer rendered inside the chat - recipients, subject, body and attachments, all editable in place. Your agent writes the first version; nothing sends until you press send.",
+      body: "Replies open in a real Gmail draft inside the chat. Nothing sends until you do.",
     },
     {
       visual: "ledger",
       title: "Triage that remembers",
-      body: "Your agent reads a thread once and banks its verdict. Each judgment is stamped against the thread's Gmail history, so the next \"what needs me?\" only re-reads what actually changed - instead of re-running a search and starting from zero.",
+      body: "Verdicts are banked per thread, so the next pass re-reads only what changed.",
     },
     {
       visual: "signing",
       title: "Fill and sign, in the thread",
-      body: "Your agent opens a PDF attachment, fills its form fields, and hands it back for signature. The bytes stay server-side and never enter the conversation - and signing is a step only you can complete, by typing your own name.",
+      body: "Your agent fills the PDF where it lives. The file never enters the chat, and only you can sign it.",
     },
   ],
 };

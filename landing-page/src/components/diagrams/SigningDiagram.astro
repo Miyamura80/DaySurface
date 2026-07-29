@@ -1,0 +1,241 @@
+---
+/*
+ * "Fill and sign, in the thread".
+ *
+ * One point: the PDF lives on the far side of a boundary. Field values and your
+ * typed name cross it; the file itself never does. The dashed rule is the whole
+ * diagram - everything else just says which way things move across it.
+ */
+const W = 420;
+const H = 300;
+
+const divX = 206;
+const agent = { x: 16, y: 86, w: 148, h: 48 };
+const you = { x: 16, y: 188, w: 148, h: 48 };
+const doc = { x: 240, y: 62, w: 168, h: 186 };
+
+const fieldY = doc.y + 44;
+const fieldPitch = 26;
+const filled = [58, 42, 66]; // how much of each field the agent wrote
+
+const signY = doc.y + 152;
+const blockedY = 266;
+---
+
+<svg
+  viewBox={`0 0 ${W} ${H}`}
+  class="h-auto w-full font-mono"
+  role="img"
+  aria-labelledby="signing-diagram-title"
+>
+  <title id="signing-diagram-title">
+    The agent fills the PDF where it already lives; only your signature crosses
+    back, and the file itself never enters the chat.
+  </title>
+
+  <!-- the boundary -->
+  <line
+    x1={divX}
+    y1="34"
+    x2={divX}
+    y2={H - 16}
+    class="stroke-border"
+    stroke-width="2"
+    stroke-dasharray="5 6"></line>
+  <text
+    x={agent.x + agent.w / 2}
+    y="44"
+    text-anchor="middle"
+    font-size="12"
+    class="fill-fg-subtle">in chat</text
+  >
+  <text
+    x={doc.x + doc.w / 2}
+    y="44"
+    text-anchor="middle"
+    font-size="12"
+    class="fill-fg-subtle">your account</text
+  >
+
+  <!-- who's in the chat -->
+  <rect
+    x={agent.x}
+    y={agent.y}
+    width={agent.w}
+    height={agent.h}
+    class="fill-surface-1 stroke-border"
+    stroke-width="2"></rect>
+  <text
+    x={agent.x + agent.w / 2}
+    y={agent.y + agent.h / 2 + 5}
+    text-anchor="middle"
+    font-size="14"
+    class="fill-fg-muted">agent</text
+  >
+
+  <rect
+    x={you.x}
+    y={you.y}
+    width={you.w}
+    height={you.h}
+    class="fill-surface-1 stroke-accent"
+    stroke-width="2"></rect>
+  <text
+    x={you.x + you.w / 2}
+    y={you.y + you.h / 2 + 5}
+    text-anchor="middle"
+    font-size="14"
+    class="fill-accent">you</text
+  >
+
+  <!-- the document, on the far side -->
+  <rect
+    x={doc.x}
+    y={doc.y}
+    width={doc.w}
+    height={doc.h}
+    class="fill-surface-1 stroke-border"
+    stroke-width="2"></rect>
+  <text x={doc.x + 14} y={doc.y + 24} font-size="12" class="fill-fg-subtle"
+    >PDF</text
+  >
+
+  {
+    filled.map((w, i) => (
+      <>
+        <rect
+          x={doc.x + 14}
+          y={fieldY + i * fieldPitch + 5}
+          width="32"
+          height="6"
+          class="fill-border"
+        />
+        <rect
+          x={doc.x + 54}
+          y={fieldY + i * fieldPitch}
+          width="90"
+          height="16"
+          class="stroke-border"
+          fill="none"
+        />
+        <rect
+          x={doc.x + 60}
+          y={fieldY + i * fieldPitch + 5}
+          width={w}
+          height="6"
+          class="fill-accent"
+        />
+      </>
+    ))
+  }
+
+  <!-- signature line: empty until you type your own name -->
+  <line
+    x1={doc.x + 14}
+    y1={signY}
+    x2={doc.x + doc.w - 14}
+    y2={signY}
+    class="stroke-accent"
+    stroke-width="2"></line>
+  <rect
+    x={doc.x + 22}
+    y={signY - 20}
+    width="2"
+    height="17"
+    class="caret fill-accent"></rect>
+  <text x={doc.x + 14} y={signY + 20} font-size="12" class="fill-fg-subtle"
+    >sign</text
+  >
+
+  <!-- agent fills the fields -->
+  <line
+    x1={agent.x + agent.w}
+    y1={fieldY + 8}
+    x2={doc.x - 10}
+    y2={fieldY + 8}
+    class="stroke-border"
+    stroke-width="2"></line>
+  <polygon
+    points={`${doc.x},${fieldY + 8} ${doc.x - 10},${fieldY + 3} ${doc.x - 10},${fieldY + 13}`}
+    class="fill-border"></polygon>
+  <rect
+    x={divX - 22}
+    y={fieldY - 18}
+    width="44"
+    height="14"
+    class="fill-surface-1"></rect>
+  <text
+    x={divX}
+    y={fieldY - 7}
+    text-anchor="middle"
+    font-size="12"
+    class="fill-fg-subtle">fills</text
+  >
+
+  <!-- only you can sign -->
+  <line
+    x1={you.x + you.w}
+    y1={signY}
+    x2={doc.x - 10}
+    y2={signY}
+    class="stroke-accent"
+    stroke-width="2"></line>
+  <polygon
+    points={`${doc.x},${signY} ${doc.x - 10},${signY - 5} ${doc.x - 10},${signY + 5}`}
+    class="fill-accent"></polygon>
+  <rect
+    x={divX - 22}
+    y={signY - 25}
+    width="44"
+    height="14"
+    class="fill-surface-1"></rect>
+  <text
+    x={divX}
+    y={signY - 14}
+    text-anchor="middle"
+    font-size="12"
+    class="fill-accent">signs</text
+  >
+
+  <!-- and the bytes stop at the boundary -->
+  <line
+    x1={doc.x}
+    y1={blockedY}
+    x2={divX + 14}
+    y2={blockedY}
+    class="stroke-fg-subtle"
+    stroke-width="1"
+    stroke-dasharray="4 5"></line>
+  <line
+    x1={divX - 5}
+    y1={blockedY - 5}
+    x2={divX + 5}
+    y2={blockedY + 5}
+    class="stroke-fg-subtle"
+    stroke-width="2"></line>
+  <line
+    x1={divX + 5}
+    y1={blockedY - 5}
+    x2={divX - 5}
+    y2={blockedY + 5}
+    class="stroke-fg-subtle"
+    stroke-width="2"></line>
+  <text x={doc.x + 10} y={blockedY + 4} font-size="12" class="fill-fg-subtle"
+    >file bytes</text
+  >
+</svg>
+
+<style>
+  .caret {
+    animation: caret-blink 1.1s step-end infinite;
+  }
+  @keyframes caret-blink {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0;
+    }
+  }
+</style>

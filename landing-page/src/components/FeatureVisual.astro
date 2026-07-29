@@ -4,19 +4,17 @@
  * feature in config). Rendered both in the sticky desktop panel and inline on
  * mobile (Features.astro).
  *
- * These are the REAL MCP App mocks - the same components the hero chat mock
- * embeds (InboxApp / ComposerApp) plus SignerApp - inside a ChatFrame wearing
- * whichever client the page is currently set to. Pick ChatGPT in the hero and
- * these frames are ChatGPT too: same page-level state, same tokens.
+ * These are diagrams, not product mocks. The hero already stages the real MCP
+ * apps in a chat shell; restaging them here just showed the same screenshot
+ * twice and left the actual claim ("nothing sends until you do", "only what
+ * changed is re-read", "the file never enters the chat") to a paragraph of
+ * prose. A diagram says it without the paragraph.
  *
- * The app cards themselves deliberately do NOT re-skin with the host. A
- * sandboxed MCP App ships its own UI and renders identically in every client -
- * that's the point of the frame around them changing while they don't.
+ * Shared language across all three: grey is the agent's half, cyan is yours.
  */
-import ChatFrame from "./chat/ChatFrame.astro";
-import InboxApp from "./chat/InboxApp.astro";
-import ComposerApp from "./chat/ComposerApp.astro";
-import SignerApp from "./chat/SignerApp.astro";
+import ComposerDiagram from "./diagrams/ComposerDiagram.astro";
+import LedgerDiagram from "./diagrams/LedgerDiagram.astro";
+import SigningDiagram from "./diagrams/SigningDiagram.astro";
 
 interface Props {
   name: string;
@@ -24,40 +22,20 @@ interface Props {
 const { name } = Astro.props;
 ---
 
-<div class="feature-visual flex h-full items-center justify-center p-3 sm:p-5">
-  {
-    /* Drafts you edit, not approve - the composer served into the chat */
-    name === "composer" && (
-      <ChatFrame say="Drafted a reply to Dana - it's open for you to edit.">
-        <ComposerApp standalone />
-      </ChatFrame>
-    )
-  }
+<div class="feature-visual flex h-full items-center justify-center p-4 sm:p-6">
+  {/* Drafts you edit, not approve */}
+  {name === "composer" && <ComposerDiagram />}
 
-  {
-    /* Triage that remembers - the curated inbox, list -> reader -> AI reply */
-    name === "ledger" && (
-      <ChatFrame say="I triaged your inbox. Here's what needs you.">
-        <InboxApp />
-      </ChatFrame>
-    )
-  }
+  {/* Triage that remembers */}
+  {name === "ledger" && <LedgerDiagram />}
 
-  {
-    /* Fill and sign, in the thread - the signing ceremony */
-    name === "signing" && (
-      <ChatFrame say="Filled the form. It needs your signature to go back.">
-        <SignerApp />
-      </ChatFrame>
-    )
-  }
+  {/* Fill and sign, in the thread */}
+  {name === "signing" && <SigningDiagram />}
 </div>
 
 <style>
-  /* Pause every attract loop in the panel while the visitor is interacting -
-     the same courtesy the hero extends via ConvoScroll, so the composer's real
-     textarea and the signer's ceremony hold still under the cursor instead of
-     animating out from under it. */
+  /* Hold the blinking carets still while the visitor is reading under the
+     cursor - the same courtesy the hero extends via ConvoScroll. */
   .feature-visual:hover :global(*),
   .feature-visual:focus-within :global(*) {
     animation-play-state: paused !important;

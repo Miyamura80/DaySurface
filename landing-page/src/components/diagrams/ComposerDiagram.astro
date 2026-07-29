@@ -1,0 +1,159 @@
+---
+/*
+ * "Drafts you edit, not approve".
+ *
+ * One point: the agent's reply stops in an editable draft, and the send button
+ * belongs to you. Grey = the agent's half, cyan = yours.
+ *
+ * Layout is parametric - every coordinate below derives from the named boxes,
+ * so nudging a column is one edit rather than twenty magic numbers.
+ */
+const W = 420;
+const H = 300;
+
+const agent = { x: 10, y: 114, w: 88, h: 52 };
+const card = { x: 146, y: 40, w: 250, h: 200 };
+const pad = 16;
+const midY = agent.y + agent.h / 2;
+
+// Skeleton lines standing in for the drafted body.
+const bars = [210, 186, 150];
+const barY = card.y + 90;
+const barPitch = 18;
+
+const send = {
+  w: 64,
+  h: 28,
+  x: card.x + card.w - pad - 64,
+  y: card.y + card.h - pad - 28,
+};
+const sendCx = send.x + send.w / 2;
+---
+
+<svg
+  viewBox={`0 0 ${W} ${H}`}
+  class="h-auto w-full font-mono"
+  role="img"
+  aria-labelledby="composer-diagram-title"
+>
+  <title id="composer-diagram-title">
+    The agent writes into a draft; you edit it and press send.
+  </title>
+
+  <!-- agent -->
+  <rect
+    x={agent.x}
+    y={agent.y}
+    width={agent.w}
+    height={agent.h}
+    class="fill-surface-1 stroke-border"
+    stroke-width="2"></rect>
+  <text
+    x={agent.x + agent.w / 2}
+    y={midY + 5}
+    text-anchor="middle"
+    font-size="14"
+    class="fill-fg-muted">agent</text
+  >
+
+  <!-- agent writes into the draft -->
+  <line
+    x1={agent.x + agent.w}
+    y1={midY}
+    x2={card.x - 10}
+    y2={midY}
+    class="stroke-border"
+    stroke-width="2"></line>
+  <polygon
+    points={`${card.x},${midY} ${card.x - 10},${midY - 5} ${card.x - 10},${midY + 5}`}
+    class="fill-border"></polygon>
+
+  <!-- the draft itself -->
+  <rect
+    x={card.x}
+    y={card.y}
+    width={card.w}
+    height={card.h}
+    class="fill-surface-1 stroke-accent"
+    stroke-width="2"></rect>
+  <text
+    x={card.x + pad}
+    y={card.y + 32}
+    font-size="13"
+    class="fill-fg-muted">To: Dana</text
+  >
+  <line
+    x1={card.x + pad}
+    y1={card.y + 48}
+    x2={card.x + card.w - pad}
+    y2={card.y + 48}
+    class="stroke-border"
+    stroke-width="1"></line>
+
+  {
+    bars.map((w, i) => (
+      <rect
+        x={card.x + pad}
+        y={barY + i * barPitch}
+        width={w}
+        height="7"
+        class="fill-border"
+      />
+    ))
+  }
+  <!-- caret: the draft is live text, not a diff to approve -->
+  <rect
+    x={card.x + pad + bars[bars.length - 1] + 6}
+    y={barY + (bars.length - 1) * barPitch - 6}
+    width="2"
+    height="19"
+    class="caret fill-accent"></rect>
+
+  <rect
+    x={send.x}
+    y={send.y}
+    width={send.w}
+    height={send.h}
+    class="fill-accent"></rect>
+  <text
+    x={sendCx}
+    y={send.y + 19}
+    text-anchor="middle"
+    font-size="13"
+    class="fill-accent-fg">Send</text
+  >
+
+  <!-- and the send is yours -->
+  <line
+    x1={sendCx}
+    y1={H - 12}
+    x2={sendCx}
+    y2={card.y + card.h + 16}
+    class="stroke-accent"
+    stroke-width="2"></line>
+  <polygon
+    points={`${sendCx},${card.y + card.h + 6} ${sendCx - 5},${card.y + card.h + 16} ${sendCx + 5},${card.y + card.h + 16}`}
+    class="fill-accent"></polygon>
+  <text
+    x={sendCx - 12}
+    y={H - 22}
+    text-anchor="end"
+    font-size="13"
+    class="fill-accent">you</text
+  >
+</svg>
+
+<style>
+  .caret {
+    animation: caret-blink 1.1s step-end infinite;
+  }
+  @keyframes caret-blink {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0;
+    }
+  }
+</style>

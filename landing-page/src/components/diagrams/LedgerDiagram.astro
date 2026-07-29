@@ -1,0 +1,134 @@
+---
+/*
+ * "Triage that remembers".
+ *
+ * One point: the verdicts are banked, so the next pass re-reads only the thread
+ * that actually changed. Three dead dashed lines, one live cyan one - the
+ * asymmetry is the whole message, so nothing else here gets a label.
+ */
+const W = 420;
+const H = 300;
+
+const ROWS = 4;
+const CHANGED = 2; // the thread that got a new reply since the last pass
+
+const row = { x: 14, w: 150, h: 34 };
+const y0 = 70;
+const pitch = 46;
+const cy = (i: number) => y0 + i * pitch + row.h / 2;
+
+const mem = { x: 252, y: 52, w: 156, h: 204 };
+const chip = { x: mem.x + 14, w: mem.w - 28, h: 22 };
+
+const linkFrom = row.x + row.w;
+const linkTo = mem.x - 10;
+---
+
+<svg
+  viewBox={`0 0 ${W} ${H}`}
+  class="h-auto w-full font-mono"
+  role="img"
+  aria-labelledby="ledger-diagram-title"
+>
+  <title id="ledger-diagram-title">
+    Every thread's verdict is kept; only the thread that changed is read again.
+  </title>
+
+  <text x={row.x} y="52" font-size="12" class="fill-fg-subtle">threads</text>
+
+  <!-- what the agent already judged -->
+  <rect
+    x={mem.x}
+    y={mem.y}
+    width={mem.w}
+    height={mem.h}
+    class="fill-surface-1 stroke-border"
+    stroke-width="2"></rect>
+  <text x={chip.x} y={mem.y + 22} font-size="12" class="fill-fg-subtle"
+    >memory</text
+  >
+
+  {
+    Array.from({ length: ROWS }, (_, i) => {
+      const changed = i === CHANGED;
+      const y = y0 + i * pitch;
+      const mid = cy(i);
+      return (
+        <>
+          {/* thread */}
+          <rect
+            x={row.x}
+            y={y}
+            width={row.w}
+            height={row.h}
+            class:list={[
+              "fill-surface-1",
+              changed ? "stroke-accent" : "stroke-border",
+            ]}
+            stroke-width={changed ? 2 : 1}
+          />
+          <rect
+            x={row.x + 14}
+            y={mid - 5}
+            width="10"
+            height="10"
+            class="fill-border"
+          />
+          <rect
+            x={row.x + 32}
+            y={mid - 3.5}
+            width="82"
+            height="7"
+            class="fill-border"
+          />
+          {changed && (
+            <circle cx={row.x + row.w - 16} cy={mid} r="4" class="fill-accent" />
+          )}
+
+          {/* link to the banked verdict */}
+          <line
+            x1={linkFrom}
+            y1={mid}
+            x2={linkTo}
+            y2={mid}
+            class:list={[changed ? "stroke-accent" : "stroke-border"]}
+            stroke-width={changed ? 2 : 1}
+            stroke-dasharray={changed ? undefined : "4 5"}
+          />
+          <polygon
+            points={`${mem.x},${mid} ${linkTo},${mid - 5} ${linkTo},${mid + 5}`}
+            class:list={[changed ? "fill-accent" : "fill-border"]}
+          />
+          {changed && (
+            <text
+              x={(linkFrom + mem.x) / 2}
+              y={mid - 11}
+              text-anchor="middle"
+              font-size="12"
+              class="fill-accent"
+            >
+              re-read
+            </text>
+          )}
+
+          {/* the verdict it kept */}
+          <rect
+            x={chip.x}
+            y={mid - chip.h / 2}
+            width={chip.w}
+            height={chip.h}
+            class:list={["fill-surface-2", changed && "stroke-accent"]}
+            stroke-width={changed ? 2 : 0}
+          />
+          <rect
+            x={chip.x + 10}
+            y={mid - 3.5}
+            width={changed ? 74 : 62 + i * 8}
+            height="7"
+            class:list={[changed ? "fill-accent" : "fill-border"]}
+          />
+        </>
+      );
+    })
+  }
+</svg>
