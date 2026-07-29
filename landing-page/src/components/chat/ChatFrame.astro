@@ -1,0 +1,98 @@
+---
+/*
+ * A compact chat frame wearing whichever client is currently selected.
+ *
+ * The hero's four *Shell.astro components are bespoke, full reproductions -
+ * each client's chrome differs structurally (avatars, bubble shapes, serif vs
+ * sans, VS Code's editor chrome), and the hero is where that fidelity earns
+ * its keep. Repeating all four for every features step would mean twelve
+ * copies of that markup in the page.
+ *
+ * So this is the other half of the pattern: one frame, themed entirely from
+ * the --chat-* custom properties in global.css, which are keyed off
+ * <html data-client>. Selecting a client anywhere on the page re-skins every
+ * frame in CSS, at first paint, with no JS involved in the switch.
+ *
+ * It carries just enough of a host to read as one - the client's name and
+ * mark, a line of assistant text, and its composer bar - around the real MCP
+ * App card in the slot.
+ */
+interface Props {
+  /** The assistant line above the card: what the agent said as it rendered it. */
+  say: string;
+}
+const { say } = Astro.props;
+---
+
+<div class="chat-frame w-full max-w-[460px] overflow-hidden rounded-xl border shadow-2xl shadow-black/40">
+  <div class="frame-head flex items-center gap-2 border-b px-3.5 py-2.5">
+    <span class="frame-logo size-4 shrink-0" aria-hidden="true"></span>
+    <span class="frame-name text-xs font-medium"></span>
+  </div>
+
+  <div class="space-y-2.5 px-3.5 py-3">
+    <p class="frame-say text-[13px] leading-relaxed">{say}</p>
+    <slot />
+  </div>
+
+  <div class="px-3.5 pb-3.5">
+    <div class="frame-composer flex items-center gap-2 rounded-2xl border px-3.5 py-2">
+      <span class="frame-placeholder flex-1 text-[13px]"></span>
+      <span class="frame-send grid size-6 shrink-0 place-items-center rounded-full">
+        <svg
+          class="size-3.5"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M12 19V5M5 12l7-7 7 7"></path>
+        </svg>
+      </span>
+    </div>
+  </div>
+</div>
+
+<style>
+  .chat-frame {
+    background: var(--chat-canvas);
+    border-color: var(--chat-border);
+    color: var(--chat-text);
+  }
+  .frame-head {
+    background: var(--chat-chrome);
+    border-color: var(--chat-border);
+  }
+  /* The mark is masked rather than an <img> so one element can be any client's
+     logo - the src would otherwise have to be swapped in JS. */
+  .frame-logo {
+    background: var(--chat-accent);
+    -webkit-mask: var(--chat-logo) center / contain no-repeat;
+    mask: var(--chat-logo) center / contain no-repeat;
+  }
+  /* Client name and composer placeholder come from the same token set, so a
+     client swap needs no text nodes updated. */
+  .frame-name::after {
+    content: var(--chat-name);
+  }
+  .frame-say {
+    font-family: var(--chat-say-font);
+  }
+  .frame-placeholder {
+    color: var(--chat-muted);
+  }
+  .frame-placeholder::after {
+    content: var(--chat-placeholder);
+  }
+  .frame-composer {
+    background: var(--chat-chrome);
+    border-color: var(--chat-border);
+  }
+  .frame-send {
+    background: var(--chat-accent);
+    color: var(--chat-accent-fg);
+  }
+</style>
