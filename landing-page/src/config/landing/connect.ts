@@ -158,14 +158,19 @@ export const connect: {
       // be filled in.
       method: "deeplink",
       prefills: false,
-      note: "Opens ChatGPT's New Plugin dialog directly - the fields come up empty, so paste the URL above, set Authentication to OAuth, tick the risk box, then Create. Developer mode has to be on first (Settings → Connectors → Advanced settings), and custom connectors need a paid plan.",
+      // The note carries ONLY what the button doesn't do: the dialog is empty,
+      // and it needs Developer mode to exist at all. Everything else - which
+      // auth to pick, the risk checkbox, the plan requirement - is either in
+      // the collapsed steps or on the docs page. Spelling the flow out here as
+      // well left the panel saying the same thing twice, once as a paragraph
+      // and once as a numbered list.
+      note: "The dialog opens empty - paste the URL above. Needs Developer mode on first.",
       steps: [
-        "Settings → Connectors (newer builds: Apps & Connectors)",
-        "Advanced settings → turn on Developer mode",
+        "Settings → Connectors → Advanced settings → Developer mode on",
         "Back on Connectors, click Create",
-        "Paste the URL above, name it, set Authentication to OAuth",
-        "Tick “I understand and want to continue”, then click Create",
-        "Start a new chat so the tools menu refreshes",
+        "Paste the URL, name it, Authentication → OAuth",
+        "Tick the risk box, click Create",
+        "New chat, so the tools menu refreshes",
       ],
     },
     {
