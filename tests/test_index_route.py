@@ -1,18 +1,19 @@
 """Tests for the root landing document and the unknown-path 404 fallback.
 
-The host exists to serve MCP, so both are part of the agent journey: an agent
-handed ``https://mcp.<domain>`` (no path) must be able to find the endpoint,
-and one that guesses a wrong path must be told the right one instead of
-Starlette's bare ``Not Found``.
+This deployment exists to serve MCP, so both are part of the agent journey: an
+agent handed ``https://mcp.<domain>`` (no path) must be able to find the
+endpoint, and one that guesses a wrong path must be told the right one instead
+of Starlette's bare ``Not Found``.
 """
 
 from fastapi.testclient import TestClient
 
 from api_server.routes import index
 from api_server.server import app
+from tests.test_template import TestTemplate
 
 
-class TestRootIndex:
+class TestRootIndex(TestTemplate):
     def _client(self) -> TestClient:
         # No lifespan needed: neither handler touches the MCP session manager.
         return TestClient(app)
@@ -84,6 +85,42 @@ class TestRootIndex:
         assert body["mcp"]["url"] == "https://mcp.example.com/mcp"
         assert body["endpoints"]["health"] == "https://mcp.example.com/health"
 
+    def test_endpoints_mcp_matches_mcp_url(self, monkeypatch):
+        # A path-carrying public URL (a rewriting proxy in front) must not be
+        # rebuilt from the origin, or one document states the endpoint twice
+        # and disagrees with itself.
+        monkeypatch.setattr(
+            index.global_config, "MCP_PUBLIC_URL", "https://mcp.example.com/gateway/mcp"
+        )
+        body = self._client().get("/").json()
+        assert body["endpoints"]["mcp"] == body["mcp"]["url"]
+        assert body["mcp"]["url"] == "https://mcp.example.com/gateway/mcp"
+
+    def test_explicit_html_rejection_gets_json(self):
+        # `text/html;q=0` refuses HTML outright; handing it over anyway breaks
+        # the client that was careful enough to say so.
+        resp = self._client().get(
+            "/", headers={"accept": "application/json, text/html;q=0"}
+        )
+        assert resp.headers["content-type"].startswith("application/json")
+
+    def test_json_ranked_above_html_gets_json(self):
+        resp = self._client().get(
+            "/", headers={"accept": "text/html;q=0.8, application/json;q=0.9"}
+        )
+        assert resp.headers["content-type"].startswith("application/json")
+
+    def test_browser_accept_header_still_gets_html(self):
+        # The real header Chrome sends - HTML must still win it.
+        resp = self._client().get(
+            "/",
+            headers={
+                "accept": "text/html,application/xhtml+xml,"
+                "application/xml;q=0.9,*/*;q=0.8"
+            },
+        )
+        assert resp.headers["content-type"].startswith("text/html")
+
     def test_root_serves_html_to_browsers(self):
         resp = self._client().get("/", headers={"accept": "text/html"})
         assert resp.status_code == 200
@@ -91,6 +128,8 @@ class TestRootIndex:
         assert "/mcp" in resp.text
         # The copy-pasteable connect command is the point of the page.
         assert "claude mcp add --transport http" in resp.text
+        # …and the command alone leaves you at a 401, so name the credential.
+        assert "X-Api-Key" in resp.text
         # Self-contained: no external assets to block or leak the visit.
         assert "src=" not in resp.text
 
@@ -102,7 +141,7 @@ class TestRootIndex:
         assert "/" not in app.openapi()["paths"]
 
 
-class TestNotFoundFallback:
+class TestNotFoundFallback(TestTemplate):
     def _client(self) -> TestClient:
         return TestClient(app)
 
@@ -152,14 +191,21 @@ class TestNotFoundFallback:
         assert resp.json()["error"]["code"] == -32001
         assert "www-authenticate" in resp.headers
 
+    def test_mcp_lookalike_paths_get_the_landing_404(self):
+        # /mcpfoo is not the transport, so it must not be answered with an auth
+        # challenge implying one lives there. The auth middleware and the 404
+        # handler share one segment-aware predicate; this proves they agree.
+        resp = self._client().get("/mcpfoo")
+        assert resp.status_code == 404
+        assert resp.json()["error"]["code"] == "not_found"
+
     def test_mcp_transport_surface_keeps_its_own_404(self):
         # Registration is by status code, so a 404 raised inside the transport
         # would land here. The transport owns that surface: a stale session must
         # not be answered with a landing document.
-        assert index._is_mcp_path("/mcp") is True
-        assert index._is_mcp_path("/mcp/session") is True
-        # No segment boundary would make /mcpfoo look like the transport.
-        assert index._is_mcp_path("/mcpfoo") is False
+        assert index.is_mcp_path("/mcp") is True
+        assert index.is_mcp_path("/mcp/session") is True
+        assert index.is_mcp_path("/mcpfoo") is False
 
     def test_real_routes_are_untouched(self):
         assert self._client().get("/health").status_code == 200

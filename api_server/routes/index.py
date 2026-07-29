@@ -28,6 +28,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from starlette.responses import Response
 
 from api_server.auth.authkit_auth import authkit_domain
+from api_server.middleware.mcp_auth import is_mcp_path
 from common import global_config
 
 router = APIRouter(tags=["index"])
@@ -106,10 +107,32 @@ def _base_url(request: Request) -> str:
 
 
 def _mcp_url(request: Request) -> str:
-    """Absolute URL of the streamable-HTTP MCP endpoint."""
+    """Absolute URL of the streamable-HTTP MCP endpoint.
+
+    The configured value is used verbatim rather than rebuilt from the origin:
+    ``MCP_PUBLIC_URL`` is the canonical RFC 8707 resource identifier that tokens
+    are bound to, and a deployment fronted by a path-rewriting proxy can carry a
+    prefix the origin alone would lose.
+    """
     if global_config.MCP_PUBLIC_URL:
         return global_config.MCP_PUBLIC_URL.rstrip("/")
     return f"{_base_url(request)}{MCP_PATH}"
+
+
+def _absolute(request: Request, path: str) -> str:
+    """Absolute URL for an advertised path, in this deployment's terms."""
+    if path == MCP_PATH:
+        return _mcp_url(request)
+    return f"{_base_url(request)}{path}"
+
+
+def _endpoint_urls(request: Request) -> dict[str, str]:
+    """The advertised endpoints as absolute URLs.
+
+    ``mcp`` routes through :func:`_absolute` so it can never disagree with
+    ``mcp.url`` in the same document.
+    """
+    return {name: _absolute(request, path) for name, path in _endpoints().items()}
 
 
 def _authentication() -> dict:
@@ -151,7 +174,6 @@ def _client_name(title: str) -> str:
 def index_document(request: Request) -> dict:
     """The machine-readable "what is this host" document served at ``/``."""
     b = global_config.branding
-    base = _base_url(request)
     mcp_url = _mcp_url(request)
     client_name = _client_name(b.title)
     return {
@@ -159,11 +181,14 @@ def index_document(request: Request) -> dict:
         "title": b.title,
         "description": b.description,
         "protocol": "mcp",
+        # "server", not "host": in MCP's glossary the Host is the AI application
+        # calling in, and this document is read by agents that will take the
+        # word literally. See mcp_server/COMMON_TERMS.md.
         "instructions": (
-            f"This host serves the Model Context Protocol at {mcp_url} over the "
-            "streamable-HTTP transport. Point an MCP client at that URL - e.g. "
-            f"`claude mcp add --transport http {client_name} {mcp_url}` - and "
-            "authenticate as described under `mcp.authentication`. Read "
+            f"This server speaks the Model Context Protocol at {mcp_url} over "
+            "the streamable-HTTP transport. Point an MCP client at that URL - "
+            f"e.g. `claude mcp add --transport http {client_name} {mcp_url}` - "
+            "and authenticate as described under `mcp.authentication`. Read "
             "`endpoints.server_card` for the full tool descriptions without "
             "opening a session."
         ),
@@ -173,7 +198,7 @@ def index_document(request: Request) -> dict:
             "authentication": _authentication(),
             "tools": _tool_names(),
         },
-        "endpoints": {name: f"{base}{path}" for name, path in _endpoints().items()},
+        "endpoints": _endpoint_urls(request),
         "links": {
             "website": b.website_url,
             "repository": b.repository_url,
@@ -181,9 +206,52 @@ def index_document(request: Request) -> dict:
     }
 
 
+def _quality(accept: str, media_type: str) -> float:
+    """The ``q`` value a client gave an exact media type, 0 if it never named it.
+
+    Exact ranges only - a wildcard like ``*/*`` is not read as a vote for HTML,
+    which is what keeps `curl` and agents on the JSON representation.
+    """
+    for part in accept.split(","):
+        name, _, params = part.strip().partition(";")
+        if name.strip().lower() != media_type:
+            continue
+        for param in params.split(";"):
+            key, _, value = param.partition("=")
+            if key.strip().lower() == "q":
+                try:
+                    return float(value.strip())
+                except ValueError:
+                    return 1.0
+        return 1.0
+    return 0.0
+
+
 def _prefers_html(request: Request) -> bool:
-    """True for browsers. Agents and ``curl`` send ``*/*`` or a JSON type."""
-    return "text/html" in request.headers.get("accept", "")
+    """True for browsers. Agents and ``curl`` send ``*/*`` or a JSON type.
+
+    Not full RFC 9110 negotiation, but it honours the two signals that matter:
+    a client that refuses HTML outright (``text/html;q=0``) never receives it,
+    and one that ranks JSON higher gets JSON.
+    """
+    accept = request.headers.get("accept", "")
+    html_q = _quality(accept, "text/html")
+    return html_q > 0 and html_q >= _quality(accept, "application/json")
+
+
+def _auth_summary(auth: dict) -> str:
+    """One line naming the credential a reader has to go and get.
+
+    The command above it registers the endpoint but not the credential, so a
+    page that said only "authentication required" would send someone off to a
+    401 with no idea which of the two schemes to reach for.
+    """
+    schemes = []
+    if "oauth2" in auth["schemes"]:
+        schemes.append("OAuth 2.1, which your MCP client runs on first connect")
+    if "api_key" in auth["schemes"]:
+        schemes.append(f"an {auth['api_key_header']} header")
+    return "Authenticate with " + " or ".join(schemes) + "."
 
 
 def _landing_page(doc: dict) -> str:
@@ -205,6 +273,7 @@ def _landing_page(doc: dict) -> str:
         f"{doc['mcp']['url']}"
     )
     return Template(_LANDING_TEMPLATE.read_text(encoding="utf-8")).substitute(
+        auth_summary=e(_auth_summary(doc["mcp"]["authentication"])),
         title=e(doc["title"]),
         description=e(doc["description"]),
         mcp_url=e(doc["mcp"]["url"]),
@@ -245,11 +314,6 @@ def _suggest(path: str) -> str | None:
     return _ALIASES.get(normalized)
 
 
-def _is_mcp_path(path: str) -> bool:
-    """True for the MCP transport surface: ``/mcp`` and anything beneath it."""
-    return path == MCP_PATH or path.startswith(f"{MCP_PATH}/")
-
-
 async def not_found_handler(request: Request, exc: Exception) -> Response:
     """404 that points the caller at the endpoints this host does serve.
 
@@ -263,26 +327,27 @@ async def not_found_handler(request: Request, exc: Exception) -> Response:
     (terminated or unknown session) as direct responses, so none arrive here -
     but the transport owns that surface either way, and answering a stale
     session with a landing document would be a protocol error. Hence the guard:
-    /mcp keeps the bare 404.
+    /mcp keeps the bare 404. The predicate is the one the auth middleware uses,
+    so the two boundaries agree on where the transport ends.
     """
-    if _is_mcp_path(request.url.path):
+    if is_mcp_path(request.url.path):
         return PlainTextResponse("Not Found", status_code=404)
 
-    base = _base_url(request)
     suggestion = _suggest(request.url.path)
     message = f"No handler for {request.method} {request.url.path}."
-    if suggestion:
-        message += f" Did you mean {base}{suggestion}?"
-    else:
-        message += f" This host serves the Model Context Protocol at {base}{MCP_PATH}."
-
     details: dict = {"path": request.url.path}
     if suggestion:
-        details["did_you_mean"] = f"{base}{suggestion}"
+        suggested_url = _absolute(request, suggestion)
+        message += f" Did you mean {suggested_url}?"
+        details["did_you_mean"] = suggested_url
+    else:
+        message += (
+            f" This server speaks the Model Context Protocol at {_mcp_url(request)}."
+        )
 
     body = {
         "error": {"code": "not_found", "message": message, "details": details},
-        "endpoints": {name: f"{base}{path}" for name, path in _endpoints().items()},
+        "endpoints": _endpoint_urls(request),
     }
     # Same CORS grant as the index: the browser-based agent that probed a wrong
     # path is exactly who the hint is for, and without this it reads an opaque
