@@ -17,9 +17,10 @@ drafts on your behalf.
 https://api.daysurface.com
 ```
 
-The API shares one process with the MCP server, so the production host also
-answers at `daysurface.com` / `mcp.daysurface.com`; `api.daysurface.com` is the
-canonical vanity host for REST traffic.
+The API shares one process with the MCP server, so the same deployment also
+answers MCP traffic at `mcp.daysurface.com/mcp`; `api.daysurface.com` is the
+canonical vanity host for REST. (`daysurface.com` is the product site, a separate
+service.)
 
 Every example in these docs uses that host. Running the server yourself? Swap in
 your own deployment, or `http://localhost:8000` when it is running locally via

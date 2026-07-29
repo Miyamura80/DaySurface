@@ -9,8 +9,9 @@ Keep the following in English (untranslated) in every locale.
 
 ### Product & brand names
 
-- MCP Template
+- DaySurface
 - MCP (Model Context Protocol)
+- Gmail
 - Fumadocs
 
 ### Security & feature terms
