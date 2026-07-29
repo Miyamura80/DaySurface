@@ -5,7 +5,7 @@
 
 Both targets provision the backend (FastAPI + MCP at `/mcp`) as a Docker service plus a managed Postgres database, run Alembic migrations, and prompt for the required secrets. The landing page (`landing-page/`) deploys separately and is not included.
 
-> **Forking this repo?** The buttons point at the canonical upstream template. To deploy your own fork, change the Render button's `repo=` URL to your fork and re-create the Railway template from your project (its deploy link is fixed to a published template). Render's button takes an absolute repo URL, so it can't auto-follow a fork.
+> **Forking this repo?** The buttons point at the canonical upstream Railway template. To deploy your own fork, change the Render button's `repo=` URL to your fork and re-create the Railway template from your project (its deploy link is fixed to a published template). Render's button takes an absolute repo URL, so it can't auto-follow a fork.
 
 ## Render
 
@@ -13,11 +13,11 @@ Driven by [`render.yaml`](../render.yaml). The database and `SESSION_SECRET_KEY`
 
 ## Railway
 
-The committed [`railway.json`](../railway.json) pins the Docker build, pre-deploy migrations, and health check, so the template inherits them. To re-generate or update the template: **project Settings → Generate Template from Project → Publish** (dashboard only; the CLI can't publish templates).
+The committed [`railway.json`](../railway.json) pins the Docker build, pre-deploy migrations, and health check, so the Railway template inherits them. To re-generate or update it: **project Settings → Generate Template from Project → Publish** (dashboard only; the CLI can't publish templates).
 
 ### Forking the Railway template? Variable map for the backend service
 
-The template has two services: a **Postgres** service (use Railway's standard Postgres defaults) and the **backend**. Set the backend's variables as follows.
+The Railway template has two services: a **Postgres** service (use Railway's standard Postgres defaults) and the **backend**. Set the backend's variables as follows.
 
 **Auto-resolve / auto-generate** (paste as defaults so it deploys with zero input):
 

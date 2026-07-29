@@ -4,6 +4,10 @@ import { site, comparison, pricing } from "../config/landing";
 // Static routes that ship in dist/. Keep in sync with src/pages/*.astro.
 const routes = [
   { path: "/", priority: "1.0", changefreq: "weekly" },
+  // Entry point into the docs section, which is proxied from the Next.js docs
+  // service (see `server.ts`) and ships its own `/docs/sitemap.xml` covering
+  // every page. Listing the index here gives crawlers a path in from the apex.
+  { path: "/docs", priority: "0.9", changefreq: "weekly" },
   { path: "/compare", priority: "0.8", changefreq: "monthly" },
   ...(pricing.enabled
     ? [{ path: "/pricing", priority: "0.9", changefreq: "monthly" }]

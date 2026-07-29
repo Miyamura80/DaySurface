@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Assertion oracle for the MCP-App e2e harness.
 
-Analogue of Edison's edison_api.py, but this template has no policy/sessions API,
+Analogue of Edison's edison_api.py, but DaySurface has no policy/sessions API,
 so the verdict comes from two INDEPENDENT records - neither of which the mock LLM
 can fake:
   1. the rendered ui:// iframe  (pw_result_<name>.json, written by Playwright from

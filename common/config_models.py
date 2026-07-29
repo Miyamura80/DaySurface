@@ -284,7 +284,7 @@ class AskConfig(BaseModel):
 
     enabled: bool = False
     corpus_path: str = "docs/content/docs"
-    docs_base_url: str = "https://docs.daysurface.com"
+    docs_base_url: str = "https://daysurface.com/docs"
     top_k: int = 5
     rate_limit_per_minute: int = 20
 

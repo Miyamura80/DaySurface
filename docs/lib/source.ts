@@ -23,15 +23,36 @@ export const source = loader({
   },
 });
 
+/**
+ * True when `page` is genuinely written in `locale`, rather than the English
+ * fallback fumadocs returns when no translation exists.
+ *
+ * `page.locale` cannot answer this - it always echoes the *requested* locale,
+ * so `getPage(["deployment"], "zh")` reports `locale: "zh"` while serving the
+ * English file. `page.path` is the discriminator: a real translation resolves
+ * to `index.zh.mdx`, a fallback to `deployment.mdx`.
+ *
+ * This matters because declaring `hreflang="zh"` for a page serving English is
+ * a misdeclaration - only `index` is translated today, so without this check 23
+ * of 26 pages would advertise three languages they do not have.
+ */
+export function isTranslated(
+  page: ReturnType<typeof source.getPage> & {},
+  locale: string,
+): boolean {
+  if (locale === i18n.defaultLanguage) return true;
+  return page.path.endsWith(`.${locale}.mdx`);
+}
+
 export function getPageImage(page: ReturnType<typeof source.getPage> & {}) {
-  const allSegments = page.url.split("/").filter(Boolean);
-  // Strip locale and "docs" prefix for the slug param (they're separate route params)
-  const docSegments = allSegments.filter(
-    (s) => s !== page.locale && s !== "docs",
-  );
+  // Built from `locale` + `slugs` rather than by parsing `page.url`. Under
+  // `hideLocale: "default-locale"` the English URL carries no locale segment, so
+  // deriving the route from the URL would emit `/og/docs/...` and 404 - the OG
+  // route is `/og/[lang]/docs/[...slug]`, where `lang` is always explicit.
+  const locale = page.locale ?? i18n.defaultLanguage;
   return {
-    url: `/og/${allSegments.join("/")}/og.png`,
-    segments: [...docSegments, "og.png"],
+    url: `/og/${locale}/docs/${[...page.slugs, "og.png"].join("/")}`,
+    segments: [...page.slugs, "og.png"],
   };
 }
 

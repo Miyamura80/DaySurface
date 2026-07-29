@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Super-opinionated Python template that ships **one codebase, three interfaces** (CLI, MCP server, HTTP API) over a shared service registry. Python >= 3.12 required. Uses `uv` for dependency management (not pip).
+DaySurface is a Gmail MCP server. Super-opinionated Python codebase that ships **one codebase, three interfaces** (CLI, MCP server, HTTP API) over a shared service registry. Python >= 3.12 required. Uses `uv` for dependency management (not pip).
 
 **Before any other work in this repo, enable prek:** `uv tool install prek && prek install`. Hooks are defined in `prek.toml`.
 
@@ -167,7 +167,7 @@ Structure as: `init()` → `continue(id)` → `cleanup(id)`
 
 ## MCP: Headless vs UI
 
-This template supports two MCP tool styles:
+There are two MCP tool styles:
 
 - **Headless tools** (default) - sync wrapper, no `Context`, returns the
   Pydantic output model so FastMCP derives `outputSchema`. The CLI/API/MCP
@@ -207,7 +207,7 @@ Then add `import mcp_server.enhancers.my_service  # noqa: F401` to
 
 Apps live in `mcp_server/apps/<name>/`:
 - React + Vite + `vite-plugin-singlefile` (always bun, never npm)
-- `dist/mcp-app.html` is **committed** so the template works without Node
+- `dist/mcp-app.html` is **committed** so the server works without Node
 - `make build_apps` rebuilds the bundle (developer-only; not part of CI)
 - `make dev_host` runs the upstream `@modelcontextprotocol/ext-apps` basic-host
   for manual smoke testing

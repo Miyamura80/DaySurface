@@ -10,7 +10,7 @@ export interface Testimonial {
   title: string;
   /**
    * Avatar in public/avatars/. The shipped images are AI-generated faces
-   * (not real people) so the template implies no real endorsement - swap them
+   * (not real people) so the page implies no real endorsement - swap them
    * for your real customers' headshots. Omit to fall back to a name monogram.
    */
   avatar?: string;
@@ -87,8 +87,8 @@ export const askAi: {
   providers: AskAiProvider[];
 } = {
   heading: "Ask AI about this",
-  subhead: "Have your assistant explain the template, compare it, or walk you through deploying it.",
-  prompt: `What is the ${site.name} MCP server template? Explain what it does, how the CLI / MCP / HTTP transports share one codebase, and how I'd deploy it. Repo: ${site.githubUrl}`,
+  subhead: "Have your assistant explain DaySurface, compare it, or walk you through deploying it.",
+  prompt: `What is the ${site.name} Gmail MCP server? Explain what it does, how the CLI / MCP / HTTP transports share one codebase, and how I'd deploy it. Repo: ${site.githubUrl}`,
   providers: [
     { id: "chatgpt", name: "ChatGPT", logo: "/logos/chatgpt.svg", url: "https://chatgpt.com/?q={q}" },
     { id: "perplexity", name: "Perplexity", logo: "/logos/perplexity.svg", url: "https://www.perplexity.ai/search?q={q}" },
@@ -129,7 +129,7 @@ export const faq: { heading: string; items: FaqItem[] } = {
     },
     {
       q: "Is there an /ask (NLWeb) endpoint?",
-      a: "Yes. There's a public, NLWeb-conformant /ask endpoint for natural-language questions answered from the docs (server-side Q&A with SSE streaming). It's distinct from the /mcp action-tool surface, which exposes callable tools. /ask is disabled by default in the template; enable it via config (ask.enabled: true).",
+      a: "Yes. There's a public, NLWeb-conformant /ask endpoint for natural-language questions answered from the docs (server-side Q&A with SSE streaming). It's distinct from the /mcp action-tool surface, which exposes callable tools. /ask is disabled by default; enable it via config (ask.enabled: true).",
     },
     {
       q: "Is this just another Gmail API wrapper?",
@@ -144,7 +144,7 @@ export const faq: { heading: string; items: FaqItem[] } = {
 
 export const finalCta: { heading: string; subhead: string; features: string[] } = {
   heading: "Ship your MCP server today.",
-  subhead: "Clone the template, deploy it, and point your agent at the URL.",
+  subhead: "Clone the repo, deploy it, and point your agent at the URL.",
   // Four flagship features, 3–4 words each, shown beside the final CTA.
   features: [
     "Three transports, one codebase",

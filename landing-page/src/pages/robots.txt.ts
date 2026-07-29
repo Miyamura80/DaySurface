@@ -38,6 +38,9 @@ ${aiAgents.map((a) => `User-agent: ${a}\nAllow: /`).join("\n\n")}
 
 # Sitemaps
 Sitemap: ${origin}/sitemap.xml
+# Docs live under /docs on this origin and ship their own sitemap (Next.js
+# basePath), so both must be listed for full coverage from one submission.
+Sitemap: ${origin}/docs/sitemap.xml
 
 # NLWeb / Schema Map feed of structured (schema.org) data
 Schemamap: ${origin}/schemamap.xml
