@@ -21,6 +21,7 @@ from urllib.parse import urlsplit
 from loguru import logger as log
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
+from starlette.applications import Starlette
 
 from common import global_config
 from mcp_server._tool_factory import make_tool
@@ -212,19 +213,26 @@ def _register_app_resource(
         return html_path.read_text()
 
 
-def mount_on(app, path: str = "/mcp") -> None:
+def mount_on(app, path: str = "/mcp") -> Starlette:
     """Mount the streamable-HTTP MCP server onto a Starlette/FastAPI app.
 
     FastMCP's ``streamable_http_app()`` already serves at ``/mcp`` internally,
     so we mount it at root to avoid a doubled prefix. Caller must also include
     :func:`lifespan` in the parent app's lifespan to start the session manager.
+
+    Returns the mounted sub-app. Because the mount sits at ``/``, it - not the
+    parent - receives every path the parent's own routes don't claim, so a
+    caller that wants to customize the 404 for unknown paths must register the
+    handler on the returned app.
     """
     if path != "/mcp":
         raise ValueError(
             "Custom mount paths are not supported; FastMCP serves at /mcp internally."
         )
     mcp = build_mcp_server()
-    app.mount("/", mcp.streamable_http_app())
+    mcp_app = mcp.streamable_http_app()
+    app.mount("/", mcp_app)
+    return mcp_app
 
 
 @asynccontextmanager

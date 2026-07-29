@@ -1,6 +1,6 @@
 /**
- * Longer-form marketing content: agent guidance, testimonials, pricing, the
- * "Ask AI" launcher, the FAQ, and the final CTA.
+ * Longer-form marketing content: agent guidance, testimonials, the "Ask AI"
+ * launcher, the FAQ, and the final CTA. Pricing lives in ./pricing.ts.
  */
 import { site } from "./site";
 
@@ -19,17 +19,6 @@ export interface Testimonial {
 export interface FaqItem {
   q: string;
   a: string;
-}
-
-export interface PricingTier {
-  name: string;
-  price: string;
-  cadence?: string;
-  description: string;
-  features: string[];
-  cta: string;
-  href: string;
-  featured?: boolean;
 }
 
 /**
@@ -79,62 +68,6 @@ export const testimonials: { enabled: boolean; heading: string; items: Testimoni
   ],
 };
 
-export const pricing: { enabled: boolean; heading: string; subhead: string; tiers: PricingTier[] } = {
-  // Surfaced on the homepage AND in the machine-readable /pricing.md manifest.
-  // Flip to false to hide the on-page section (the manifest still generates).
-  enabled: true,
-  heading: "Pricing & licensing",
-  subhead:
-    "Open source under the MIT license and free to self-host - no setup fee, no seat minimum. Pay only when you want us to run and scale it for you.",
-  tiers: [
-    {
-      name: "Open Source",
-      price: "$0",
-      cadence: "forever",
-      description:
-        "MIT-licensed. Self-host the full server on your own infrastructure - zero setup cost, no license fee.",
-      features: [
-        "MIT license - fork, modify, and ship freely",
-        "All three transports: CLI, MCP, HTTP API",
-        "Interactive MCP Apps (composer + ranked inbox)",
-        "Your own OAuth credentials & encrypted tokens",
-        "Community support",
-      ],
-      cta: "Get the source",
-      href: site.githubUrl,
-    },
-    {
-      name: "Hosted Pro",
-      price: "$20",
-      cadence: "/mo",
-      description:
-        "We run the streamable-HTTP server for you. No infrastructure to manage, paste-a-URL setup.",
-      features: [
-        "Managed cloud deployment (zero ops)",
-        "Hosted OAuth 2.1 & encrypted token storage",
-        "Usage analytics & monitoring",
-        "Priority support",
-      ],
-      cta: "Start free trial",
-      href: "/#connect",
-      featured: true,
-    },
-    {
-      name: "Team",
-      price: "Custom",
-      description: "For teams running agents in production, with commercial licensing options.",
-      features: [
-        "SSO + audit logs",
-        "Commercial / OEM licensing",
-        "Uptime SLA",
-        "Dedicated support & onboarding",
-      ],
-      cta: "Contact sales",
-      href: "/#connect",
-    },
-  ],
-};
-
 /**
  * "Ask AI about this" - links that open an assistant with a pre-filled prompt
  * about the project. Each provider URL has a `{q}` placeholder; AskAi.astro
@@ -154,8 +87,8 @@ export const askAi: {
   providers: AskAiProvider[];
 } = {
   heading: "Ask AI about this",
-  subhead: "Have your assistant explain what it does, how it compares, and how to connect it.",
-  prompt: `What is ${site.name}? It is an MCP server for Gmail that lets an AI assistant triage a ranked inbox, draft replies in a real composer, and fill and sign PDF attachments - all inside Claude, ChatGPT, or any MCP client. Explain what it can do, how it compares to other Gmail MCP servers, and how I would connect it. Site: ${site.url} - source: ${site.githubUrl}`,
+  subhead: "Have your assistant explain the template, compare it, or walk you through deploying it.",
+  prompt: `What is the ${site.name} MCP server template? Explain what it does, how the CLI / MCP / HTTP transports share one codebase, and how I'd deploy it. Repo: ${site.githubUrl}`,
   providers: [
     { id: "chatgpt", name: "ChatGPT", logo: "/logos/chatgpt.svg", url: "https://chatgpt.com/?q={q}" },
     { id: "perplexity", name: "Perplexity", logo: "/logos/perplexity.svg", url: "https://www.perplexity.ai/search?q={q}" },
@@ -167,32 +100,36 @@ export const faq: { heading: string; items: FaqItem[] } = {
   heading: "Frequently asked questions",
   items: [
     {
-      q: "What can it actually do with my email?",
-      a: "Rank your inbox by what needs attention, search and read threads, draft and send replies in a real composer, manage labels, archive, handle attachments, and fill and sign PDF attachments without leaving the chat. 34 tools in total, all through the official Gmail API.",
+      q: "Which MCP clients are supported?",
+      a: "Any client that speaks the Model Context Protocol: Claude Desktop, Claude Code, Cursor, Cline, VS Code, Windsurf, and more. The server exposes a standard tool/resource surface.",
     },
     {
-      q: "Can it send email without me?",
-      a: "The tools are built so replies land in a composer you review and edit first - your agent writes, you press send. Signing is stronger still: the assistant can fill a PDF's fields, but the signature itself is a step only you can complete by typing your own name. It cannot sign on your behalf.",
+      q: "stdio or streamable HTTP?",
+      a: "Both. Streamable HTTP is the primary transport (mounted at /mcp alongside the HTTP API in one process), and stdio is available for local/dev use.",
     },
     {
-      q: "Do you read or train on my email?",
-      a: "No. Your email is never sent to an AI model by us - DaySurface runs no LLM inference on Gmail content, and the inbox ranking is deterministic code, not a model. Mail goes only to the AI client you chose and connected, under that client's own terms. Access uses Google's gmail.modify scope; see the privacy policy for the full detail.",
+      q: "How does authentication work?",
+      a: "The MCP mount supports OAuth 2.1 as a resource server, sharing auth and CORS with the HTTP API. You can also run it unauthenticated for local development.",
     },
     {
       q: "Do I need to install anything to use it?",
-      a: "No. The server runs over streamable HTTP, so connecting is just adding its URL to your client - one click in Claude, Cursor, VS Code, and Goose. No local install, runtime, or download. (Self-hosting is a separate, optional step.)",
-    },
-    {
-      q: "Which clients does it work with?",
-      a: "Anything that speaks the Model Context Protocol: Claude, ChatGPT, Claude Code, Cursor, VS Code, Goose, Cline, Zed, Windsurf, and more. Pick yours in the connect box above - some get a one-click install link, the rest take a pasted URL or a setup prompt.",
+      a: "No. Because the server runs over streamable HTTP, connecting is just pasting its URL into your agent client. No local install, runtime, or download required. (Self-hosting the server is a separate, optional step.)",
     },
     {
       q: "Does it work on mobile?",
-      a: "Yes, anywhere your agent runs. It's a remote server with nothing to install locally, so it works in any agent app with a mobile client, including the Claude and ChatGPT mobile apps.",
+      a: "Yes, anywhere your agent runs. Since it's a remote HTTP server with nothing to install locally, it works in any agent app that has a mobile app, including the Claude and ChatGPT mobile apps.",
     },
     {
       q: "Can I self-host?",
-      a: "Yes. The whole thing is open source and ships with a Dockerfile and Railway config, so you can run it on your own infrastructure with your own Google OAuth credentials. Deploy it anywhere that runs a container.",
+      a: "Yes. The whole thing is open source and ships with a Dockerfile and Railway config. Deploy it anywhere that runs a container.",
+    },
+    {
+      q: "What about my existing CLI / API?",
+      a: "They share the same service registry. Add a tool once and it's available over CLI, MCP, and HTTP simultaneously, with no duplicated logic.",
+    },
+    {
+      q: "Is there an /ask (NLWeb) endpoint?",
+      a: "Yes. There's a public, NLWeb-conformant /ask endpoint for natural-language questions answered from the docs (server-side Q&A with SSE streaming). It's distinct from the /mcp action-tool surface, which exposes callable tools. /ask is disabled by default in the template; enable it via config (ask.enabled: true).",
     },
     {
       q: "Is this just another Gmail API wrapper?",
@@ -206,14 +143,13 @@ export const faq: { heading: string; items: FaqItem[] } = {
 };
 
 export const finalCta: { heading: string; subhead: string; features: string[] } = {
-  heading: "Put your inbox in your chat.",
-  subhead: "Pick your client, add the server, and your agent can start triaging today.",
+  heading: "Ship your MCP server today.",
+  subhead: "Clone the template, deploy it, and point your agent at the URL.",
   // Four flagship features, 3–4 words each, shown beside the final CTA.
-  // End-user outcomes, not architecture - the transports story lives on /api.
   features: [
-    "Ranked inbox triage",
-    "Drafts you edit, not approve",
-    "Fill and sign PDFs in-thread",
+    "Three transports, one codebase",
+    "Headless or interactive tools",
+    "Streamable HTTP, one port",
     "Open source, self-hostable",
   ],
 };
