@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="#key-features">Key Features</a> •
+  <a href="#mcp-ui">MCP UI</a> •
   <a href="#architecture">Architecture</a> •
   <a href="#quick-start">Quick Start</a> •
   <a href="#cli-usage">CLI Usage</a> •
@@ -35,6 +35,19 @@
 </p>
 
 ---
+
+## MCP UI
+
+Four MCP Apps ship in the box. Each is a React bundle served as a `ui://` resource and rendered in the host's sandboxed iframe:
+
+| | |
+|:--|:--|
+| **`gmail_inbox`** - curated inbox with importance scores and labels, beside a thread reader showing a pending draft and AI-drafted replies<br><br><img src="media/mcp-ui/gmail-inbox.png" alt="gmail_inbox MCP App: curated inbox list beside an open thread with a pending draft"> | **`gmail_composer`** - draft editor with the conversation in context, attachments, and send / save / discard<br><br><img src="media/mcp-ui/gmail-composer.png" alt="gmail_composer MCP App: draft editor with To, Subject and body fields"> |
+| **`pdf_signer`** - pdf.js viewer with the signature field highlighted and a type-your-name signing ceremony<br><br><img src="media/mcp-ui/pdf-signer.png" alt="pdf_signer MCP App: NDA with a Sign here highlight and signing footer"> | **`settings`** - connected Gmail account, inbox watch state, and webhook endpoints with secret rotation<br><br><img src="media/mcp-ui/settings.png" alt="settings MCP App: Gmail account status and webhook endpoint list"> |
+
+Screenshots are rendered from the committed app bundles by the fixture host in `mcp_server/dev_preview/` - no server, Gmail account, or OAuth involved. Reproduce any of them with `make preview_app APP=<name>`.
+
+Apps are opt-in. Add an **enhancer** in `mcp_server/enhancers/` when a tool needs elicitation, image output, or an iframe dashboard. Enhancers wrap a service for the MCP transport only - the pure service stays untouched and CLI/API consumers are unaffected. See [`mcp_server/MCP_UI_ARCHITECTURE.md`](mcp_server/MCP_UI_ARCHITECTURE.md) for the full design.
 
 ## Agent Prompt
 
@@ -69,23 +82,6 @@ The skill's source of truth lives in [`skills/daysurface/SKILL.md`](skills/daysu
 - A dashboard that uses the same MCP layer
 - Open source
 
-## Key Features
-
-| Feature | Stack |
-|---|---|
-| CLI (auto-discovery commands, global flags, shell completions, self-update) | Typer |
-| MCP server (streamable HTTP at `/mcp`, services auto-registered as tools; stdio supported for local dev) | FastMCP |
-| HTTP API server (also hosts `/mcp`) | FastAPI + Uvicorn |
-| Auth | WorkOS + API keys |
-| Payments | Stripe |
-| Database + migrations | SQLAlchemy + Alembic |
-| Config (YAML + `.env`) | Pydantic-settings |
-| LLM inference + observability | DSPY + LiteLLM + LangFuse |
-| Testing | pytest + `TestTemplate` |
-| Lint / type / dead-code | Ruff + Vulture + ty + import-linter |
-| Pre-commit (folder size, ai-writing, agent-config sync) | prek |
-| Telemetry | Anonymous, opt-out |
-
 ## Architecture
 
 One codebase, three interfaces. Write business logic once in `services/` and it ships as a CLI subcommand, an MCP tool, and an HTTP route - same Pydantic input/output contract everywhere.
@@ -112,21 +108,6 @@ One codebase, three interfaces. Write business logic once in `services/` and it 
         │ (config)   │ (ORM) │ (DSPY)     │ (logs/theme)│
         └────────────┴───────┴────────────┴─────────────┘
 ```
-
-### MCP UI (optional)
-
-Need elicitation, image output, or an iframe dashboard for an MCP tool? Add an opt-in **enhancer** in `mcp_server/enhancers/`. Enhancers wrap a service for the MCP transport only - the pure service stays untouched and CLI/API consumers are unaffected.
-
-Four MCP Apps ship in the box. Each is a React bundle served as a `ui://` resource and rendered in the host's sandboxed iframe:
-
-| | |
-|:--|:--|
-| **`gmail_inbox`** - curated inbox with importance scores and labels, beside a thread reader showing a pending draft and AI-drafted replies<br><br><img src="media/mcp-ui/gmail-inbox.png" alt="gmail_inbox MCP App: curated inbox list beside an open thread with a pending draft"> | **`gmail_composer`** - draft editor with the conversation in context, attachments, and send / save / discard<br><br><img src="media/mcp-ui/gmail-composer.png" alt="gmail_composer MCP App: draft editor with To, Subject and body fields"> |
-| **`pdf_signer`** - pdf.js viewer with the signature field highlighted and a type-your-name signing ceremony<br><br><img src="media/mcp-ui/pdf-signer.png" alt="pdf_signer MCP App: NDA with a Sign here highlight and signing footer"> | **`settings`** - connected Gmail account, inbox watch state, and webhook endpoints with secret rotation<br><br><img src="media/mcp-ui/settings.png" alt="settings MCP App: Gmail account status and webhook endpoint list"> |
-
-Screenshots are rendered from the committed app bundles by the fixture host in `mcp_server/dev_preview/` - no server, Gmail account, or OAuth involved. Reproduce any of them with `make preview_app APP=<name>`.
-
-See [`mcp_server/MCP_UI_ARCHITECTURE.md`](mcp_server/MCP_UI_ARCHITECTURE.md) for the full design.
 
 ## Quick Start
 
