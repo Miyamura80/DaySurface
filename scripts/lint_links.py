@@ -25,6 +25,13 @@ BOT_BLOCKED_DOMAINS = [
     # Railway template deploy links are browser-only SPA routes; they 404 for
     # non-browser HTTP clients even though they resolve fine in a browser.
     r"https://railway\.com/deploy/.*",
+    # chatgpt.com sits behind Cloudflare bot protection and serves the app
+    # itself to signed-in browsers only - a checker gets 403/redirect wherever
+    # it runs, so this belongs here rather than in CLOUD_SANDBOX_IGNORES (which
+    # would still fail open-egress CI). The one link we have is the
+    # create-connector deep link in docs/content/docs/mcp/chatgpt.mdx; verify it
+    # by clicking it, not by link-linting it.
+    r"https://chatgpt\.com/.*",
 ]
 
 # Domains we deliberately keep OFF the Claude Code cloud sandbox network
@@ -52,6 +59,12 @@ CLOUD_SANDBOX_IGNORES = [
     # off the allowlist rather than grant standing egress for one convenience
     # link to an extension page.
     r"https?://marketplace\.visualstudio\.com(/|\?|$)",
+    # One-click MCP install deep links in the README's client table. Both hosts
+    # are programmable surfaces an attacker could push data into and read back
+    # (claude.ai is a chat product; vscode.dev is a full web IDE), so they stay
+    # off the allowlist and are skipped in the sandbox only.
+    r"https?://(www\.)?claude\.ai(/|\?|$)",
+    r"https?://(www\.)?vscode\.dev(/|\?|$)",
 ]
 
 # Files whose external links are deliberately not checked inside the cloud
