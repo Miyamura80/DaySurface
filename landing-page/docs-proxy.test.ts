@@ -25,6 +25,11 @@ describe("isDocsPath", () => {
     ["/og/en/docs/x/og.png", true],
     ["/api/search", true],
     ["/llms-full.txt", true],
+    // Root assets from docs/public, referenced by the docs icon metadata.
+    // Without these the apex serves SPA-fallback HTML at a 200 instead.
+    ["/favicon.ico", true],
+    ["/icon-light.png", true],
+    ["/icon-dark.png", true],
     // Must NOT match: these belong to the landing page.
     ["/", false],
     ["/docsomething", false],
@@ -114,6 +119,28 @@ describe("proxyDocs", () => {
     const res = await throughProxy("/redirect");
     expect(res.status).toBe(307);
     expect(res.headers.get("location")).toBe("/docs/target");
+  });
+
+  test("settles its promise on a completed response", async () => {
+    // Not merely cosmetic: server.ts calls this fire-and-forget, so a promise
+    // that only settled when the socket was torn down would retain per-request
+    // listeners for the life of a keep-alive connection.
+    let settled = false;
+    const front = createServer((req, res) => {
+      void proxyDocs(req, res).then(() => {
+        settled = true;
+      });
+    });
+    await new Promise<void>((r) => front.listen(0, "127.0.0.1", r));
+    const port = (front.address() as AddressInfo).port;
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/docs/ok`, { keepalive: true });
+      await res.text();
+      await Bun.sleep(200);
+      expect(settled).toBe(true);
+    } finally {
+      front.close();
+    }
   });
 
   test("survives an upstream that dies mid-body", async () => {

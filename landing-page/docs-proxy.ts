@@ -55,6 +55,15 @@ const PROXY_PREFIXES: readonly string[] = [
   "/api/search",
   "/llms.mdx",
   "/llms-full.txt",
+  // Root assets from `docs/public`, referenced by the icon metadata in
+  // `docs/app/layout.tsx`. Next serves `public/` at its origin root, so these
+  // are docs-owned paths despite not starting with `/docs`. Without them the
+  // apex answers each one from `sirv`'s SPA fallback - HTML, at a 200 - and
+  // every docs page loses its icon. The landing page uses `/favicon.svg`, so
+  // there is nothing to collide with.
+  "/favicon.ico",
+  "/icon-light.png",
+  "/icon-dark.png",
 ];
 
 if (!docsUpstream()) {
@@ -169,9 +178,25 @@ export async function proxyDocs(
     // sit in memory in full, and time-to-first-byte would wait on the last byte.
     await new Promise<void>((resolve, reject) => {
       const body = Readable.fromWeb(upstream.body as never);
-      body.on("error", reject);
-      res.on("error", reject);
-      res.on("close", resolve);
+      const done = (err?: Error) => {
+        body.off("error", done);
+        res.off("error", done);
+        res.off("finish", onFinish);
+        res.off("close", onClose);
+        if (err) reject(err);
+        else resolve();
+      };
+      const onFinish = () => done();
+      const onClose = () => {
+        // If the client went away before the response finished, stop pulling
+        // bytes we can no longer deliver instead of draining the upstream.
+        if (!res.writableFinished) body.destroy();
+        done();
+      };
+      body.once("error", done);
+      res.once("error", done);
+      res.once("finish", onFinish);
+      res.once("close", onClose);
       body.pipe(res);
     });
   } catch (error) {
