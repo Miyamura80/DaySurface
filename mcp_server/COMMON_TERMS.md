@@ -74,7 +74,7 @@ connection. Streamable HTTP also conveys it via `MCP-Protocol-Version` header.
 ## 7. OAuth 2.1 pitfalls
 
 - MCP server is a **resource server**, not the authorization server (token factory).
-  This template implements exactly that split: RFC 9728 Protected Resource
+  DaySurface implements exactly that split: RFC 9728 Protected Resource
   Metadata at `/.well-known/oauth-protected-resource[/mcp]`
   (`api_server/routes/well_known.py`), a `resource_metadata` hint in the 401
   `WWW-Authenticate` challenge (`api_server/middleware/mcp_auth.py`), and

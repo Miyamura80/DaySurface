@@ -43,7 +43,7 @@ The discovery documents that live here:
   (draft-meunier-http-message-signatures-directory) - publishes this agent's
   Ed25519 public signing key(s) as a JWK Set so origins can verify the HTTP
   Message Signatures it sends. Served only when ``WEB_BOT_AUTH_PRIVATE_KEY`` is
-  configured (404 otherwise), so a key-less template signals "no signing
+  configured (404 otherwise), so a key-less deployment signals "no signing
   identity" rather than advertising an empty directory.
 """
 
@@ -151,7 +151,7 @@ def mcp_server_card() -> JSONResponse:
 def _agent_endpoint_url(b: BrandingConfig) -> str:
     """Resolve the public host to advertise as the agent's ``url``.
 
-    A2A requires ``url``. This template ships a *discovery* card only - it does
+    A2A requires ``url``. DaySurface ships a *discovery* card only - it does
     not implement an A2A wire transport (no JSON-RPC ``message/send``, no
     HTTP+JSON REST binding), so we deliberately omit ``preferredTransport`` and
     point ``url`` at the MCP endpoint, the agent's real machine-facing surface.
@@ -187,7 +187,7 @@ def a2a_agent_card() -> JSONResponse:
 
     Discovery/branding only: it advertises this agent's identity and skills so
     A2A registries/clients can find it. We intentionally do not declare a
-    ``preferredTransport`` because the template implements no A2A wire transport;
+    ``preferredTransport`` because the server implements no A2A wire transport;
     advertising one would point clients at an endpoint that can't speak it.
     """
     b = global_config.branding

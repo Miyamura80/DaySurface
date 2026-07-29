@@ -82,7 +82,7 @@ mcp_server/
       dist/mcp-app.html
 ```
 
-**Why:** Driven by the need to support MCP UI features (elicitation at limited-but-growing client adoption, MCP Apps shipping since late 2025) without breaking the template's pure-function service architecture. The enhancer pattern lets MCP-specific UI be opt-in per-tool while keeping CLI/API consumers unaffected.
+**Why:** Driven by the need to support MCP UI features (elicitation at limited-but-growing client adoption, MCP Apps shipping since late 2025) without breaking the project's pure-function service architecture. The enhancer pattern lets MCP-specific UI be opt-in per-tool while keeping CLI/API consumers unaffected.
 
 **How to apply:** When implementing MCP UI, follow this architecture. Don't mix UI concerns into the service layer. All new MCP UI features go through enhancers.
 

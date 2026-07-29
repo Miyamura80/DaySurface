@@ -1,6 +1,6 @@
 ---
 name: goose-gui-e2e
-description: Drive the real Goose desktop GUI (Electron) as an MCP client via Playwright to end-to-end test this template's MCP Apps - asserting the ui:// iframe actually renders and round-trips in a real host. Use to run, add, or debug MCP-App e2e scenarios.
+description: Drive the real Goose desktop GUI (Electron) as an MCP client via Playwright to end-to-end test DaySurface's MCP Apps - asserting the ui:// iframe actually renders and round-trips in a real host. Use to run, add, or debug MCP-App e2e scenarios.
 ---
 
 # Goose-GUI end-to-end testing of the MCP Apps
@@ -8,7 +8,7 @@ description: Drive the real Goose desktop GUI (Electron) as an MCP client via Pl
 Goose (Block's open-source agent, an Agentic AI Foundation reference MCP client)
 renders MCP Apps natively - it fetches a tool's `ui://` resource and mounts the
 HTML in a sandboxed iframe. This skill stands up the **real Goose desktop app**
-(Electron), wires **this template's `/mcp` mount** into it as a streamable-HTTP
+(Electron), wires **DaySurface's `/mcp` mount** into it as a streamable-HTTP
 extension, drives a chat scenario with **Playwright-Electron** (DOM selectors, no
 pixel coordinates), and decides PASS/FAIL from two records the mock LLM cannot
 fake: the **rendered iframe DOM** and the **tool-call round-trip log**.
@@ -22,7 +22,7 @@ build under `$E2E_HOME/goose_src` is repo-agnostic and shared with it.
    scenario (JSON: prompt + tool plan + expect)
         │  Playwright-Electron drives the DOM
         ▼
-   mock LLM ──emits webhook_settings──► Goose desktop GUI ──/mcp──► template server
+   mock LLM ──emits webhook_settings──► Goose desktop GUI ──/mcp──► DaySurface server
    (scenario engine)                    (Electron, real)            (FastMCP + enhancer
         ▲                                     │  renders ui://       attaches ui://daysurface/settings)
         │                                     ▼
@@ -38,7 +38,7 @@ cd .agents/skills/goose-gui-e2e/scripts     # or the symlink under .claude/skill
 export E2E_HOME="$HOME/goose-e2e"           # working dir (default; override freely)
 
 bash setup.sh                # ONE TIME: build goose + Electron + bundles (~6-8 min). Idempotent.
-bash up.sh                   # seed e2e DB + API key; start template server + mock + vite (idempotent)
+bash up.sh                   # seed e2e DB + API key; start DaySurface server + mock + vite (idempotent)
 bash run_test.sh settings_render   # drive the GUI + assert -> PASS/FAIL, screenshot in $E2E_HOME
 bash run_all.sh              # run every scenario, print a summary
 bash down.sh                 # stop test services  (down.sh --reset also drops the e2e DB + key)

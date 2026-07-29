@@ -19,7 +19,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 : "${E2E_HOME:=$HOME/goose-e2e}"
 mkdir -p "$E2E_HOME"
 
-# The repo under test (this template). Two levels up from scripts/ is the skill
+# The repo under test (DaySurface). Two levels up from scripts/ is the skill
 # dir; the repo root is wherever the skill is checked out. Resolve it robustly.
 : "${REPO:=$(cd "$SCRIPT_DIR/../../../.." && pwd)}"
 
@@ -32,18 +32,18 @@ mkdir -p "$E2E_HOME"
 : "${CURRENT_SCENARIO:=$E2E_HOME/current_scenario.json}"
 : "${TOOLCALL_LOG:=$E2E_HOME/toolcalls.jsonl}"
 
-# e2e SQLite DB for the template server + the fixed user the API key belongs to
+# e2e SQLite DB for the DaySurface server + the fixed user the API key belongs to
 : "${E2E_DB:=$E2E_HOME/daysurface_e2e.db}"
 : "${BACKEND_DB_URI:=sqlite:///$E2E_DB}"
 : "${E2E_USER_ID:=e2e-user}"
 : "${API_KEY_FILE:=$E2E_HOME/api_key.txt}"
 
-# ports / hosts. NB: these leak into `uv run` for the template server + seed, and
+# ports / hosts. NB: these leak into `uv run` for the DaySurface server + seed, and
 # pydantic-settings is case-insensitive - so an env var named SERVER/HOST/PORT/GMAIL
 # would be misread as a config field and crash boot. Keep the SRV_ prefix.
 : "${VITE_PORT:=5173}"       # Goose desktop dev renderer (Electron loads this)
 : "${MOCK_PORT:=8410}"       # scenario-engine mock LLM (OpenAI-compatible)
-: "${SRV_PORT:=8080}"        # this template's FastAPI + /mcp mount (daysurface-serve default)
+: "${SRV_PORT:=8080}"        # DaySurface's FastAPI + /mcp mount (daysurface-serve default)
 : "${SRV_URL:=http://127.0.0.1:$SRV_PORT}"
 : "${MCP_URL:=$SRV_URL/mcp}"
 

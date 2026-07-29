@@ -3,7 +3,7 @@ repo = "https://github.com/pre-commit/pre-commit-hooks"
 rev = "v4.6.0"
 hooks = [
     # MCP App bundles (dist/mcp-app.html) are deliberately committed so the
-    # template works without Node (see CLAUDE.md); they inline pdf.js/React
+    # server works without Node (see CLAUDE.md); they inline pdf.js/React
     # and exceed the default 500 KB cap.
     { id = "check-added-large-files", exclude = "^mcp_server/apps/[^/]+/dist/mcp-app\\.html$" },
 ]

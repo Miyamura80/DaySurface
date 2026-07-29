@@ -4,7 +4,7 @@
 //   node pw_scenario.mjs <scenario.json> <shotPath>
 //
 // Flow: type the prompt -> the mock emits the app-returning tool call -> the
-// template server returns the CallToolResult with _meta.ui -> Goose fetches the
+// DaySurface server returns the CallToolResult with _meta.ui -> Goose fetches the
 // ui:// resource and renders it in a sandboxed iframe -> we frameLocator into that
 // iframe and assert its DOM. The render is proof of the full round-trip (server
 // returned the app + the iframe received its ontoolresult payload); it cannot be
