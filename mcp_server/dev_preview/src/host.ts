@@ -105,7 +105,9 @@ async function main(): Promise<void> {
   // rather than pushing the rest of the thread off screen. Uncapped by default;
   // set MAXH=... at build time for an app that measures very tall (pdf_signer
   // asks for ~2000px because its viewer pane grows with the document).
-  const maxHeight = (window as unknown as { __MAX_HEIGHT__?: number }).__MAX_HEIGHT__ || Infinity;
+  const capRaw = (window as unknown as { __MAX_HEIGHT__?: number }).__MAX_HEIGHT__;
+  const maxHeight =
+    typeof capRaw === "number" && Number.isFinite(capRaw) && capRaw > 0 ? capRaw : Infinity;
   bridge.onsizechange = ({ height }) => {
     if (height && height > 0) {
       iframe.style.height = `${Math.min(Math.ceil(height), maxHeight)}px`;

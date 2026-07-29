@@ -50,6 +50,13 @@ const WIDTH = Number(process.env.WIDTH) || 760;
 // so the README and the site tell the same story.
 const CHAT = process.env.CHAT || "";
 
+// Height cap for the auto-resized iframe, read by host.ts. Anything that is not
+// a finite positive number (unset, junk, zero, negative) means "uncapped" - a
+// negative cap would otherwise reach Math.min() and produce a negative CSS
+// height, which browsers drop on the floor.
+const maxHeightNum = Number(process.env.MAXH);
+const maxHeightAttr = Number.isFinite(maxHeightNum) && maxHeightNum > 0 ? maxHeightNum : 0;
+
 // Per-app conversation copy: the prompt that would summon the app, and the tool
 // the server would run to serve it. Tool names are the real registry names
 // (landing-page/src/config/tool-surface.generated.json), so the chrome can't
@@ -86,13 +93,26 @@ const CLAUDE_MARK = `<svg viewBox="0 0 256 257" xmlns="http://www.w3.org/2000/sv
 // bundle, so its shot is APP=gmail_inbox SCENARIO=gmail_composer.
 const SCENARIO = process.env.SCENARIO || APP;
 
-const convo = CONVO[SCENARIO] || {
+// Everything interpolated as text into the generated HTML goes through this.
+// APP and SCENARIO are operator-supplied, so this is hygiene rather than a trust
+// boundary - but the output is a single file meant to be opened in a browser and
+// handed around, and a template literal is not an HTML escaper.
+const esc = (s) =>
+  String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
+const raw = CONVO[SCENARIO] || {
   ask: `Show me ${SCENARIO}.`,
   tool: SCENARIO,
   say: "Here you go.",
 };
+const convo = { ask: esc(raw.ask), tool: esc(raw.tool), say: esc(raw.say) };
 
-const WIDGET = `<div class="widget"><iframe id="app" title="${APP} MCP App"></iframe></div>`;
+const WIDGET = `<div class="widget"><iframe id="app" title="${esc(APP)} MCP App"></iframe></div>`;
 
 // The app card sits where a tool result lands: under the assistant's line and
 // its tool-call chip, inside the assistant turn. Same order as ClaudeShell.
@@ -131,7 +151,7 @@ const page = `<!doctype html>
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>MCP-UI preview · ${APP}</title>
+<title>MCP-UI preview · ${esc(APP)}</title>
 <style>
   /* Neutral host surface only - no chrome. The framed widget is the app exactly
      as a real MCP host embeds it inline; a real host renders it on its own
@@ -219,7 +239,7 @@ const page = `<!doctype html>
 <div id="err"></div>
 <script>
   window.__APP_NAME__ = ${JSON.stringify(APP)};
-  window.__MAX_HEIGHT__ = ${Number(process.env.MAXH) || 0};
+  window.__MAX_HEIGHT__ = ${maxHeightAttr};
   window.__APP_HTML_B64__ = "${appB64}";
 </script>
 <script type="module">
