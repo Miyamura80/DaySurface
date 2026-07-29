@@ -25,6 +25,13 @@ BOT_BLOCKED_DOMAINS = [
     # Railway template deploy links are browser-only SPA routes; they 404 for
     # non-browser HTTP clients even though they resolve fine in a browser.
     r"https://railway\.com/deploy/.*",
+    # chatgpt.com sits behind Cloudflare bot protection and serves the app
+    # itself to signed-in browsers only - a checker gets 403/redirect wherever
+    # it runs, so this belongs here rather than in CLOUD_SANDBOX_IGNORES (which
+    # would still fail open-egress CI). The one link we have is the
+    # create-connector deep link in docs/content/docs/mcp/chatgpt.mdx; verify it
+    # by clicking it, not by link-linting it.
+    r"https://chatgpt\.com/.*",
 ]
 
 # Domains we deliberately keep OFF the Claude Code cloud sandbox network
@@ -52,10 +59,21 @@ CLOUD_SANDBOX_IGNORES = [
     # off the allowlist rather than grant standing egress for one convenience
     # link to an extension page.
     r"https?://marketplace\.visualstudio\.com(/|\?|$)",
+    # One-click MCP install deep links in the README's client table. Both hosts
+    # are programmable surfaces an attacker could push data into and read back
+    # (claude.ai is a chat product; vscode.dev is a full web IDE), so they stay
+    # off the allowlist and are skipped in the sandbox only.
+    r"https?://(www\.)?claude\.ai(/|\?|$)",
+    r"https?://(www\.)?vscode\.dev(/|\?|$)",
     # GitHub hosts user-writable, readable-back surfaces (gists, repo contents,
     # issue bodies) - a textbook publish-then-read exfil channel. Skip in the
     # sandbox rather than grant standing egress for repo links.
     r"https?://(www\.)?github\.com(/|\?|$)",
+    # github.io is a user-publishable hosting apex (anyone can serve a site on a
+    # subdomain), and the Goose install deep link in the README's client table
+    # takes a `?url=` parameter the host acts on - same relay shape as
+    # shields.io. Both reasons keep it off the allowlist.
+    r"https?://([a-z0-9-]+\.)?github\.io(/|\?|$)",
     # Package registry (publish-then-read), same reasoning as the MCP registry.
     r"https?://docs\.pypi\.org(/|\?|$)",
     # Platform apexes carrying APIs/webhooks well beyond the one doc link.

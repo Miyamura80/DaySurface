@@ -1,69 +1,65 @@
 ---
 /*
- * Bespoke Edison-brand wireframe diagram for each feature, selected by `name`
- * (the `visual` key on each feature in config). Rendered both in the sticky
- * desktop panel and inline on mobile (Features.astro). Decorative.
+ * The visual for each feature, selected by `name` (the `visual` key on each
+ * feature in config). Rendered both in the sticky desktop panel and inline on
+ * mobile (Features.astro).
+ *
+ * These are the REAL MCP App mocks - the same components the hero chat mock
+ * embeds (InboxApp / ComposerApp) plus SignerApp - inside a ChatFrame wearing
+ * whichever client the page is currently set to. Pick ChatGPT in the hero and
+ * these frames are ChatGPT too: same page-level state, same tokens.
+ *
+ * The app cards themselves deliberately do NOT re-skin with the host. A
+ * sandboxed MCP App ships its own UI and renders identically in every client -
+ * that's the point of the frame around them changing while they don't.
  */
+import ChatFrame from "./chat/ChatFrame.astro";
+import InboxApp from "./chat/InboxApp.astro";
+import ComposerApp from "./chat/ComposerApp.astro";
+import SignerApp from "./chat/SignerApp.astro";
+
 interface Props {
   name: string;
 }
 const { name } = Astro.props;
 ---
 
-{
-  /* Three transports, zero duplication */
-  name === "transports" && (
-    <div class="flex h-full flex-col justify-center gap-4 p-4 sm:gap-6 sm:p-6" aria-hidden="true">
-      <div class="grid grid-cols-3 gap-3 font-mono text-xs">
-        {["CLI", "MCP", "HTTP"].map((t) => (
-          <div class="border border-accent/50 bg-bg px-2 py-3 text-center text-accent">
-            {t}
-          </div>
-        ))}
-      </div>
-      <div class="flex justify-center">
-        <svg class="size-7 text-fg-subtle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <path d="M5 4v6M12 4v6M19 4v6M5 10h14M12 10v6M12 16l-3-3M12 16l3-3" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-      </div>
-      <div class="border-2 border-accent bg-bg p-4">
-        <p class="font-mono text-[11px] text-fg-subtle">@service</p>
-        <p class="mt-1 font-mono text-sm text-fg">gmail_curate_inbox()</p>
-        <p class="mt-2 text-xs text-fg-muted">one shared service registry</p>
-      </div>
-    </div>
-  )
-}
+<div class="feature-visual flex h-full items-center justify-center p-3 sm:p-5">
+  {
+    /* Drafts you edit, not approve - the composer served into the chat */
+    name === "composer" && (
+      <ChatFrame say="Drafted a reply to Dana - it's open for you to edit.">
+        <ComposerApp standalone />
+      </ChatFrame>
+    )
+  }
 
-{
-  /* Headless or interactive */
-  name === "interactive" && (
-    <div class="flex h-full flex-col justify-center p-4 sm:p-6" aria-hidden="true">
-      <div class="border-2 border-accent bg-bg">
-        <div class="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
-          <span class="shrink-0 text-xs font-semibold text-fg">Curated Inbox</span>
-          <span class="min-w-0 truncate font-mono text-[10px] uppercase tracking-wider text-accent">ui://daysurface/gmail_inbox</span>
-        </div>
-        <div class="inline-flex items-center gap-1.5 border-b border-border px-3 py-2 font-mono text-[11px] text-fg-muted">
-          <svg class="size-3 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 8l4 4-4 4m6 0h6" stroke-linecap="round" stroke-linejoin="round" /></svg>
-          gmail_curate_inbox <span class="text-accent">✓</span>
-        </div>
-        <ul class="divide-y divide-border">
-          {[
-            { s: "Re: Q3 contract", high: true },
-            { s: "Invoice #8472 is ready", high: false },
-          ].map((r) => (
-            <li class="flex items-center gap-2.5 px-3 py-2.5">
-              <span class={`size-2 shrink-0 ${r.high ? "bg-accent" : "border border-fg-subtle"}`} />
-              <span class="truncate text-[13px] text-fg">{r.s}</span>
-            </li>
-          ))}
-        </ul>
-        <div class="flex items-center gap-2 border-t border-border px-3 py-2">
-          <span class="bg-accent px-2.5 py-1 text-[11px] font-semibold text-accent-fg">Draft replies</span>
-          <span class="font-mono text-[10px] text-fg-subtle">postMessage → host</span>
-        </div>
-      </div>
-    </div>
-  )
-}
+  {
+    /* Triage that remembers - the curated inbox, list -> reader -> AI reply */
+    name === "ledger" && (
+      <ChatFrame say="I triaged your inbox. Here's what needs you.">
+        <InboxApp />
+      </ChatFrame>
+    )
+  }
+
+  {
+    /* Fill and sign, in the thread - the signing ceremony */
+    name === "signing" && (
+      <ChatFrame say="Filled the form. It needs your signature to go back.">
+        <SignerApp />
+      </ChatFrame>
+    )
+  }
+</div>
+
+<style>
+  /* Pause every attract loop in the panel while the visitor is interacting -
+     the same courtesy the hero extends via ConvoScroll, so the composer's real
+     textarea and the signer's ceremony hold still under the cursor instead of
+     animating out from under it. */
+  .feature-visual:hover :global(*),
+  .feature-visual:focus-within :global(*) {
+    animation-play-state: paused !important;
+  }
+</style>

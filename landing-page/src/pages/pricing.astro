@@ -1,0 +1,484 @@
+---
+/**
+ * Dedicated /pricing page.
+ *
+ * Everything here is driven by src/config/landing/pricing.ts, which is also the
+ * source for the homepage teaser and the machine-readable /pricing.md manifest.
+ */
+import Base from "../layouts/Base.astro";
+import Nav from "../components/Nav.astro";
+import Footer from "../components/Footer.astro";
+import PricingTable from "../components/PricingTable.astro";
+import {
+  site,
+  pricing,
+  repoName,
+  pricingAxes,
+  pricingMatrix,
+  pricingFaq,
+  pricingJourney,
+  alwaysFree,
+  addOns,
+  selfHost,
+} from "../config/landing";
+
+// nav, footer, sitemap, and schemamap all drop this route when pricing is
+// disabled. Without this the page stayed live but orphaned - reachable, absent
+// from every index, linked from nowhere - which is worse than either state the
+// flag is meant to express.
+if (!pricing.enabled) return Astro.redirect("/", 302);
+
+const origin = (Astro.site ?? new URL(site.url)).origin;
+
+// Shown in the disclosure label so people know the size of what they are
+// opening. Derived, so adding a matrix row updates the copy.
+const capabilityCount = pricingMatrix.reduce((n, g) => n + g.rows.length, 0);
+
+const pageTitle = `Pricing - ${site.name}`;
+const pageDescription = pricing.subhead;
+
+// schema.org: the tier list as Offers, plus the FAQ so answer engines can quote
+// the "does 30 days mean I lose my email?" answer verbatim instead of guessing.
+const jsonLd = [
+  {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: site.name,
+    description: pageDescription,
+    url: `${origin}/pricing`,
+    offers: pricing.tiers.map((t) => ({
+      "@type": "Offer",
+      name: t.name,
+      description: t.description,
+      url: `${origin}/pricing`,
+      // An unpriced tier must omit price AND currency: a bare priceCurrency
+      // is invalid schema.org. A priced tier carries its billing period, so
+      // an answer engine cannot report "$29" as a one-time charge.
+      ...(t.priceUsd === null
+        ? {}
+        : {
+            priceSpecification: {
+              "@type": "UnitPriceSpecification",
+              price: t.priceUsd,
+              priceCurrency: "USD",
+              ...(t.billingPeriod
+                ? { billingDuration: 1, billingIncrement: 1, unitCode: "MON" }
+                : {}),
+            },
+          }),
+    })),
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: pricingFaq.items.map((item) => ({
+      "@type": "Question",
+      name: item.q,
+      acceptedAnswer: { "@type": "Answer", text: item.a },
+    })),
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: site.url },
+      { "@type": "ListItem", position: 2, name: "Pricing", item: `${origin}/pricing` },
+    ],
+  },
+];
+---
+
+<Base title={pageTitle} description={pageDescription}>
+  <script
+    type="application/ld+json"
+    is:inline
+    slot="head"
+    set:html={JSON.stringify(jsonLd)}
+  />
+
+  <Nav />
+
+  <main>
+    <!-- Header -->
+    <section class="glow border-b border-border/60">
+      <div class="mx-auto max-w-6xl px-6 pt-16 pb-20">
+        <a href="/" class="text-sm opacity-70 transition hover:opacity-100">
+          &larr; Back to {site.name}
+        </a>
+
+        <header class="mx-auto mt-10 max-w-3xl text-center">
+          <h1 class="text-4xl font-bold tracking-tight text-balance sm:text-5xl">
+            {pricing.heading}
+          </h1>
+          <p class="mt-5 text-lg text-pretty text-fg-muted">{pricing.subhead}</p>
+
+          <p
+            class="mt-8 inline-block border-2 border-accent bg-accent/10 px-5 py-3 font-mono text-sm font-semibold text-accent sm:text-base"
+          >
+            {pricing.principle}
+          </p>
+        </header>
+      </div>
+    </section>
+
+    <!-- Tier cards -->
+    <section class="border-b border-border/60 py-20">
+      <div class="mx-auto max-w-6xl px-6">
+        <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {
+            pricing.tiers.map((tier) => (
+              <div class="flex flex-col border border-border bg-surface-1 p-7">
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <h2 class="text-lg font-semibold">{tier.name}</h2>
+                  {tier.repoBadge && (
+                    <a
+                      href={site.githubUrl}
+                      title={`Open source - ${repoName} on GitHub`}
+                      class="inline-flex items-center gap-1.5 text-xs font-medium text-fg-muted transition hover:text-accent"
+                    >
+                      {/* Masked so the mark follows the link colour on hover. */}
+                      <span
+                        class="size-4 shrink-0 bg-current"
+                        style="-webkit-mask:url('/logos/github.svg') center/contain no-repeat;mask:url('/logos/github.svg') center/contain no-repeat;"
+                        aria-hidden="true"
+                      />
+                      {repoName}
+                    </a>
+                  )}
+                </div>
+                <div class="mt-4 flex items-baseline gap-1">
+                  <span class="text-4xl font-bold">{tier.price}</span>
+                  {tier.cadence && <span class="text-fg-muted">{tier.cadence}</span>}
+                </div>
+                {tier.note && (
+                  <p class="mt-2 text-xs text-fg-subtle">{tier.note}</p>
+                )}
+                <p class="mt-3 text-sm text-pretty text-fg-muted">{tier.description}</p>
+
+                <ul class="mt-6 grow space-y-3 text-sm">
+                  {tier.features.map((f) => (
+                    <li class="flex items-start gap-2">
+                      <svg
+                        class="mt-0.5 size-4 shrink-0 text-accent"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2.5"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="M20 6L9 17l-5-5" />
+                      </svg>
+                      <span class="text-fg-muted">{f}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                {/* Add-ons render as an inset panel inside the tier they
+                    attach to. fieldset/legend gives the notched border for
+                    free; `grow` on the feature list above pins this panel and
+                    the CTA to the card bottom across unequal card heights. */}
+                {addOns.items
+                  .filter((addOn) => addOn.attachTo === tier.id)
+                  .map((addOn) => (
+                    <fieldset class="mt-8 border border-border/70 px-4 pb-5">
+                      <legend class="mx-auto px-2 text-xs font-medium text-fg-subtle">
+                        + optional
+                      </legend>
+
+                      <div class="flex items-baseline justify-between gap-3">
+                        <h3 class="text-sm font-bold text-balance text-fg">{addOn.name}</h3>
+                        {/* One expression: separate elements would render a
+                            stray space between "$300" and "/mo". */}
+                        <span class="shrink-0 text-sm font-bold text-fg">
+                          {`${addOn.price}${addOn.cadence}`}
+                        </span>
+                      </div>
+
+                      <ul class="mt-4 space-y-2.5 text-sm">
+                        {addOn.features.map((f) => (
+                          <li class="flex items-start gap-2">
+                            <svg
+                              class="mt-0.5 size-4 shrink-0 text-accent"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="2.5"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              aria-hidden="true"
+                            >
+                              <path d="M20 6L9 17l-5-5" />
+                            </svg>
+                            <span class="text-fg-muted">{f}</span>
+                          </li>
+                        ))}
+                      </ul>
+
+                      <p class="mt-4 text-xs text-fg-subtle">{addOn.availableOn}</p>
+                    </fieldset>
+                  ))}
+
+                <a
+                  href={tier.href}
+                  class="mt-8 border-2 border-border px-5 py-2.5 text-center font-semibold text-fg transition hover:border-accent hover:text-accent"
+                >
+                  {tier.cta}
+                </a>
+              </div>
+            ))
+          }
+        </div>
+
+      </div>
+    </section>
+
+    <!-- Self-hosting: a real option, not small print under the paid ladder -->
+    <section class="border-b border-border/60 py-20">
+      <div class="mx-auto max-w-6xl px-6">
+        <div class="grid gap-10 border-2 border-border bg-surface-1 p-8 md:grid-cols-2 sm:p-10">
+          <div>
+            <span class="font-mono text-xs tracking-widest text-accent uppercase">
+              {selfHost.eyebrow}
+            </span>
+            <h2 class="mt-4 text-2xl font-bold tracking-tight text-balance sm:text-3xl">
+              {selfHost.heading}
+            </h2>
+            <p class="mt-4 text-pretty text-fg-muted">{selfHost.body}</p>
+
+            <div class="mt-8 flex flex-wrap gap-3">
+              <a
+                href={selfHost.cta.href}
+                class="inline-flex items-center gap-2 bg-accent px-5 py-2.5 font-semibold text-accent-fg transition hover:bg-accent-strong"
+              >
+                <span
+                  class="size-4 shrink-0 bg-accent-fg"
+                  style="-webkit-mask:url('/logos/github.svg') center/contain no-repeat;mask:url('/logos/github.svg') center/contain no-repeat;"
+                  aria-hidden="true"
+                ></span>
+                {selfHost.cta.label}
+              </a>
+              <a
+                href={selfHost.secondary.href}
+                class="border-2 border-border px-5 py-2.5 font-semibold text-fg transition hover:border-accent hover:text-accent"
+              >
+                {selfHost.secondary.label}
+              </a>
+            </div>
+          </div>
+
+          <ul class="space-y-4 md:border-l md:border-border/60 md:pl-10">
+            {
+              selfHost.points.map((point) => (
+                <li class="flex items-start gap-3">
+                  <svg
+                    class="mt-0.5 size-4 shrink-0 text-accent"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M20 6L9 17l-5-5" />
+                  </svg>
+                  <span class="text-pretty text-fg">{point}</span>
+                </li>
+              ))
+            }
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- The three axes -->
+    <section class="border-b border-border/60 py-24">
+      <div class="mx-auto max-w-6xl px-6">
+        <div class="mx-auto max-w-2xl text-center">
+          <h2 class="text-3xl font-bold tracking-tight sm:text-4xl">{pricingAxes.heading}</h2>
+          <p class="mt-4 text-lg text-pretty text-fg-muted">{pricingAxes.subhead}</p>
+        </div>
+
+        <div class="mt-14 grid gap-6 md:grid-cols-3">
+          {
+            pricingAxes.items.map((axis) => (
+              <div class="flex flex-col border border-border bg-surface-1 p-7">
+                <div class="flex items-center justify-between gap-3">
+                  <h3 class="text-lg font-semibold">{axis.name}</h3>
+                  <span class="border border-accent/40 px-2 py-0.5 font-mono text-xs text-accent">
+                    {axis.tier}
+                  </span>
+                </div>
+
+                <dl class="mt-6 space-y-5 text-sm">
+                  <div>
+                    <dt class="font-mono text-xs tracking-widest text-fg-subtle uppercase">
+                      Free
+                    </dt>
+                    <dd class="mt-1.5 text-pretty text-fg-muted">{axis.free}</dd>
+                  </div>
+                  <div class="border-t border-border/60 pt-5">
+                    <dt class="font-mono text-xs tracking-widest text-accent uppercase">Paid</dt>
+                    <dd class="mt-1.5 text-pretty text-fg">{axis.paid}</dd>
+                  </div>
+                </dl>
+              </div>
+            ))
+          }
+        </div>
+      </div>
+    </section>
+
+    <!-- Free forever promise -->
+    <section class="border-b border-border/60 py-24">
+      <div class="mx-auto max-w-4xl px-6">
+        <div class="border-2 border-accent bg-surface-1 p-8 sm:p-10">
+          <h2 class="text-2xl font-bold tracking-tight sm:text-3xl">{alwaysFree.heading}</h2>
+          <p class="mt-4 max-w-2xl text-pretty text-fg-muted">{alwaysFree.body}</p>
+
+          <ul class="mt-8 grid gap-3 text-sm sm:grid-cols-2">
+            {
+              alwaysFree.items.map((item) => (
+                <li class="flex items-start gap-2">
+                  <svg
+                    class="mt-0.5 size-4 shrink-0 text-accent"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M20 6L9 17l-5-5" />
+                  </svg>
+                  <span class="text-fg">{item}</span>
+                </li>
+              ))
+            }
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- Full comparison matrix -->
+    <section id="compare-tiers" class="scroll-mt-20 border-b border-border/60 py-24">
+      <div class="mx-auto max-w-6xl px-6">
+        <div class="mx-auto max-w-2xl text-center">
+          <h2 class="text-3xl font-bold tracking-tight sm:text-4xl">Every feature, every tier</h2>
+          <p class="mt-4 text-lg text-fg-muted">No footnotes, no "contact us to find out".</p>
+        </div>
+
+        <details id="compare-tiers-details" class="group mt-12 border-2 border-border bg-surface-1">
+          <summary
+            class="flex cursor-pointer list-none items-center justify-between gap-4 px-6 py-5 font-medium transition hover:text-accent"
+          >
+            <span>
+              Compare all {capabilityCount} capabilities across {pricing.tiers.length} tiers
+            </span>
+            <svg
+              class="size-5 shrink-0 text-fg-muted transition-transform group-open:rotate-45"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              aria-hidden="true"
+            >
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+          </summary>
+
+          <div class="border-t border-border px-6 pt-8 pb-8">
+            <PricingTable />
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <!-- Paywall journey -->
+    <section class="border-b border-border/60 py-24">
+      <div class="mx-auto max-w-5xl px-6">
+        <div class="mx-auto max-w-2xl text-center">
+          <h2 class="text-3xl font-bold tracking-tight text-balance sm:text-4xl">
+            {pricingJourney.heading}
+          </h2>
+          <p class="mt-4 text-lg text-pretty text-fg-muted">{pricingJourney.subhead}</p>
+        </div>
+
+        <ol class="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {
+            pricingJourney.steps.map((step) => (
+              <li
+                class={`flex flex-col border-t-2 p-6 ${
+                  step.gated
+                    ? "border-t-accent bg-accent/5"
+                    : "border-t-border bg-surface-1"
+                }`}
+              >
+                <span
+                  class={`font-mono text-xs tracking-widest uppercase ${
+                    step.gated ? "text-accent" : "text-fg-subtle"
+                  }`}
+                >
+                  {step.when}
+                </span>
+                <p class="mt-3 text-sm text-pretty text-fg-muted">{step.what}</p>
+              </li>
+            ))
+          }
+        </ol>
+      </div>
+    </section>
+
+    <!-- Pricing FAQ -->
+    <section class="py-24">
+      <div class="mx-auto max-w-3xl px-6">
+        <h2 class="text-center text-3xl font-bold tracking-tight sm:text-4xl">
+          {pricingFaq.heading}
+        </h2>
+
+        <div class="mt-12 divide-y divide-border border-2 border-border bg-surface-1">
+          {
+            pricingFaq.items.map((item) => (
+              <details class="group px-6">
+                <summary class="flex cursor-pointer list-none items-center justify-between gap-4 py-5 font-medium">
+                  {item.q}
+                  <svg
+                    class="size-5 shrink-0 text-fg-muted transition-transform group-open:rotate-45"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                </summary>
+                <p class="pb-5 text-pretty leading-relaxed text-fg-muted">{item.a}</p>
+              </details>
+            ))
+          }
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <Footer />
+</Base>
+
+<script>
+  // A deep link to the matrix (/pricing#compare-tiers) should arrive open.
+  function openMatrixOnHash() {
+    if (window.location.hash !== "#compare-tiers") return;
+    const el = document.getElementById("compare-tiers-details");
+    if (el instanceof HTMLDetailsElement) el.open = true;
+  }
+
+  openMatrixOnHash();
+  window.addEventListener("hashchange", openMatrixOnHash);
+  document.addEventListener("astro:page-load", openMatrixOnHash);
+</script>

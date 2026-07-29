@@ -1,7 +1,7 @@
 # DaySurface
 
 <p align="center">
-  <img src="media/banner.png" alt="2" width="400">
+  <img src="media/banner.png" alt="DaySurface" width="400">
 </p>
 
 <p align="center">
@@ -9,11 +9,11 @@
 </p>
 
 <p align="center">
-  <a href="#key-features">Key Features</a> •
+  <a href="#mcp-ui">MCP UI</a> •
+  <a href="#connect-your-client">Connect</a> •
   <a href="#architecture">Architecture</a> •
   <a href="#quick-start">Quick Start</a> •
   <a href="#cli-usage">CLI Usage</a> •
-  <a href="#adding-commands">Adding Commands</a> •
   <a href="#configuration">Configuration</a> •
   <a href="manual_docs/deploy.md">Deploy</a> •
   <a href="#credits">Credits</a>
@@ -31,10 +31,44 @@
   <img alt="GitHub repo size" src="https://img.shields.io/github/repo-size/Miyamura80/DaySurface">
   <img alt="GitHub Actions Workflow Status" src="https://img.shields.io/github/actions/workflow/status/Miyamura80/DaySurface/a_test_target_tests.yml?branch=main">
   <a href="https://skills.sh/Miyamura80/DaySurface"><img alt="skills.sh" src="https://skills.sh/b/Miyamura80/DaySurface"></a>
-
 </p>
 
 ---
+
+## MCP UI
+
+Four MCP Apps ship in the box. Each is a React bundle served as a `ui://` resource and rendered in the host's sandboxed iframe:
+
+| | |
+|:--|:--|
+| **`gmail_inbox`** - curated inbox with importance scores and labels, beside a thread reader showing a pending draft and AI-drafted replies<br><br><img src="media/mcp-ui/gmail-inbox.png" alt="gmail_inbox MCP App: curated inbox list beside an open thread with a pending draft"> | **`gmail_composer`** - draft editor with the conversation in context, attachments, and send / save / discard<br><br><img src="media/mcp-ui/gmail-composer.png" alt="gmail_composer MCP App: draft editor with To, Subject and body fields"> |
+| **`pdf_signer`** - pdf.js viewer with the signature field highlighted and a type-your-name signing ceremony<br><br><img src="media/mcp-ui/pdf-signer.png" alt="pdf_signer MCP App: NDA with a Sign here highlight and signing footer"> | **`settings`** - connected Gmail account, inbox watch state, and webhook endpoints with secret rotation<br><br><img src="media/mcp-ui/settings.png" alt="settings MCP App: Gmail account status and webhook endpoint list"> |
+
+Screenshots are rendered from the committed app bundles by the fixture host in `mcp_server/dev_preview/` - no server, Gmail account, or OAuth involved. Reproduce any of them with `make preview_app APP=<name>`.
+
+Apps are opt-in. Add an **enhancer** in `mcp_server/enhancers/` when a tool needs elicitation, image output, or an iframe dashboard. Enhancers wrap a service for the MCP transport only - the pure service stays untouched and CLI/API consumers are unaffected. See [`mcp_server/MCP_UI_ARCHITECTURE.md`](mcp_server/MCP_UI_ARCHITECTURE.md) for the full design.
+
+## Connect Your Client
+
+DaySurface is a remote MCP server, so there is nothing to install - point your client at the endpoint and sign in through the browser.
+
+```text
+Endpoint:   https://mcp.daysurface.com/mcp
+Transport:  streamable HTTP (remote, not stdio)
+Auth:       OAuth in the browser, no key to paste
+```
+
+| Client | Add it |
+|:--|:--|
+| <picture><source media="(prefers-color-scheme: dark)" srcset="media/clients/claude-dark.png"><img src="media/clients/claude-light.png" width="17" alt=""></picture> **Claude** | **[Add to Claude](https://claude.ai/new?modal=add-custom-connector&connectorName=DaySurface&connectorUrl=https%3A%2F%2Fmcp.daysurface.com%2Fmcp#settings/customize-connectors)** - opens the *Add custom connector* dialog with the name and URL filled in. Claude flags it as suggested by an external link; that is expected. On Team and Enterprise plans an admin adds it. |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="media/clients/chatgpt-dark.png"><img src="media/clients/chatgpt-light.png" width="17" alt=""></picture> **ChatGPT** | Settings → Connectors → Advanced settings → turn on **Developer mode**. Back on Connectors, click **Create**, paste the endpoint, and name it. Start a new chat so the tools menu refreshes. |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="media/clients/cli-dark.png"><img src="media/clients/cli-light.png" width="17" alt=""></picture> **Claude Code** | `claude mcp add --transport http --scope user daysurface https://mcp.daysurface.com/mcp`<br>Then run `/mcp` in a session to sign in. |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="media/clients/cursor-dark.png"><img src="media/clients/cursor-light.png" width="17" alt=""></picture> **Cursor** | [<picture><source media="(prefers-color-scheme: dark)" srcset="https://cursor.com/deeplink/mcp-install-light.svg"><img src="https://cursor.com/deeplink/mcp-install-dark.svg" alt="Add to Cursor" height="24"></picture>](https://cursor.com/en/install-mcp?name=daysurface&config=eyJ1cmwiOiJodHRwczovL21jcC5kYXlzdXJmYWNlLmNvbS9tY3AifQ%3D%3D)<br>Not working? Add the endpoint by hand under Settings → MCP. |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="media/clients/vscode-dark.png"><img src="media/clients/vscode-light.png" width="17" alt=""></picture> **VS Code** | **[Add to VS Code](https://vscode.dev/redirect/mcp/install?name=daysurface&config=%7B%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Fmcp.daysurface.com%2Fmcp%22%7D)** - requires Copilot agent mode. |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="media/clients/goose-dark.png"><img src="media/clients/goose-light.png" width="17" alt=""></picture> **Goose** | [<img src="https://block.github.io/goose/img/extension-install-dark.svg" alt="Install in Goose" height="24">](https://block.github.io/goose/extension?url=https%3A%2F%2Fmcp.daysurface.com%2Fmcp&type=streamable_http&id=daysurface&name=daysurface&description=daysurface+MCP+server&timeout=300)<br>Adds it as an extension over streamable HTTP. |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="media/clients/mcp-dark.png"><img src="media/clients/mcp-light.png" width="17" alt=""></picture> **Any MCP client** | Add a remote server at `https://mcp.daysurface.com/mcp` over streamable HTTP. Cline, Zed and Windsurf all work - each spells the config differently (VS Code `servers`, Cursor and Cline `mcpServers`, Zed `context_servers`, and Windsurf wants `serverUrl` where everyone else wants `url`). |
+
+Every one-click button routes through an `https://` install URL, since GitHub strips custom URL schemes such as `cursor://` from links. The same picker is on the [landing page](https://daysurface.com) - both are generated from `landing-page/src/config/landing/connect.ts`.
 
 ## Agent Prompt
 
@@ -59,32 +93,6 @@ npx skills add Miyamura80/DaySurface
 The skill's source of truth lives in [`skills/daysurface/SKILL.md`](skills/daysurface/SKILL.md);
 `make sync-skills` mirrors it to the landing page's
 `/.well-known/agent-skills/` discovery tree (digest-pinned in `index.json`).
-
-## App Distribution
-
-- MCP server with OAuth
-- Claude and ChatGPT connectors
-- APIs and SDKs
-- Chat interfaces like iMessage and WhatsApp
-- A dashboard that uses the same MCP layer
-- Open source
-
-## Key Features
-
-| Feature | Stack |
-|---|---|
-| CLI (auto-discovery commands, global flags, shell completions, self-update) | Typer |
-| MCP server (streamable HTTP at `/mcp`, services auto-registered as tools; stdio supported for local dev) | FastMCP |
-| HTTP API server (also hosts `/mcp`) | FastAPI + Uvicorn |
-| Auth | WorkOS + API keys |
-| Payments | Stripe |
-| Database + migrations | SQLAlchemy + Alembic |
-| Config (YAML + `.env`) | Pydantic-settings |
-| LLM inference + observability | DSPY + LiteLLM + LangFuse |
-| Testing | pytest + `TestTemplate` |
-| Lint / type / dead-code | Ruff + Vulture + ty + import-linter |
-| Pre-commit (folder size, ai-writing, agent-config sync) | prek |
-| Telemetry | Anonymous, opt-out |
 
 ## Architecture
 
@@ -113,18 +121,12 @@ One codebase, three interfaces. Write business logic once in `services/` and it 
         └────────────┴───────┴────────────┴─────────────┘
 ```
 
-### MCP UI (optional)
-
-Need elicitation, image output, or an iframe dashboard for an MCP tool? Add an opt-in **enhancer** in `mcp_server/enhancers/`. Enhancers wrap a service for the MCP transport only - the pure service stays untouched and CLI/API consumers are unaffected.
-
-See [`mcp_server/MCP_UI_ARCHITECTURE.md`](mcp_server/MCP_UI_ARCHITECTURE.md) for the full design.
-
 ## Quick Start
 
 ```bash
-uv sync                        # install deps
-uv run daysurface --help       # see all CLI commands
-uv run daysurface greet Alice  # run a command
+uv sync                     # install deps
+uv run daysurface --help    # see all CLI commands
+uv run daysurface doctor    # check your environment is wired up
 
 uv run daysurface-serve   # start the server (HTTP API + MCP at /mcp on one port)
 uv run daysurface-mcp     # legacy: stdio MCP only, for local Claude Desktop / dev
@@ -132,7 +134,7 @@ uv run daysurface-mcp     # legacy: stdio MCP only, for local Claude Desktop / d
 
 ## Deploy
 
-One-click deploy to Railway or Render (backend + managed Postgres, migrations run automatically). See **[deployment docs](manual_docs/deploy.md)** for the per-platform setup, the Railway template variable map, and OAuth/secret wiring.
+The buttons at the top of this page provision the backend and a managed Postgres, and run migrations on boot. See **[deployment docs](manual_docs/deploy.md)** for the per-platform setup, the Railway template variable map, and OAuth/secret wiring.
 
 ## CLI Usage
 
@@ -148,50 +150,12 @@ Global flags go **before** the subcommand:
 | `--version` | `-V` | Print version and exit |
 
 ```bash
-uv run daysurface --format json config show     # JSON output
-uv run daysurface --dry-run greet Bob           # preview without executing
-uv run daysurface --verbose greet Alice         # detailed output
+uv run daysurface --format json config show          # JSON output
+uv run daysurface --verbose doctor                   # detailed output
+uv run daysurface --dry-run secrets set OPENAI_API_KEY  # preview without writing
 ```
 
-## Adding Commands
-
-Drop a Python file in `src/cli/commands/` and it is auto-discovered.
-
-**Single command** - export a `main()` function:
-
-```python
-# src/cli/commands/hello.py
-from typing import Annotated
-import typer
-
-
-def main(name: Annotated[str, typer.Argument(help="Who to greet.")]) -> None:
-    """Say hello."""
-    typer.echo(f"Hello, {name}!")
-```
-
-```bash
-uv run daysurface hello World   # Hello, World!
-```
-
-**Subcommand group** - export `app = typer.Typer()`:
-
-```python
-# src/cli/commands/db.py
-import typer
-
-app = typer.Typer()
-
-
-@app.command()
-def migrate() -> None:
-    """Run migrations."""
-    ...
-```
-
-```bash
-uv run daysurface db migrate
-```
+Commands are auto-discovered from `src/cli/commands/` - see [adding commands](manual_docs/adding_commands.md).
 
 ## Configuration
 
@@ -199,7 +163,8 @@ uv run daysurface db migrate
 from common import global_config
 
 # Access config values from common/global_config.yaml
-global_config.example_parent.example_child
+global_config.default_llm.default_model
+global_config.llm_config.cache_enabled
 
 # Access secrets from .env
 global_config.OPENAI_API_KEY
@@ -217,8 +182,7 @@ uv run daysurface config set logging.verbose false      # write override
 
 ## Credits
 
-This software uses the following tools:
-- [Cursor: The AI Code Editor](https://cursor.com)
+This software is built with:
 - [uv](https://docs.astral.sh/uv/)
 - [Typer: CLI framework](https://typer.tiangolo.com/)
 - [Rich: Terminal formatting](https://rich.readthedocs.io/)

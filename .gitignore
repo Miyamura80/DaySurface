@@ -30,6 +30,7 @@ eggs/
 .eggs/
 lib/
 !docs/lib/
+!landing-page/src/lib/
 lib64/
 parts/
 sdist/

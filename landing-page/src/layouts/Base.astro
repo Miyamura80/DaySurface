@@ -2,6 +2,7 @@
 import "../styles/global.css";
 import { site } from "../config/landing";
 import WebMcp from "../components/WebMcp.astro";
+import { CLIENT_IDS, DEFAULT_CLIENT } from "../lib/client-state";
 
 interface Props {
   title?: string;
@@ -25,9 +26,23 @@ const fontHref =
 ---
 
 <!doctype html>
-<html lang="en">
+<!-- data-client is the page-level selected-client state (src/lib/client-state.ts).
+     Rendered with the default so the page is correct with JS off; the inline
+     script below restores a stored choice before first paint. -->
+<html lang="en" data-client={DEFAULT_CLIENT}>
   <head>
     <meta charset="UTF-8" />
+
+    <!-- Must run before paint and before the deferred module scripts, or every
+         chat surface renders as Claude for a frame and then swaps. -->
+    <script is:inline define:vars={{ ids: CLIENT_IDS }}>
+      try {
+        const stored = localStorage.getItem("daysurface:client");
+        if (ids.includes(stored)) document.documentElement.dataset.client = stored;
+      } catch {
+        // Storage unavailable - keep the server-rendered default.
+      }
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="generator" content={Astro.generator} />

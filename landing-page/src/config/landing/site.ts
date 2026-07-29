@@ -28,6 +28,13 @@ export const site = {
 } as const;
 
 /**
+ * Repo name parsed from `site.githubUrl` (e.g. "DaySurface"), so the badge
+ * label can never drift from the URL it links to.
+ */
+export const repoName: string =
+  site.githubUrl.replace(/\/+$/, "").split("/").pop() || site.name;
+
+/**
  * Pre-connect registry branding (SEP-2127 Server Card + MCP registry server.json).
  *
  * `scripts/gen-discovery.ts` reads this (plus `site`) at build time and writes
