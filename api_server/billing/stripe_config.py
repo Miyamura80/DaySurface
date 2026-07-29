@@ -46,7 +46,7 @@ def ensure_stripe() -> bool:
         try:
             # Deliberately lazy: the app must boot (and billing degrade to
             # 503 via the False return) when the stripe SDK is pruned from
-            # the template or fails to import.
+            # the install or fails to import.
             import stripe  # noqa: PLC0415
 
             cfg = global_config.subscription_config.stripe

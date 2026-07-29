@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Write ~/.config/goose/config.yaml + secrets.yaml for the chosen LLM mode.
-# Wires THIS template's /mcp mount as a streamable-HTTP extension either way
+# Wires DaySurface's /mcp mount as a streamable-HTTP extension either way
 # (that's the system under test), authenticating with the seeded API key.
 #
 #   configure_goose.sh mock                 # deterministic mock LLM (default, offline, CI)

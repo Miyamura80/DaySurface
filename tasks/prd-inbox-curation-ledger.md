@@ -145,7 +145,7 @@ or many threads so my reasoning is banked and not repeated.
       `historyId` and `curator_version` records the model/prompt version.
 - [ ] Summary/reasoning are encrypted before persistence (US-002).
 - [ ] Being `mutating=True`, the auto-generated REST route enforces
-      `Idempotency-Key` (per template behaviour); CLI/MCP unaffected.
+      `Idempotency-Key` (per the project's mutating-service behaviour); CLI/MCP unaffected.
 - [ ] Unit tests cover: insert new, update existing (re-curate advances
       `curated_history_id`), batch of mixed insert/update.
 - [ ] `make ci` passes.
@@ -286,7 +286,7 @@ deleted.
 - **Migration:** next version is `009` (latest is
   `008_add_idempotency_keys.py`).
 - **Idempotency:** `inbox_save_curation` is `mutating=True`, so it inherits the
-  template's REST `Idempotency-Key` enforcement
+  standard REST `Idempotency-Key` enforcement
   (`api_server/idempotency.py:execute_idempotent`) automatically.
 - **Transport parity:** ledger logic stays in `services/`; MCP auto-registers on
   import; the dashboard enhancer stays MCP-only and never changes CLI/API

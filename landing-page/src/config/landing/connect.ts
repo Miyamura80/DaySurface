@@ -4,7 +4,7 @@
  *
  * This file previously also held the "One tool. Three transports." onboarding
  * section, which was removed: its MCP step duplicated the hero's connect widget,
- * and its CLI/HTTP examples pitched the template's architecture to an audience
+ * and its CLI/HTTP examples pitched the project's architecture to an audience
  * that came here for their inbox. That story now lives where it earns its place
  * - the comparison pillars and the /api page.
  */

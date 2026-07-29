@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Scenario-driven OpenAI-compatible mock LLM for Goose e2e tests (DaySurface).
 
-Ported from Edison-Watch's harness and simplified: this template's /mcp mount has
+Ported from Edison-Watch's harness and simplified: DaySurface's /mcp mount has
 no session-token handshake, so the mock just follows a declared tool-call plan.
 
 Reads $SCENARIO_FILE fresh on every request (so the persistent mock picks up the

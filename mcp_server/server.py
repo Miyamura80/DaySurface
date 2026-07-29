@@ -96,7 +96,7 @@ def _transport_security() -> TransportSecuritySettings:
 # ``stateless_http=True`` (the config default) makes every /mcp request
 # self-contained: the server does not persist per-session state keyed by
 # ``Mcp-Session-Id`` in memory. Stateful mode (the FastMCP default) breaks in
-# exactly the deployments this template targets - Render free-tier spins down
+# exactly the deployments DaySurface targets - Render free-tier spins down
 # when idle, redeploys restart the process, and horizontal scaling routes
 # requests across replicas - each of which wipes/splits the in-memory session
 # store, so a client's next POST fails with "MCP session has been terminated or

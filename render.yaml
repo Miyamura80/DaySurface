@@ -70,5 +70,5 @@ services:
         sync: false
 
       # Optional integrations (LLM keys, Stripe, LangFuse, Telegram, …) are
-      # omitted here to keep the template minimal. Add any you need from the
+      # omitted here to keep this blueprint minimal. Add any you need from the
       # dashboard; see .env.example for the full list.
