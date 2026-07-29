@@ -186,11 +186,15 @@ const payloadJson = JSON.stringify(payload).replace(/</g, "\\u003c");
           if (client.method === "deeplink" && client.install_url) {
             const note = client.note ? `\nNote: ${client.note}` : "";
             // A link that prefills nothing is half the answer: without the URL
-            // and the remaining steps the agent hands over a blank dialog.
+            // the agent hands over a blank dialog. The steps come along as an
+            // explicitly labelled FALLBACK - the link already performs the
+            // first two, so presenting them as remaining work would have the
+            // agent navigate to a dialog that is already open.
             const rest = client.prefills
               ? ""
               : `\nThis link only opens the setup dialog - the fields come up empty.` +
-                `\nMCP server URL to paste: ${data.mcpUrl}\n` +
+                `\nAfter it opens: paste ${data.mcpUrl} as the server URL, then confirm.` +
+                `\nOnly if the link is blocked or unavailable, the full path from scratch:\n` +
                 (client.steps ?? []).map((s, i) => `${i + 1}. ${s}`).join("\n");
             return textResult(
               `${client.prefills ? "One-click install" : "Setup shortcut"} for ${client.name}: ${client.install_url}${rest}${note}`,

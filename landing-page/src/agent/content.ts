@@ -76,9 +76,14 @@ export function buildLlmsFullTxt(origin: string): string {
       if (t.method === "deeplink" && t.prefills !== false) {
         how = "One-click install link on the site.";
       } else if (t.method === "deeplink") {
-        // A deep link that prefills nothing gets the click-path too: the dialog
-        // it opens is empty, so filling it in is still the work.
-        how = `Install link on the site opens the setup dialog with empty fields; finish it by hand:\n${numbered(t.steps)}`;
+        // A deep link that prefills nothing gets the click-path too, but the
+        // steps have to be labelled as the FALLBACK: the link already performs
+        // the first two, so an agent reading them as remaining work would try
+        // to navigate to a dialog that is open in front of it.
+        how =
+          `Install link on the site opens the setup dialog; the fields come up empty, ` +
+          `so paste the server URL there and confirm. If the link is blocked or ` +
+          `unavailable, the full path from scratch is:\n${numbered(t.steps)}`;
       } else if (t.method === "prompt" && t.setupPrompt) {
         // Inline the actual text - an agent reading this cannot go and fetch
         // "the setup prompt from the site".

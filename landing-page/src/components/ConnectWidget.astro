@@ -255,7 +255,7 @@ const selected = enriched.find((t) => t.id === defaultId) ?? enriched[0];
     document.querySelectorAll<HTMLAnchorElement>("a[data-copy-on-open]").forEach((a) => {
       if (a.dataset.copyOpenReady === "true") return;
       a.dataset.copyOpenReady = "true";
-      a.addEventListener("click", async (e) => {
+      const handle = async (e: MouseEvent) => {
         const url = a.dataset.copyOnOpen ?? "";
         // Modified clicks mean "open elsewhere, keep this page". Hijacking them
         // would swallow that, so copy without preventing the default.
@@ -275,6 +275,16 @@ const selected = enriched.find((t) => t.id === defaultId) ?? enriched[0];
           // anyway; the panel still shows the URL with its own copy button.
         }
         window.location.href = a.href;
+      };
+
+      a.addEventListener("click", handle);
+      // Middle-click fires `auxclick` and NOT `click`, so the button !== 0 arm
+      // above is unreachable without this line - the new tab would open with
+      // nothing on the clipboard. Restricted to button 1: `auxclick` also fires
+      // on right-click, and clobbering the clipboard when someone opens a
+      // context menu would be a surprise, not an enhancement.
+      a.addEventListener("auxclick", (e) => {
+        if (e.button === 1) void handle(e);
       });
     });
   }
