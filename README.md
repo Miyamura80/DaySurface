@@ -1,7 +1,7 @@
 # DaySurface
 
 <p align="center">
-  <img src="media/banner.png" alt="2" width="400">
+  <img src="media/banner.png" alt="DaySurface" width="400">
 </p>
 
 <p align="center">
@@ -14,7 +14,6 @@
   <a href="#architecture">Architecture</a> •
   <a href="#quick-start">Quick Start</a> •
   <a href="#cli-usage">CLI Usage</a> •
-  <a href="#adding-commands">Adding Commands</a> •
   <a href="#configuration">Configuration</a> •
   <a href="manual_docs/deploy.md">Deploy</a> •
   <a href="#credits">Credits</a>
@@ -32,7 +31,6 @@
   <img alt="GitHub repo size" src="https://img.shields.io/github/repo-size/Miyamura80/DaySurface">
   <img alt="GitHub Actions Workflow Status" src="https://img.shields.io/github/actions/workflow/status/Miyamura80/DaySurface/a_test_target_tests.yml?branch=main">
   <a href="https://skills.sh/Miyamura80/DaySurface"><img alt="skills.sh" src="https://skills.sh/b/Miyamura80/DaySurface"></a>
-
 </p>
 
 ---
@@ -96,15 +94,6 @@ The skill's source of truth lives in [`skills/daysurface/SKILL.md`](skills/daysu
 `make sync-skills` mirrors it to the landing page's
 `/.well-known/agent-skills/` discovery tree (digest-pinned in `index.json`).
 
-## App Distribution
-
-- MCP server with OAuth
-- Claude and ChatGPT connectors
-- APIs and SDKs
-- Chat interfaces like iMessage and WhatsApp
-- A dashboard that uses the same MCP layer
-- Open source
-
 ## Architecture
 
 One codebase, three interfaces. Write business logic once in `services/` and it ships as a CLI subcommand, an MCP tool, and an HTTP route - same Pydantic input/output contract everywhere.
@@ -135,9 +124,9 @@ One codebase, three interfaces. Write business logic once in `services/` and it 
 ## Quick Start
 
 ```bash
-uv sync                        # install deps
-uv run daysurface --help       # see all CLI commands
-uv run daysurface greet Alice  # run a command
+uv sync                     # install deps
+uv run daysurface --help    # see all CLI commands
+uv run daysurface doctor    # check your environment is wired up
 
 uv run daysurface-serve   # start the server (HTTP API + MCP at /mcp on one port)
 uv run daysurface-mcp     # legacy: stdio MCP only, for local Claude Desktop / dev
@@ -145,7 +134,7 @@ uv run daysurface-mcp     # legacy: stdio MCP only, for local Claude Desktop / d
 
 ## Deploy
 
-One-click deploy to Railway or Render (backend + managed Postgres, migrations run automatically). See **[deployment docs](manual_docs/deploy.md)** for the per-platform setup, the Railway template variable map, and OAuth/secret wiring.
+The buttons at the top of this page provision the backend and a managed Postgres, and run migrations on boot. See **[deployment docs](manual_docs/deploy.md)** for the per-platform setup, the Railway template variable map, and OAuth/secret wiring.
 
 ## CLI Usage
 
@@ -161,50 +150,12 @@ Global flags go **before** the subcommand:
 | `--version` | `-V` | Print version and exit |
 
 ```bash
-uv run daysurface --format json config show     # JSON output
-uv run daysurface --dry-run greet Bob           # preview without executing
-uv run daysurface --verbose greet Alice         # detailed output
+uv run daysurface --format json config show          # JSON output
+uv run daysurface --verbose doctor                   # detailed output
+uv run daysurface --dry-run secrets set OPENAI_API_KEY  # preview without writing
 ```
 
-## Adding Commands
-
-Drop a Python file in `src/cli/commands/` and it is auto-discovered.
-
-**Single command** - export a `main()` function:
-
-```python
-# src/cli/commands/hello.py
-from typing import Annotated
-import typer
-
-
-def main(name: Annotated[str, typer.Argument(help="Who to greet.")]) -> None:
-    """Say hello."""
-    typer.echo(f"Hello, {name}!")
-```
-
-```bash
-uv run daysurface hello World   # Hello, World!
-```
-
-**Subcommand group** - export `app = typer.Typer()`:
-
-```python
-# src/cli/commands/db.py
-import typer
-
-app = typer.Typer()
-
-
-@app.command()
-def migrate() -> None:
-    """Run migrations."""
-    ...
-```
-
-```bash
-uv run daysurface db migrate
-```
+Commands are auto-discovered from `src/cli/commands/` - see [adding commands](manual_docs/adding_commands.md).
 
 ## Configuration
 
@@ -212,7 +163,8 @@ uv run daysurface db migrate
 from common import global_config
 
 # Access config values from common/global_config.yaml
-global_config.example_parent.example_child
+global_config.default_llm.default_model
+global_config.llm_config.cache_enabled
 
 # Access secrets from .env
 global_config.OPENAI_API_KEY
@@ -230,8 +182,7 @@ uv run daysurface config set logging.verbose false      # write override
 
 ## Credits
 
-This software uses the following tools:
-- [Cursor: The AI Code Editor](https://cursor.com)
+This software is built with:
 - [uv](https://docs.astral.sh/uv/)
 - [Typer: CLI framework](https://typer.tiangolo.com/)
 - [Rich: Terminal formatting](https://rich.readthedocs.io/)
