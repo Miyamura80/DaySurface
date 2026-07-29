@@ -49,10 +49,19 @@ export function deepLink(
       // manual path. `redirectAfter` is where ChatGPT returns the user once the
       // dialog closes - /plugins, i.e. back where they started.
       //
-      // Unlike Claude's link this prefills NOTHING: OpenAI exposes no name or
-      // url parameter, so the dialog opens with empty fields and the panel must
-      // keep showing the URL to copy. Hence `prefills: false` in connect.ts -
-      // do not relabel this "1-click".
+      // Unlike Claude's link this prefills NOTHING: the dialog opens with empty
+      // fields. Hence `prefills: false` in connect.ts - do not relabel this
+      // "1-click". ConnectWidget copies the server URL to the clipboard as it
+      // navigates, so the remaining step is a paste.
+      //
+      // Prefill params were click-tested July 2026 and none exist. Tried, both
+      // inside the hash and ahead of it: name/url, connectorName/connectorUrl
+      // (Claude's spelling), connector-name/connector-url, server_label/
+      // server_url (OpenAI's own Responses API MCP naming), serverUrl, mcp_url,
+      // mcpUrl, description. Every one is ignored - the dialog still opens
+      // blank. Don't re-run this matrix without new evidence; the absence of
+      // any "Add to ChatGPT" badge across the MCP ecosystem is the corroborating
+      // signal that OpenAI ships no prefill surface at all.
       //
       // Shape: unlike Claude, BOTH the route and its flags live in the hash
       // (`#settings/Connectors?create-connector=true`). Hoisting the query

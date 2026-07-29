@@ -107,8 +107,13 @@ const selected = enriched.find((t) => t.id === defaultId) ?? enriched[0];
         <div data-panel={t.id} hidden={t.id !== selected.id}>
           {t.method === "deeplink" && t.href ? (
             <>
+              {/* A link that prefills nothing drops the visitor into an empty
+                  dialog, so data-copy-on-open puts the URL on their clipboard
+                  on the way out - the paste is the only step left. Astro omits
+                  the attribute entirely when the value is undefined. */}
               <a
                 href={t.href}
+                data-copy-on-open={t.prefills === false ? mcpUrl : undefined}
                 class="flex min-h-12 w-full items-center justify-center gap-2.5 bg-accent px-4 text-center font-semibold text-accent-fg transition hover:bg-accent-strong"
               >
                 <span
@@ -239,6 +244,37 @@ const selected = enriched.find((t) => t.id === defaultId) ?? enriched[0];
     });
   }
 
+  /*
+   * Copy-then-navigate for deep links that land on an empty form (ChatGPT).
+   * The clipboard write has to finish before the page unloads, so this waits
+   * on it and then navigates by hand rather than letting the anchor's default
+   * race the write. Progressive enhancement: with no JS, or a rejected
+   * clipboard, the anchor still navigates and the URL is still on screen.
+   */
+  function initCopyOnOpen() {
+    document.querySelectorAll<HTMLAnchorElement>("a[data-copy-on-open]").forEach((a) => {
+      if (a.dataset.copyOpenReady === "true") return;
+      a.dataset.copyOpenReady = "true";
+      a.addEventListener("click", async (e) => {
+        const url = a.dataset.copyOnOpen ?? "";
+        // Modified clicks mean "open elsewhere, keep this page". Hijacking them
+        // would swallow that, so copy without preventing the default.
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) {
+          navigator.clipboard?.writeText(url).catch(() => {});
+          return;
+        }
+        e.preventDefault();
+        try {
+          await navigator.clipboard.writeText(url);
+        } catch {
+          // Clipboard API unavailable or denied - fall through and navigate
+          // anyway; the panel still shows the URL with its own copy button.
+        }
+        window.location.href = a.href;
+      });
+    });
+  }
+
   function initConnect() {
     document.querySelectorAll<HTMLElement>("[data-connect]").forEach((root) => {
       // Idempotent: skip roots already wired so a repeat call (e.g.
@@ -327,10 +363,12 @@ const selected = enriched.find((t) => t.id === defaultId) ?? enriched[0];
     });
   }
 
-  initConnect();
-  initCopy();
-  document.addEventListener("astro:page-load", () => {
+  function initAll() {
     initConnect();
     initCopy();
-  });
+    initCopyOnOpen();
+  }
+
+  initAll();
+  document.addEventListener("astro:page-load", initAll);
 </script>

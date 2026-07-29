@@ -164,7 +164,7 @@ export const connect: {
       // the collapsed steps or on the docs page. Spelling the flow out here as
       // well left the panel saying the same thing twice, once as a paragraph
       // and once as a numbered list.
-      note: "The dialog opens empty - paste the URL above. Needs Developer mode on first.",
+      note: "Copies the URL, then opens the empty dialog - just paste. Needs Developer mode on first.",
       steps: [
         "Settings → Connectors → Advanced settings → Developer mode on",
         "Back on Connectors, click Create",
