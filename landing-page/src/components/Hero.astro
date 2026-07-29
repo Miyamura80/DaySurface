@@ -1,6 +1,6 @@
 ---
 import { hero, site } from "../config/landing";
-import CtaButtons from "./CtaButtons.astro";
+import ConnectWidget from "./ConnectWidget.astro";
 import ChatMock from "./ChatMock.astro";
 ---
 
@@ -9,10 +9,11 @@ import ChatMock from "./ChatMock.astro";
   <div class="glow pointer-events-none absolute inset-x-0 top-0 h-[600px]"></div>
 
   <div
-    class="relative mx-auto grid max-w-6xl items-center gap-12 px-6 pt-20 pb-20 sm:pt-28 lg:grid-cols-2 lg:gap-10"
+    class="relative mx-auto grid max-w-6xl items-center gap-12 px-4 pt-14 pb-16 sm:px-6 sm:pt-28 sm:pb-20 lg:grid-cols-2 lg:gap-10"
   >
-    <!-- Left: copy -->
-    <div class="text-center lg:text-left">
+    <!-- Left: copy. min-w-0 so the grid track can shrink below its content's
+         intrinsic width on narrow screens instead of overflowing the page. -->
+    <div class="min-w-0 text-center lg:text-left">
       {
         hero.eyebrow && (
           <a
@@ -25,21 +26,28 @@ import ChatMock from "./ChatMock.astro";
         )
       }
 
-      <h1 class="text-balance text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
+      <h1 class="text-balance text-3xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
         {hero.headline}
       </h1>
 
       <p
-        class="mx-auto mt-6 max-w-xl text-pretty text-lg leading-relaxed text-fg-muted lg:mx-0"
+        class="mx-auto mt-5 max-w-xl text-pretty text-base leading-relaxed text-fg-muted sm:mt-6 sm:text-lg lg:mx-0"
       >
         {hero.subhead}
       </p>
 
-      <CtaButtons class="mt-9 justify-center lg:justify-start" />
+      <!-- Primary CTA: connect your client. The repo and docs links live in the
+           header only - they are not the conversion action for an end user.
+           #connect is the target for the nav CTA, the pricing CTAs, and the
+           /compare and /vs/* pages, which used to point at the removed
+           "How it works" section. -->
+      <div id="connect" class="mx-auto mt-9 w-full max-w-md scroll-mt-24 lg:mx-0">
+        <ConnectWidget />
+      </div>
     </div>
 
     <!-- Right: chat UI mock rendering the MCP App -->
-    <div class="lg:pl-4">
+    <div class="min-w-0 lg:pl-4">
       <ChatMock />
     </div>
   </div>

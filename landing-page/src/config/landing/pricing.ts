@@ -99,7 +99,7 @@ export const pricing: {
         "Community support",
       ],
       cta: "Start free",
-      href: "/#how-it-works",
+      href: "/#top",
       repoBadge: true,
     },
     {
@@ -124,7 +124,7 @@ export const pricing: {
         "Priority support",
       ],
       cta: "Start 14-day trial",
-      href: "/#how-it-works",
+      href: "/#top",
       note: "5 members included. $6/mo per extra member. No card up front.",
     },
     {
@@ -148,7 +148,7 @@ export const pricing: {
         "Priority support with a response target",
       ],
       cta: "Start 14-day trial",
-      href: "/#how-it-works",
+      href: "/#top",
       note: "25 members included. $5/mo per extra member.",
     },
     {
@@ -170,7 +170,7 @@ export const pricing: {
         "Named onboarding + dedicated support",
       ],
       cta: "Contact sales",
-      href: "/#how-it-works",
+      href: "/#top",
     },
   ],
 };

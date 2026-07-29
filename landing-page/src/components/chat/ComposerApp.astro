@@ -32,7 +32,7 @@ Alex`;
 ---
 
 <div
-  class="composer-app h-[276px] w-full max-w-[460px] overflow-hidden rounded-lg border border-black/10 bg-white text-[#202124] shadow-sm"
+  class="composer-app h-[276px] w-full min-w-0 max-w-[460px] overflow-hidden rounded-lg border border-black/10 bg-white text-[#202124] shadow-sm"
   style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif"
 >
   <div class="flex h-full flex-col">
@@ -59,19 +59,19 @@ Alex`;
       <!-- editable compose card, pre-filled with the agent's researched draft -->
       <div class="mt-1.5 flex min-h-0 flex-1 flex-col rounded-lg border border-[#dadce0] shadow-sm">
         <div class="flex items-center gap-2 border-b border-[#f0f0f0] px-3 py-1.5 text-[12px]">
-          <span class="text-[#5f6368]">To</span>
-          <span class="text-[#202124]">dana@acme.legal</span>
+          <span class="shrink-0 text-[#5f6368]">To</span>
+          <span class="min-w-0 truncate text-[#202124]">dana@acme.legal</span>
         </div>
         <textarea
-          class="compose-body min-h-0 w-full flex-1 resize-none bg-transparent px-3 py-2 text-[12px] leading-relaxed text-[#3c4043] outline-none"
+          class="compose-body min-h-0 w-full min-w-0 flex-1 resize-none bg-transparent px-3 py-2 text-[12px] leading-relaxed text-[#3c4043] outline-none"
           spellcheck="false"
           aria-label="Draft reply">{draftBody}</textarea>
         <div class="flex items-center gap-2 border-t border-[#f0f0f0] px-3 py-2">
-          <button type="button" class="rounded-full bg-[#1a73e8] px-4 py-1.5 text-[12px] font-semibold text-white">Send</button>
-          <button type="button" class="grid size-7 place-items-center rounded-full text-[#5f6368] hover:bg-[#f1f3f4]" aria-label="Attach">
+          <button type="button" tabindex="-1" class="rounded-full bg-[#1a73e8] px-4 py-1.5 text-[12px] font-semibold text-white">Send</button>
+          <button type="button" tabindex="-1" class="grid size-7 place-items-center rounded-full text-[#5f6368] hover:bg-[#f1f3f4]" aria-label="Attach">
             <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21.4 11.05l-8.49 8.49a5 5 0 0 1-7.07-7.07l8.49-8.49a3 3 0 0 1 4.24 4.24l-8.49 8.49a1 1 0 0 1-1.41-1.41l7.78-7.78"></path></svg>
           </button>
-          <span class="ml-auto text-[11px] text-[#5f6368]">Draft saved</span>
+          <span class="ml-auto shrink-0 text-[11px] text-[#5f6368]">Draft saved</span>
         </div>
       </div>
     </div>

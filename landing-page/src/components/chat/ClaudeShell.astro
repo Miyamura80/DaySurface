@@ -10,7 +10,7 @@ import ConvoScroll from "./ConvoScroll.astro";
 
 <div class="overflow-hidden rounded-xl border border-[#e5e0d6] bg-[#f5f1e8] text-[#2d2a26] shadow-2xl shadow-black/50">
   <!-- header: model pill -->
-  <div class="flex items-center justify-between border-b border-[#e9e3d6] px-4 py-2.5">
+  <div class="flex items-center justify-between border-b border-[#e9e3d6] px-3 py-2.5 sm:px-4">
     <span class="inline-flex items-center gap-1.5 rounded-full border border-[#e0d9c9] bg-[#faf8f2] px-2.5 py-1 text-xs font-medium text-[#5c574d]">
       <img src="/logos/claude.svg" alt="" class="size-3.5" aria-hidden="true" />
       Claude
@@ -18,7 +18,7 @@ import ConvoScroll from "./ConvoScroll.astro";
     </span>
   </div>
 
-  <div class="space-y-4 px-4 py-4">
+  <div class="space-y-4 px-3 py-4 sm:px-4">
     <!-- user bubble (right) -->
     <div class="flex justify-end">
       <p class="max-w-[80%] rounded-2xl bg-[#e7e1d4] px-4 py-2 text-sm">
@@ -27,7 +27,7 @@ import ConvoScroll from "./ConvoScroll.astro";
     </div>
 
     <!-- assistant: coral sunburst + serif text, no bubble -->
-    <div class="flex gap-3">
+    <div class="flex gap-2 sm:gap-3">
       <img src="/logos/claude.svg" alt="" class="mt-0.5 size-6 shrink-0" aria-hidden="true" />
       <div class="min-w-0 flex-1 space-y-2.5">
         <p style="font-family:Georgia,'Times New Roman',serif" class="text-[15px] leading-relaxed text-[#2d2a26]">
@@ -62,9 +62,9 @@ import ConvoScroll from "./ConvoScroll.astro";
   </div>
 
   <!-- composer -->
-  <div class="px-4 pb-4">
-    <div class="flex items-center gap-2 rounded-2xl border border-[#e0d9c9] bg-white px-4 py-2.5">
-      <span class="flex-1 text-sm text-[#9a9286]">Reply to Claude…</span>
+  <div class="px-3 pb-4 sm:px-4">
+    <div class="flex items-center gap-2 rounded-2xl border border-[#e0d9c9] bg-white px-3 py-2.5 sm:px-4">
+      <span class="min-w-0 flex-1 truncate text-sm text-[#9a9286]">Reply to Claude…</span>
       <span class="grid size-7 place-items-center rounded-full bg-[#c96442] text-white">
         <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"></path></svg>
       </span>

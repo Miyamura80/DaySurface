@@ -3,7 +3,7 @@
   "info": {
     "title": "DaySurface API",
     "version": "0.1.0",
-    "description": "DaySurface is a Model Context Protocol server that gives your AI agent real capabilities: one codebase exposed over CLI, MCP, and HTTP."
+    "description": "An MCP server for Gmail: triage a ranked inbox, draft replies in a real composer, and fill and sign PDF attachments - inside Claude, ChatGPT, or any MCP client."
   },
   "paths": {
     "/health": {

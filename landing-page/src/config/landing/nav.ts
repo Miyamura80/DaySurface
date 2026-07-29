@@ -23,7 +23,6 @@ export const nav: {
     // Absolute anchors (with leading "/") so they also work from sub-pages
     // like /compare and /vs/* - a bare "#features" would only resolve on home.
     { label: "Features", href: "/#features" },
-    { label: "How it works", href: "/#how-it-works" },
     { label: "Compare", href: "/compare" },
     ...(pricing.enabled ? [{ label: "Pricing", href: "/pricing" }] : []),
     { label: "API", href: "/api" },
@@ -35,29 +34,7 @@ export const nav: {
     label: "Open source",
     title: "Open source & self-hostable, view on GitHub",
   },
-  cta: { label: "Get started", href: "/#how-it-works" },
-};
-
-export interface Cta {
-  label: string;
-  href: string;
-  /** Optional logo (in public/logos/) rendered inside the button. */
-  logo?: string;
-}
-
-/**
- * The primary conversion CTAs, rendered identically by the hero and the final
- * CTA (see CtaButtons.astro). Edit once, both sections update.
- *
- * The project is open source and self-hostable, so the repo is the primary
- * CTA. (Claude/ChatGPT have no one-click install deep link - adding a remote
- * MCP server there is a manual paste-the-URL flow - so a "real" deep-linked
- * "Add to Claude" button isn't possible. Editor clients like Cursor/VS Code
- * do support deep links if you ever want to add those.)
- */
-export const ctas: { primary: Cta; secondary: Cta } = {
-  primary: { label: "View on GitHub", href: site.githubUrl, logo: "/logos/github.svg" },
-  secondary: { label: "Read the docs", href: site.docsUrl },
+  cta: { label: "Get started", href: "/#connect" },
 };
 
 export const footer: { columns: FooterColumn[]; copyright: string } = {
@@ -66,7 +43,6 @@ export const footer: { columns: FooterColumn[]; copyright: string } = {
       heading: "Product",
       links: [
         { label: "Features", href: "/#features" },
-        { label: "How it works", href: "/#how-it-works" },
         { label: "Compare", href: "/compare" },
         // The /pricing page only ships when pricing.enabled - don't link a dead route otherwise.
         ...(pricing.enabled ? [{ label: "Pricing", href: "/pricing" }] : []),

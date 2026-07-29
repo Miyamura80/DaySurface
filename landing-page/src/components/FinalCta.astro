@@ -1,16 +1,16 @@
 ---
 import { finalCta } from "../config/landing";
-import CtaButtons from "./CtaButtons.astro";
+import ConnectWidget from "./ConnectWidget.astro";
 ---
 
-<section class="relative overflow-hidden border-t border-border/60 py-24">
+<section class="relative overflow-hidden border-t border-border/60 py-16 sm:py-24">
   <div class="glow pointer-events-none absolute inset-x-0 bottom-0 h-96"></div>
 
   <div
-    class="relative mx-auto grid max-w-5xl items-center gap-12 px-6 lg:grid-cols-2 lg:gap-16"
+    class="relative mx-auto grid max-w-5xl items-center gap-12 px-4 sm:px-6 lg:grid-cols-2 lg:gap-16"
   >
     <!-- Left: pitch + CTA -->
-    <div class="text-center lg:text-left">
+    <div class="min-w-0 text-center lg:text-left">
       <h2 class="text-balance text-3xl font-bold tracking-tight sm:text-4xl">
         {finalCta.heading}
       </h2>
@@ -18,11 +18,15 @@ import CtaButtons from "./CtaButtons.astro";
         {finalCta.subhead}
       </p>
 
-      <CtaButtons class="mt-9 justify-center lg:justify-start" />
+      <!-- Same connect-your-client CTA as the hero: one conversion action on
+           the page. GitHub / docs stay in the header. -->
+      <div class="mx-auto mt-9 w-full max-w-md lg:mx-0">
+        <ConnectWidget />
+      </div>
     </div>
 
     <!-- Right: flagship features -->
-    <ul class="mx-auto w-full max-w-sm border-2 border-border bg-surface-1 lg:mx-0">
+    <ul class="mx-auto w-full min-w-0 max-w-sm border-2 border-border bg-surface-1 lg:mx-0">
       {
         finalCta.features.map((feature) => (
           <li class="flex items-center gap-3 border-b border-border px-5 py-4 last:border-b-0">

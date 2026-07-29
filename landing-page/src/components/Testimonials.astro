@@ -4,15 +4,15 @@ import { testimonials } from "../config/landing";
 
 {
   testimonials.enabled && (
-    <section class="border-t border-border/60 py-24">
-      <div class="mx-auto max-w-6xl px-6">
+    <section class="border-t border-border/60 py-16 sm:py-24">
+      <div class="mx-auto max-w-6xl px-4 sm:px-6">
         <h2 class="text-center text-3xl font-bold tracking-tight sm:text-4xl">
           {testimonials.heading}
         </h2>
         <div class="mt-14 grid gap-6 md:grid-cols-2">
           {testimonials.items.map((t) => (
-            <figure class="border-2 border-border bg-surface-1 p-8 transition hover:border-accent/50">
-              <blockquote class="text-pretty text-lg leading-relaxed text-fg">
+            <figure class="border-2 border-border bg-surface-1 p-6 transition hover:border-accent/50 sm:p-8">
+              <blockquote class="text-pretty text-base leading-relaxed text-fg sm:text-lg">
                 “{t.quote}”
               </blockquote>
               <figcaption class="mt-6 flex items-center gap-3">
