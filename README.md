@@ -117,6 +117,15 @@ One codebase, three interfaces. Write business logic once in `services/` and it 
 
 Need elicitation, image output, or an iframe dashboard for an MCP tool? Add an opt-in **enhancer** in `mcp_server/enhancers/`. Enhancers wrap a service for the MCP transport only - the pure service stays untouched and CLI/API consumers are unaffected.
 
+Four MCP Apps ship in the box. Each is a React bundle served as a `ui://` resource and rendered in the host's sandboxed iframe:
+
+| | |
+|:--|:--|
+| **`gmail_inbox`** - curated inbox with importance scores, labels and a thread reader (remote images blocked by default)<br><br><img src="media/mcp-ui/gmail-inbox.png" alt="gmail_inbox MCP App: curated inbox list beside an open thread"> | **`gmail_composer`** - draft editor with the conversation in context, attachments, and send / save / discard<br><br><img src="media/mcp-ui/gmail-composer.png" alt="gmail_composer MCP App: draft editor with To, Subject and body fields"> |
+| **`pdf_signer`** - pdf.js viewer with the signature field highlighted and a type-your-name signing ceremony<br><br><img src="media/mcp-ui/pdf-signer.png" alt="pdf_signer MCP App: NDA with a Sign here highlight and signing footer"> | **`settings`** - connected Gmail account, inbox watch state, and webhook endpoints with secret rotation<br><br><img src="media/mcp-ui/settings.png" alt="settings MCP App: Gmail account status and webhook endpoint list"> |
+
+Screenshots are rendered from the committed app bundles by the fixture host in `mcp_server/dev_preview/` - no server, Gmail account, or OAuth involved. Reproduce any of them with `make preview_app APP=<name>`.
+
 See [`mcp_server/MCP_UI_ARCHITECTURE.md`](mcp_server/MCP_UI_ARCHITECTURE.md) for the full design.
 
 ## Quick Start

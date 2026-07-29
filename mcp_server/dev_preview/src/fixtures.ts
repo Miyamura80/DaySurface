@@ -165,9 +165,32 @@ const PDF_SIGNER_DOC = {
   data_base64: NDA_FILLED_B64,
 };
 
+// --- settings -------------------------------------------------------------
+
+// Shape mirrors models.settings.SettingsSnapshot / SubView. A connected,
+// actively-watching account with one webhook endpoint - the state that
+// exercises every control on the panel (rotate, remove, add).
+const SETTINGS_SNAPSHOT = {
+  gmail_connected: true,
+  gmail_email: "alex@startup.com",
+  watching: true,
+  watch_expiration: "2026-07-12T09:00:00Z",
+  push_available: true,
+  subscriptions: [
+    {
+      id: "sub-7f21",
+      url: "https://hooks.startup.com/daysurface/inbox",
+      event_types: ["message.received", "draft.saved"],
+      active: true,
+      created_at: "2026-06-28T16:20:00Z",
+    },
+  ],
+};
+
 export function initialResult(app: string): ToolResult {
   if (app === "gmail_composer") return ok(COMPOSER_DRAFT);
   if (app === "pdf_signer") return ok(PDF_SIGNER_REQUEST);
+  if (app === "settings") return ok(SETTINGS_SNAPSHOT);
   return ok(INBOX_CURATE);
 }
 
@@ -193,6 +216,17 @@ export function dispatch(name: string, args: Record<string, unknown>): ToolResul
       });
     case "pdf_signer.cancel":
       return ok({ doc_id: "doc-fixture-nda", status: "open" });
+    case "settings.get":
+      return ok(SETTINGS_SNAPSHOT);
+    case "settings.subscribe":
+      return ok({ id: "sub-new01", secret: "whsec_fixture_9c3ae10b4f27" });
+    case "settings.rotate_secret":
+      return ok({
+        id: String(args.subscription_id ?? "sub-7f21"),
+        secret: "whsec_fixture_rotated_4d81f2",
+      });
+    case "settings.unsubscribe":
+      return ok({ unsubscribed: true });
     case "gmail_composer.send":
       // A real message_id so the composer's Sent state (and the model-context
       // push it triggers) carries a plausible identifier.
