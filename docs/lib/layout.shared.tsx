@@ -34,8 +34,8 @@ export function baseOptions(locale: string): BaseLayoutProps {
     githubUrl: GITHUB_URL,
     // Carries over the landing header's Compare link, GitHub mark, and connect
     // CTA; "Docs" becomes the section link since we are already on the docs
-    // site. Deliberately no Pricing link: the landing page renders `#pricing`
-    // conditionally (`pricing.enabled`), so hardlinking that anchor here would
+    // site. Deliberately no Pricing link: the landing page ships `/pricing`
+    // conditionally (`pricing.enabled`), so hardlinking that route here would
     // put a dead link on every docs page the moment pricing is turned off. The
     // docs index links pricing from its body instead.
     links: [
