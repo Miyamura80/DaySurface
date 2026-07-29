@@ -1,4 +1,4 @@
-import { getPageImage, source } from "@/lib/source";
+import { getPageImage, isTranslated, source } from "@/lib/source";
 import {
   DocsBody,
   DocsDescription,
@@ -66,14 +66,17 @@ export async function generateMetadata({
   const page = source.getPage(slug, lang);
   if (!page) notFound();
 
-  // Untranslated pages fall back to English content, so every locale resolves
-  // to a real URL. Without hreflang those read as four duplicates of the same
-  // page; with it, search engines treat them as one page in four languages and
-  // consolidate the ranking signals instead of splitting them.
+  // Only advertise a locale that actually has a translation. `getPage` falls
+  // back to English rather than returning null, so a naive loop would declare
+  // `hreflang="zh"` for a page serving English - a misdeclaration, and on all
+  // but the three translated pages. A page with no translations ends up with
+  // just its own entry plus x-default, which is the correct signal.
   const languages: Record<string, string> = {};
   for (const locale of i18n.languages) {
     const localized = source.getPage(slug, locale);
-    if (localized) languages[locale] = absoluteUrl(localized.url);
+    if (localized && isTranslated(localized, locale)) {
+      languages[locale] = absoluteUrl(localized.url);
+    }
   }
 
   return {

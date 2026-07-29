@@ -1,4 +1,4 @@
-import { source } from "@/lib/source";
+import { isTranslated, source } from "@/lib/source";
 import { i18n } from "@/lib/i18n";
 import { absoluteUrl } from "@/lib/site";
 
@@ -35,13 +35,19 @@ export function GET(): Response {
 
   for (const locale of i18n.languages) {
     for (const page of source.getPages(locale)) {
-      // Same page in the other locales. Untranslated pages fall back to English,
-      // so every locale resolves; hreflang is what tells search engines these
-      // are one page in N languages rather than N duplicates.
+      // Skip locales that merely fall back to English. `getPages` yields an
+      // entry for every page in every locale, but only `index` is actually
+      // translated - listing the rest would submit 69 localized URLs serving
+      // identical English content, which is thin duplication, not reach.
+      if (!isTranslated(page, locale)) continue;
+
+      // Same page in the other locales, restricted to real translations for the
+      // same reason: hreflang naming a language the page is not written in is a
+      // misdeclaration.
       const alternates = i18n.languages
         .map((other) => {
           const localized = source.getPage(page.slugs, other);
-          if (!localized) return null;
+          if (!localized || !isTranslated(localized, other)) return null;
           return (
             `    <xhtml:link rel="alternate" hreflang="${other}" ` +
             `href="${xmlEscape(absoluteUrl(localized.url))}" />`

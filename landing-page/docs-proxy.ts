@@ -34,8 +34,10 @@ const UPSTREAM_TIMEOUT_MS = 30_000;
  * they are separate bun projects with no shared workspace, so this is a copy.
  * A locale missing here 404s that language's docs at the apex.
  *
- * `en` is absent on purpose: `hideLocale: "default-locale"` means English docs
- * live at `/docs/...`, and `/en/docs/...` only ever redirects there.
+ * `en` is present even though `hideLocale: "default-locale"` puts English docs
+ * at `/docs/...`: `/en/docs/...` still has to reach the docs service to receive
+ * its 307 to the canonical URL. Dropping it would hand those paths to the
+ * landing page, which answers them from the SPA fallback with a 200 instead.
  */
 const DOCS_LOCALES = ["en", "es", "ja", "zh"] as const;
 

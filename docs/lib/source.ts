@@ -23,6 +23,27 @@ export const source = loader({
   },
 });
 
+/**
+ * True when `page` is genuinely written in `locale`, rather than the English
+ * fallback fumadocs returns when no translation exists.
+ *
+ * `page.locale` cannot answer this - it always echoes the *requested* locale,
+ * so `getPage(["deployment"], "zh")` reports `locale: "zh"` while serving the
+ * English file. `page.path` is the discriminator: a real translation resolves
+ * to `index.zh.mdx`, a fallback to `deployment.mdx`.
+ *
+ * This matters because declaring `hreflang="zh"` for a page serving English is
+ * a misdeclaration - only `index` is translated today, so without this check 23
+ * of 26 pages would advertise three languages they do not have.
+ */
+export function isTranslated(
+  page: ReturnType<typeof source.getPage> & {},
+  locale: string,
+): boolean {
+  if (locale === i18n.defaultLanguage) return true;
+  return page.path.endsWith(`.${locale}.mdx`);
+}
+
 export function getPageImage(page: ReturnType<typeof source.getPage> & {}) {
   // Built from `locale` + `slugs` rather than by parsing `page.url`. Under
   // `hideLocale: "default-locale"` the English URL carries no locale segment, so

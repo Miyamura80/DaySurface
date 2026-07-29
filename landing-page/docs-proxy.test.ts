@@ -48,8 +48,10 @@ describe("isDocsPath", () => {
 /** Spin up a stub upstream whose behavior each test picks via the URL path. */
 let upstream: Server;
 let upstreamPort: number;
+let originalUpstream: string | undefined;
 
 beforeAll(async () => {
+  originalUpstream = process.env.DOCS_UPSTREAM;
   upstream = createServer((req, res) => {
     if (req.url?.startsWith("/cut")) {
       // Headers, a partial body, then a hard socket destroy - the exact shape
@@ -82,6 +84,10 @@ beforeAll(async () => {
 
 afterAll(() => {
   upstream.close();
+  // Restore rather than delete: the suite should not leak its stub upstream
+  // into anything else sharing this process.
+  if (originalUpstream === undefined) delete process.env.DOCS_UPSTREAM;
+  else process.env.DOCS_UPSTREAM = originalUpstream;
 });
 
 /** Drive proxyDocs through a real server so we exercise req/res, not mocks. */
