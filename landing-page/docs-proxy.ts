@@ -132,7 +132,12 @@ export async function proxyDocs(
     const upstream = await fetch(`${upstreamOrigin}${req.url ?? "/"}`, {
       method,
       headers,
-      body: hasBody ? (Readable.toWeb(req) as ReadableStream) : undefined,
+      // Node's `stream/web` ReadableStream and the global one are structurally
+      // distinct under these lib types even though they are the same object at
+      // runtime, so this has to launder through `unknown`.
+      body: hasBody
+        ? (Readable.toWeb(req) as unknown as ReadableStream)
+        : undefined,
       // Required by undici whenever a streaming body is sent.
       ...(hasBody ? { duplex: "half" } : {}),
       // Pass 3xx through to the browser: the docs app redirects for locale
