@@ -25,6 +25,13 @@ BOT_BLOCKED_DOMAINS = [
     # Railway template deploy links are browser-only SPA routes; they 404 for
     # non-browser HTTP clients even though they resolve fine in a browser.
     r"https://railway\.com/deploy/.*",
+    # chatgpt.com sits behind Cloudflare bot protection and serves the app
+    # itself to signed-in browsers only - a checker gets 403/redirect wherever
+    # it runs, so this belongs here rather than in CLOUD_SANDBOX_IGNORES (which
+    # would still fail open-egress CI). The one link we have is the
+    # create-connector deep link in docs/content/docs/mcp/chatgpt.mdx; verify it
+    # by clicking it, not by link-linting it.
+    r"https://chatgpt\.com/.*",
 ]
 
 # Domains we deliberately keep OFF the Claude Code cloud sandbox network
