@@ -3,52 +3,99 @@ title: Overview
 description: REST API overview, base URL, and quick start
 ---
 
-The REST API exposes the same tools available in the CLI and MCP server as authenticated HTTP endpoints.
+The REST API exposes the same Gmail, PDF, and webhook tools your assistant gets
+over MCP as authenticated HTTP endpoints - one shared service registry behind
+all three transports, so behavior never drifts between them.
 
-import { Callout } from 'fumadocs-ui/components/callout';
-
-<Callout type="info">
-The API server is available on the `saas` branch. The `main` branch includes the CLI and MCP server only.
-</Callout>
+Reach for it when the caller is your own code rather than an agent: a cron job
+that triages overnight mail, a backend that files attachments, a script that
+drafts on your behalf.
 
 ## Base URL
-
-Production:
 
 ```
 https://api.daysurface.com
 ```
 
-Local development:
+The API shares one process with the MCP server, so the same deployment also
+answers MCP traffic at `mcp.daysurface.com/mcp`; `api.daysurface.com` is the
+canonical vanity host for REST. (`daysurface.com` is the product site, a separate
+service.)
 
-```
-http://localhost:8000
-```
-
-The API shares one process with the MCP server, so the production host also
-answers at `daysurface.com` / `mcp.daysurface.com`; `api.daysurface.com` is the
-canonical vanity host for REST traffic. The examples below use `localhost`;
-swap in the production base URL to call the deployed API.
+Every example in these docs uses that host. Running the server yourself? Swap in
+your own deployment, or `http://localhost:8000` when it is running locally via
+`daysurface-serve`.
 
 ## Quick Example
 
+Rank the ten threads that most need attention:
+
 ```bash
-curl -X POST http://localhost:8000/api/v1/services/greet \
+curl -X POST https://api.daysurface.com/api/v1/services/gmail_curate_inbox \
   -H "Authorization: Bearer sk_live_..." \
   -H "Content-Type: application/json" \
-  -d '{"name": "Alice", "shout": true}'
+  -d '{"limit": 10}'
+```
+
+Every tool follows the same shape - `POST /api/v1/services/{tool_name}` with the
+tool's input model as the body. The generated OpenAPI document lives at
+`/openapi.json`.
+
+## Discovery
+
+The root path describes the deployment to whoever - or whatever - lands on it.
+No authentication required.
+
+```bash
+curl https://mcp.daysurface.com/
 ```
 
 ```json
-{ "message": "HELLO, ALICE!", "times": 1 }
+{
+  "title": "DaySurface",
+  "protocol": "mcp",
+  "instructions": "This host serves the Model Context Protocol at https://mcp.daysurface.com/mcp ...",
+  "mcp": {
+    "url": "https://mcp.daysurface.com/mcp",
+    "transport": "streamable-http",
+    "authentication": { "required": true, "schemes": ["oauth2", "api_key"] },
+    "tools": ["gmail_list_inbox", "gmail_compose", "..."]
+  },
+  "endpoints": { "mcp": "...", "health": "...", "server_card": "..." }
+}
 ```
+
+Browsers (`Accept: text/html`) get a small landing page with the same content.
+
+Unknown paths return a `404` carrying the same `endpoints` map plus a
+`did_you_mean` hint, so a client probing a legacy transport path - `/sse`,
+`/messages` - is told where the endpoint actually lives:
+
+```json
+{
+  "error": {
+    "code": "not_found",
+    "message": "No handler for GET /sse. Did you mean https://mcp.daysurface.com/mcp?",
+    "details": { "path": "/sse", "did_you_mean": "https://mcp.daysurface.com/mcp" },
+    "request_id": "eee3ed63ac4b4651ab3911c47a21603e"
+  },
+  "endpoints": {
+    "mcp": "https://mcp.daysurface.com/mcp",
+    "health": "https://mcp.daysurface.com/health",
+    "server_card": "https://mcp.daysurface.com/.well-known/mcp/server-card.json"
+  }
+}
+```
+
+`endpoints` sits beside `error`, carrying the same entries as the discovery
+response above. `did_you_mean` is present only when a known alias matches.
 
 ## Health Check
 
 No authentication required.
 
 ```bash
-curl http://localhost:8000/health
+curl https://api.daysurface.com/health
 ```
 
 ```json
@@ -73,6 +120,7 @@ Status is `"ok"` when all components are healthy, `"degraded"` if any have error
 <Cards>
   <Card title="Tools" href="/docs/api/tools" />
   <Card title="Authentication" href="/docs/api/authentication" />
+  <Card title="Idempotency" href="/docs/api/idempotency" />
   <Card title="Billing" href="/docs/api/billing" />
   <Card title="Rate Limits" href="/docs/api/rate-limits" />
   <Card title="Errors" href="/docs/api/errors" />

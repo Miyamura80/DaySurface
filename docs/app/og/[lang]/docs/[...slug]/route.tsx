@@ -2,7 +2,6 @@ import { getPageImage, source } from "@/lib/source";
 import { notFound } from "next/navigation";
 import { ImageResponse } from "next/og";
 import { generate as DefaultImage } from "fumadocs-ui/og";
-import { SITE_NAME } from "@/lib/site";
 
 export const revalidate = false;
 
@@ -18,7 +17,7 @@ export async function GET(
     <DefaultImage
       title={page.data.title}
       description={page.data.description}
-      site={`${SITE_NAME} docs`}
+      site="DaySurface"
     />,
     {
       width: 1200,

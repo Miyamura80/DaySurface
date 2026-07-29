@@ -16,7 +16,7 @@ Read-only services do not use idempotency keys.
 Send a unique key (a UUID is ideal) per logical operation:
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/services/{tool_name} \
+curl -X POST https://api.daysurface.com/api/v1/services/{tool_name} \
   -H "Authorization: Bearer sk_live_..." \
   -H "Idempotency-Key: 9f8c3e1a-7b2d-4c6e-9a1f-2b3c4d5e6f70" \
   -H "Content-Type: application/json" \

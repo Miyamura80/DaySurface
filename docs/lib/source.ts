@@ -13,10 +13,7 @@ const iconMap = {
 } as const;
 
 export const source = loader({
-  // Relative to the `/docs` basePath, so this is "/" rather than "/docs" -
-  // otherwise every URL would come out as `/docs/docs/...`. Use `absoluteUrl`
-  // (lib/site.ts) whenever a `page.url` needs to become a real, external URL.
-  baseUrl: "/",
+  baseUrl: "/docs",
   source: docs.toFumadocsSource(),
   i18n,
   icon(icon) {
@@ -27,14 +24,14 @@ export const source = loader({
 });
 
 export function getPageImage(page: ReturnType<typeof source.getPage> & {}) {
-  // `page.url` no longer carries a "docs" segment (baseUrl is "/"), and the
-  // default locale is hidden, so derive both route params explicitly instead of
-  // filtering them back out of the URL.
+  // Built from `locale` + `slugs` rather than by parsing `page.url`. Under
+  // `hideLocale: "default-locale"` the English URL carries no locale segment, so
+  // deriving the route from the URL would emit `/og/docs/...` and 404 - the OG
+  // route is `/og/[lang]/docs/[...slug]`, where `lang` is always explicit.
   const locale = page.locale ?? i18n.defaultLanguage;
-  const slugSegments = page.slugs;
   return {
-    url: `/og/${[locale, ...slugSegments].join("/")}/og.png`,
-    segments: [...slugSegments, "og.png"],
+    url: `/og/${locale}/docs/${[...page.slugs, "og.png"].join("/")}`,
+    segments: [...page.slugs, "og.png"],
   };
 }
 

@@ -67,11 +67,9 @@ export async function generateMetadata({
   if (!page) notFound();
 
   // Untranslated pages fall back to English content, so every locale resolves
-  // to a real URL. Without hreflang those reads as four duplicates of the same
+  // to a real URL. Without hreflang those read as four duplicates of the same
   // page; with it, search engines treat them as one page in four languages and
   // consolidate the ranking signals instead of splitting them.
-  // Absolute throughout: metadata is not basePath-aware, so a relative string
-  // here would resolve against metadataBase and drop the `/docs` prefix.
   const languages: Record<string, string> = {};
   for (const locale of i18n.languages) {
     const localized = source.getPage(slug, locale);
@@ -96,13 +94,13 @@ export async function generateMetadata({
       title: page.data.title,
       description: page.data.description,
       url: absoluteUrl(page.url),
-      images: getPageImage(page).url,
+      images: absoluteUrl(getPageImage(page).url),
     },
     twitter: {
       card: "summary_large_image",
       title: page.data.title,
       description: page.data.description,
-      images: getPageImage(page).url,
+      images: absoluteUrl(getPageImage(page).url),
     },
   };
 }

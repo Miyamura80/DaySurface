@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { site, comparison } from "../config/landing";
+import { site, comparison, pricing } from "../config/landing";
 
 /**
  * NLWeb / Schema Map feed (referenced via the `Schemamap:` directive in
@@ -19,6 +19,14 @@ export const GET: APIRoute = ({ site: astroSite }) => {
     { loc: `${origin}/compare`, type: "WebPage" },
     { loc: `${origin}/compare`, type: "ItemList" },
     { loc: `${origin}/compare`, type: "BreadcrumbList" },
+    // /pricing embeds Product (with an Offer per tier) + FAQPage + BreadcrumbList.
+    ...(pricing.enabled
+      ? [
+          { loc: `${origin}/pricing`, type: "Product" },
+          { loc: `${origin}/pricing`, type: "FAQPage" },
+          { loc: `${origin}/pricing`, type: "BreadcrumbList" },
+        ]
+      : []),
     // Each /vs/<slug> page embeds WebPage + BreadcrumbList JSON-LD.
     ...comparison.competitors.flatMap((c) => [
       { loc: `${origin}/vs/${c.id}`, type: "WebPage" },

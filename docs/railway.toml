@@ -5,7 +5,7 @@
 # Sibling services in the same Railway project (eito-projects):
 #   - daysurface-backend       -> /railway.json        (Python API, mcp.daysurface.com)
 #   - daysurface-landing-page  -> /landing-page/...     (Astro static, daysurface.com)
-#   - daysurface-docs          -> this file             (Next.js docs, daysurface.com/docs)
+#   - daysurface-docs          -> this file             (Next.js docs, docs.daysurface.com)
 #
 # Builder is RAILPACK: Railway auto-detects the bun/Next.js project from bun.lock.
 # `bun install` runs the `postinstall` hook (fumadocs-mdx) to generate .source.
@@ -17,9 +17,8 @@ buildCommand = "bun run build"
 [deploy]
 # `next start` binds 0.0.0.0 and reads $PORT automatically.
 startCommand = "bun run start"
-# `basePath = "/docs"` means the app serves nothing at "/" - the healthcheck
-# must target a real path inside the basePath or Railway marks the deploy dead.
-healthcheckPath = "/docs"
+# Home ("/") 308-redirects to the default locale; hit /en directly for a 200.
+healthcheckPath = "/en"
 healthcheckTimeout = 120
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 5

@@ -1,19 +1,20 @@
 import "./global.css";
 import type { Metadata } from "next";
-import { SITE_NAME, SITE_URL } from "@/lib/site";
+import { SITE_URL } from "@/lib/site";
 
-// `metadataBase` is what lets every page emit absolute canonical/OG URLs from a
-// relative path. Without it Next warns and falls back to localhost, which is how
-// canonical tags and OG images silently break in production.
+// Title and description mirror the landing page's `site` config
+// (landing-page/src/config/landing/site.ts) so search results and link
+// previews describe the same product on both sites.
 export const metadata: Metadata = {
+  // Without this, Next resolves relative metadata URLs against localhost and
+  // warns - which is how canonical tags and OG images silently break in prod.
   metadataBase: new URL(SITE_URL),
   title: {
-    default: `${SITE_NAME} docs - Gmail MCP server setup, tools, and API`,
-    template: `%s | ${SITE_NAME} docs`,
+    default: "DaySurface Documentation",
+    template: "%s | DaySurface Docs",
   },
   description:
-    "Documentation for DaySurface, an MCP server for Gmail. Connect Claude, ChatGPT, or any MCP client to triage your inbox, draft replies, and fill and sign PDF attachments.",
-  applicationName: SITE_NAME,
+    "An MCP server for Gmail: triage a ranked inbox, draft replies in a real composer, and fill and sign PDF attachments - inside Claude, ChatGPT, or any MCP client.",
   icons: {
     icon: [
       {

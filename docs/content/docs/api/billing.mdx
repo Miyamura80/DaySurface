@@ -7,7 +7,7 @@ description: Usage tracking, quotas, and subscription management
 
 ```bash
 curl -H "Authorization: Bearer sk_live_..." \
-  http://localhost:8000/api/v1/billing/usage/current
+  https://api.daysurface.com/api/v1/billing/usage/current
 ```
 
 Returns usage stats for the current billing period.
@@ -16,7 +16,7 @@ Returns usage stats for the current billing period.
 
 ```bash
 curl -X POST -H "Authorization: Bearer sk_live_..." \
-  http://localhost:8000/api/v1/billing/checkout
+  https://api.daysurface.com/api/v1/billing/checkout
 ```
 
 Returns a Stripe checkout URL to complete the upgrade.
@@ -25,13 +25,13 @@ Returns a Stripe checkout URL to complete the upgrade.
 
 ```bash
 curl -H "Authorization: Bearer sk_live_..." \
-  http://localhost:8000/api/v1/billing/subscriptions/{subscription_id}
+  https://api.daysurface.com/api/v1/billing/subscriptions/{subscription_id}
 ```
 
 ## Report Usage
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/billing/usage/report \
+curl -X POST https://api.daysurface.com/api/v1/billing/usage/report \
   -H "Authorization: Bearer sk_live_..." \
   -H "Idempotency-Key: unique-request-id"
 ```

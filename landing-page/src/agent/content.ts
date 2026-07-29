@@ -5,7 +5,7 @@
  * surface: llms.txt, llms-full.txt, agents.md and the in-page agent view.
  * Rebranding the site (editing landing.ts) keeps all of these in sync.
  */
-import { site, hero, features, faq, compatibility, connect, comparison, pricing, agentGuide } from "../config/landing";
+import { site, hero, features, faq, compatibility, connect, comparison, pricing, pricingAxes, addOns, selfHost, agentGuide } from "../config/landing";
 
 /** Strip a trailing slash so we can safely append paths. */
 function trimSlash(url: string): string {
@@ -48,7 +48,7 @@ ${agentGuide.whenToUse.map((s) => `- ${s}`).join("\n")}
 - [How it compares](${o}/compare): ${site.name} vs other Gmail MCP servers (GongRzhe, Composio, Zapier/Pipedream, Google Workspace MCP).
 
 ## Pricing & licensing
-- [pricing.md](${o}/pricing.md): Machine-readable pricing & tiers. ${site.name} is open source (MIT license) and free to self-host with no setup cost; paid tiers cover managed hosting, support, and teams.
+- [pricing.md](${o}/pricing.md): Machine-readable pricing & tiers. ${site.name} is open source (MIT license) and free to self-host with no setup cost; paid tiers cover autonomy (background follow-up and watches) and throughput, with governance sold as an add-on.
 
 ## Resources
 - [Documentation](${site.docsUrl})
@@ -358,8 +358,9 @@ export function buildPricingMd(origin: string): string {
       const price = cadence && !cadence.startsWith("/") ? `${t.price} ${cadence}` : `${t.price}${cadence}`;
       const featureLines = t.features.map((f) => `- ${f}`).join("\n");
       return (
-        `## ${t.name}${t.featured ? " (recommended)" : ""}\n\n` +
+        `## ${t.name}\n\n` +
         `- Price: ${price}\n` +
+        (t.note ? `- Terms: ${t.note}\n` : "") +
         `- Summary: ${t.description}\n\n` +
         `Includes:\n${featureLines}`
       );
@@ -377,15 +378,51 @@ export function buildPricingMd(origin: string): string {
 
 ${tierBlock}
 
+## How the tiers are drawn
+
+${pricing.principle}
+
+${pricingAxes.items
+  .map((a) => `- **${a.name}** (${a.tier}) - free: ${a.free} Paid: ${a.paid}`)
+  .join("\n")}
+
+## Add-ons
+
+Attach to any paid tier, self-serve. Not a separate contract.
+
+${addOns.items
+  .map(
+    (a) =>
+      `### ${a.name} add-on\n\n` +
+      `- Price: ${a.price}${a.cadence}\n` +
+      `- Available on: ${a.availableOn}\n` +
+      `- Summary: ${a.description}\n\n` +
+      `Includes:\n${a.features.map((f) => `- ${f}`).join("\n")}`,
+  )
+  .join("\n\n")}
+
+## Self-hosted (open source)
+
+- Price: **$0**, no licence fee, no seat count.
+- Summary: ${selfHost.body}
+
+Includes:
+${selfHost.points.map((pt) => `- ${pt}`).join("\n")}
+- Source: ${site.githubUrl}
+
 ## Notes
 
 - Licensing model: ${site.name} is open source under the **MIT license** - free
-  to use, modify, and self-host. Commercial / OEM licensing is available on the
-  Team tier.
+  to use, modify, and self-host. Every feature listed here is available when
+  self-hosting; entitlement checks are disabled by default in the source.
 - Setup cost: **none.** Self-hosting has no license or setup fee; the hosted
   tiers are paste-a-URL onboarding with no setup charge.
-- What paid tiers cover: managed hosting, monitoring, priority/dedicated
-  support, and team features (SSO, audit logs, SLA).
+- The free tier is not a trial and does not expire. No card is required.
+- **Data retention applies only to ${site.name}-generated memory** (triage
+  verdicts, summaries, document sessions) - never to the user's mail, which
+  stays in Gmail and is searchable in full on every tier, including free.
+- On downgrade or failed payment, read access is retained and stored memory is
+  frozen rather than deleted.
 
 Prices are denominated as shown above. For current, authoritative pricing
 always check ${site.url}.

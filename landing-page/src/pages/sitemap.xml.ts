@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { site, comparison } from "../config/landing";
+import { site, comparison, pricing } from "../config/landing";
 
 // Static routes that ship in dist/. Keep in sync with src/pages/*.astro.
 const routes = [
@@ -9,6 +9,9 @@ const routes = [
   // every page. Listing the index here gives crawlers a path in from the apex.
   { path: "/docs", priority: "0.9", changefreq: "weekly" },
   { path: "/compare", priority: "0.8", changefreq: "monthly" },
+  ...(pricing.enabled
+    ? [{ path: "/pricing", priority: "0.9", changefreq: "monthly" }]
+    : []),
   { path: "/api", priority: "0.7", changefreq: "weekly" },
   // One /vs/<slug> page per competitor (generated from the comparison config).
   ...comparison.competitors.map((c) => ({

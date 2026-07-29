@@ -7,12 +7,13 @@
 #
 # REQUIRED VARIABLE - `DOCS_UPSTREAM`
 # This service also fronts the documentation at `daysurface.com/docs`, reverse
-# proxying that prefix to the `daysurface-docs` service (see `server.ts`). Set
-# it on this service to the docs origin over Railway private networking:
+# proxying the docs-owned prefixes to the `daysurface-docs` service (see
+# `docs-proxy.ts` - PROXY_PREFIXES is the contract between the two). Set it on
+# this service to the docs origin over Railway private networking:
 #
 #   DOCS_UPSTREAM = http://daysurface-docs.railway.internal:8080
 #
-# Without it `/docs` answers 503 and the docs are unreachable from the apex.
+# Without it those paths answer 503 and the docs are unreachable from the apex.
 # `docs.daysurface.com` should be left in place as a 301 to `daysurface.com/docs`
 # so existing links and any indexed URLs consolidate onto the apex.
 

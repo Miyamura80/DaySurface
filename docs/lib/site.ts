@@ -1,10 +1,15 @@
 /**
  * Canonical identity for the docs site.
  *
- * The docs are served from the apex under `/docs` (see `basePath` in
- * `next.config.mjs` and the `/docs` proxy in `landing-page/server.ts`), NOT from
- * a `docs.` subdomain. Keeping docs on the same origin as the marketing site
- * consolidates link equity into one domain instead of splitting it across two.
+ * The docs are served from the apex under `/docs` (the landing page reverse
+ * proxies that prefix - see `landing-page/server.ts`), NOT from a `docs.`
+ * subdomain. Keeping docs on the same origin as the marketing site consolidates
+ * link equity into one domain instead of splitting it across two.
+ *
+ * Note there is deliberately no `basePath` in `next.config.mjs`. The `/docs`
+ * segment comes from the loader's `baseUrl`, which keeps `page.url` a
+ * browser-usable path that can be dropped into an href, a `fetch`, or a `<meta>`
+ * without further processing.
  *
  * `SITE_URL` is overridable so preview deploys emit their own absolute URLs in
  * sitemap/canonical/OG tags rather than pointing at production.
@@ -13,21 +18,16 @@ export const SITE_URL = (
   process.env.NEXT_PUBLIC_SITE_URL ?? "https://daysurface.com"
 ).replace(/\/$/, "");
 
-/** Product name used in <title> suffixes, OG cards, and nav. */
+/** Product name used in OG cards. */
 export const SITE_NAME = "DaySurface";
 
 /**
- * Must stay in step with `basePath` in `next.config.mjs`.
+ * Absolute URL for a site-relative path such as `page.url`.
  *
- * Next prepends basePath to `<Link href>` and router navigations automatically,
- * but NOT to strings placed in metadata (canonical, hreflang, OG url) or to a
- * `sitemap.ts` entry. Those need it added by hand, which is what `absoluteUrl`
- * is for - `page.url` from the fumadocs loader is basePath-relative.
+ * Trailing slashes are stripped so a path and its slashed spelling can never
+ * produce two canonical URLs for one page.
  */
-export const BASE_PATH = "/docs";
-
-/** Absolute, basePath-qualified URL for a loader-relative path. */
 export function absoluteUrl(path: string): string {
-  const rel = path === "/" ? "" : path.startsWith("/") ? path : `/${path}`;
-  return `${SITE_URL}${BASE_PATH}${rel}`;
+  const rel = path.startsWith("/") ? path : `/${path}`;
+  return `${SITE_URL}${rel}`.replace(/\/+$/, "");
 }

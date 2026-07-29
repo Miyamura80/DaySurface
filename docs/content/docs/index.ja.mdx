@@ -1,59 +1,111 @@
 ---
-title: DaySurface - Gmail 用の MCP サーバー
-description: Gmail を Claude、ChatGPT、その他の MCP クライアントに接続。受信トレイの優先順位付け、返信の下書き、PDF 添付ファイルの記入と署名ができます。
+title: DaySurface
+description: Gmail のための MCP サーバー - 優先度順の受信トレイの整理、実際のコンポーザーでの返信作成、PDF 添付ファイルの記入と署名を、どの MCP クライアントからでも。
 ---
 
-DaySurface は Gmail の受信トレイを AI クライアント内で扱える MCP サーバーです。
-同じツールセットに対して3つのインターフェースを提供します:
+import { Inbox, PenLine, FileSignature, Terminal, Bot, Globe, Rocket, Ship, Webhook } from 'lucide-react';
 
-- **CLI** - ターミナルでコマンドを実行
-- **MCP** - Claude などの AI アシスタントを直接接続
-- **REST API** - 認証付きで HTTP エンドポイントを呼び出し
+**チャットを離れずに、整理・作成・署名。** DaySurface は優先度順の受信トレイと
+本物のメールコンポーザーを Claude、ChatGPT、あるいはお使いのエージェントの中に
+届けます。エージェントが整理して書き、あなたが編集して送信します。
 
-ワークフローに合ったインターフェースを選択するか、3つすべてを使用できます。
-
-## インストール
-
-import { Step, Steps } from 'fumadocs-ui/components/steps';
-
-<Steps>
-<Step>
-
-### ソースからインストール
-
-```bash
-git clone https://github.com/Miyamura80/DaySurface.git
-cd DaySurface
-uv sync
-```
-
-</Step>
-<Step>
-
-### インストールを確認
-
-```bash
-uv run daysurface --version
-uv run daysurface --help
-```
-
-</Step>
-<Step>
-
-### コマンドを試す
-
-```bash
-uv run daysurface greet Alice
-# Hello, Alice!
-```
-
-</Step>
-</Steps>
-
-## インターフェースを選択
+ストリーミング HTTP で接続するため、インストールは不要です。クライアントに URL を
+1つ追加し、Gmail へのアクセスを一度許可するだけです。
 
 <Cards>
-  <Card title="CLI" href="/docs/cli" />
-  <Card title="MCP Server" href="/docs/mcp" />
-  <Card title="REST API" href="/docs/api" />
+  <Card
+    icon={<Rocket />}
+    title="クイックスタート"
+    href="/ja/docs/quickstart"
+    description="クライアントを接続して、1分以内に最初の受信トレイ整理を実行します。"
+  />
 </Cards>
+
+## できること
+
+<Cards>
+  <Card
+    icon={<Inbox />}
+    title="優先度順の受信トレイ"
+    href="/ja/docs/mcp/tools"
+    description="最近のスレッドを対応が必要な順に並べ替えます。ランキングはモデルではなく決定論的なコードです。"
+  />
+  <Card
+    icon={<PenLine />}
+    title="承認ではなく編集する下書き"
+    href="/ja/docs/mcp/tools"
+    description="返信は実際の Gmail 下書きとしてインタラクティブなコンポーザーに届きます。エージェントが書き、あなたが送信します。"
+  />
+  <Card
+    icon={<FileSignature />}
+    title="スレッド内で PDF に記入・署名"
+    href="/ja/docs/mcp/pdf-forms"
+    description="PDF 添付ファイルのフォームに記入し、署名のために返します。署名はあなただけが完了できる手順です。"
+  />
+  <Card
+    icon={<Webhook />}
+    title="プッシュ通知"
+    href="/ja/docs/gmail-webhooks"
+    description="HTTPS エンドポイントを登録して、新着メール時に署名付きイベントを受け取ります。"
+  />
+</Cards>
+
+合計 34 個のツールがあり、すべて公式の Gmail API を経由します。詳細は
+[ツールリファレンス](/ja/docs/mcp/tools)をご覧ください。
+
+## 接続する
+
+<Cards>
+  <Card
+    icon={<Bot />}
+    title="MCP サーバー"
+    href="/ja/docs/mcp"
+    description="Claude、ChatGPT、Cursor、VS Code、Goose など任意の MCP クライアントに追加します。"
+  />
+  <Card
+    icon={<Globe />}
+    title="REST API"
+    href="/ja/docs/api"
+    description="同じツールを認証付き HTTP エンドポイントとして自分のコードから呼び出します。"
+  />
+  <Card
+    icon={<Terminal />}
+    title="CLI"
+    href="/ja/docs/cli"
+    description="daysurface バイナリでセルフホストのデプロイをターミナルから運用します。"
+  />
+</Cards>
+
+各ツールは共有レジストリ内の純粋な関数で、3つのトランスポートすべてに同じ形で
+公開されるため、動作がずれることはありません。
+
+## 自分で運用する
+
+<Cards>
+  <Card
+    icon={<Ship />}
+    title="デプロイ"
+    href="/ja/docs/deployment"
+    description="自分の Google OAuth 認証情報を使い、サーバー全体を自分のインフラで実行します。"
+  />
+</Cards>
+
+## プライバシー
+
+当社があなたのメールを AI モデルに送信することはありません。DaySurface は Gmail の
+内容に対して LLM 推論を実行せず、受信トレイのランキングは決定論的なコードです。
+メールはあなたが接続した AI クライアントにのみ渡り、そのクライアント自身の規約に
+従います。アクセスには Google の `gmail.modify` スコープを使用します。読み取り、
+ラベル付け、下書き、送信はできますが、メールを完全に削除することはできません。
+
+## ライセンスと料金
+
+DaySurface は
+[MIT ライセンス](https://github.com/Miyamura80/DaySurface/blob/main/LICENSE)の
+オープンソースです。永久に無料で使用・改変・セルフホストでき、**初期費用も
+ライセンス料もかかりません**。
+
+自分で運用したくない場合は、有料のマネージドプランがあります。ガバナンス機能
+（SSO・監査ログ）は必要なときに追加するアドオンとして提供されます。プランと
+最新の料金は[料金ページ](https://daysurface.com/pricing)をご覧ください。
+比較検討するエージェント向けに、機械可読のマニフェストが `/pricing.md` にあります。

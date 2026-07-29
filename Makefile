@@ -305,7 +305,17 @@ blind_except_check: check_uv ## Check every `# noqa: BLE001` has a justification
 	@uv run python scripts/check_blind_except_justification.py
 	@echo "$(GREEN)✅Blind-except justification check completed.$(RESET)"
 
-ci: ruff vulture import_lint ty docs_lint check_deps file_len_check blind_except_check ## Run all CI checks (ruff, vulture, import_lint, ty, docs_lint, check_deps, file_len_check, blind_except_check)
+tool_surface_docs_check: check_uv ## Check the docs' tool tables & counts match the @service registry
+	@echo "$(YELLOW)🔍Checking tool surface docs...$(RESET)"
+	@uv run python scripts/check_tool_surface_docs.py
+	@echo "$(GREEN)✅Tool surface docs check completed.$(RESET)"
+
+docs_links_check: check_uv ## Check absolute links in docs content resolve to real pages
+	@echo "$(YELLOW)🔍Checking docs content links...$(RESET)"
+	@uv run python scripts/check_docs_links.py
+	@echo "$(GREEN)✅Docs link check completed.$(RESET)"
+
+ci: ruff vulture import_lint ty docs_lint check_deps file_len_check blind_except_check tool_surface_docs_check docs_links_check ## Run all CI checks (ruff, vulture, import_lint, ty, docs_lint, check_deps, file_len_check, blind_except_check, tool_surface_docs_check, docs_links_check)
 	@echo "$(GREEN)✅CI checks completed.$(RESET)"
 
 .PHONY: sync-agent-config
