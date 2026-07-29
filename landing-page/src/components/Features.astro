@@ -19,8 +19,12 @@ import FeatureVisual from "./FeatureVisual.astro";
       <!-- LEFT: sticky visual panel (desktop only) -->
       <div class="hidden min-w-0 lg:block">
         <div class="sticky top-28">
+          <!-- Fixed height rather than aspect-square: the cross-fading visuals
+               are absolutely positioned so the box has to be sized, and what it
+               has to fit is the tallest chat frame (~490px), which doesn't
+               follow the column's width. -->
           <div
-            class="relative aspect-square w-full border-2 border-accent bg-surface-1"
+            class="relative h-[560px] w-full border-2 border-accent bg-surface-1"
           >
             <!-- Edison corner tag: live step index, updated on scroll -->
             <span
@@ -54,8 +58,10 @@ import FeatureVisual from "./FeatureVisual.astro";
               data-active={i === 0 ? "true" : "false"}
               class="feature-step min-w-0 border-l-2 border-border py-8 pl-4 first:pt-0 sm:pl-6 sm:py-10 lg:py-[16vh]"
             >
-              {/* inline visual on mobile only */}
-              <div class="mb-6 aspect-square w-full min-w-0 border-2 border-accent bg-surface-1 lg:hidden">
+              {/* inline visual on mobile only - height follows the app card
+                  (the tallest is 340px), since a square box at phone width is
+                  shorter than that and would clip the ceremony footer */}
+              <div class="mb-6 w-full min-w-0 border-2 border-accent bg-surface-1 lg:hidden">
                 <FeatureVisual name={feature.visual} />
               </div>
 
