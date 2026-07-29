@@ -40,8 +40,12 @@ TOOL_TABLE_HEADER = "tool"
 
 # "34 tools", "34 herramientas", "34 個のツール", "34 个工具" - match the number
 # in front of whatever the locale calls a tool, without hardcoding each word.
-COUNT_PATTERN = re.compile(
-    r"(\d+)\s*(?:tools\b|herramientas\b|個のツール|个工具)",
+# Latin locales put descriptive words in between ("The 34 Gmail, PDF, and
+# webhook tools ..." in the tools page frontmatter), so allow a short run of
+# them; CJK writes the count adjacent to the noun.
+COUNT_PATTERNS = (
+    re.compile(r"(\d+)(?:[ \t]+[A-Za-z][\w./-]*,?){0,5}[ \t]+(?:tools|herramientas)\b"),
+    re.compile(r"(\d+)\s*(?:個のツール|个工具)"),
 )
 
 
@@ -108,13 +112,14 @@ def _check_counts(expected: int) -> bool:
         for line_no, line in enumerate(
             path.read_text(encoding="utf-8").splitlines(), start=1
         ):
-            for found in COUNT_PATTERN.findall(line):
-                if int(found) != expected:
-                    _fail(
-                        f"{path.relative_to(REPO_ROOT)}:{line_no} claims "
-                        f"{found} tools; the MCP surface has {expected}"
-                    )
-                    ok = False
+            for pattern in COUNT_PATTERNS:
+                for found in pattern.findall(line):
+                    if int(found) != expected:
+                        _fail(
+                            f"{path.relative_to(REPO_ROOT)}:{line_no} claims "
+                            f"{found} tools; the MCP surface has {expected}"
+                        )
+                        ok = False
     return ok
 
 
