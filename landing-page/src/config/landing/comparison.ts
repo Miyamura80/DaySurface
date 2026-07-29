@@ -51,7 +51,19 @@ export interface Competitor {
 
 export interface ComparisonPillar {
   title: string;
+  /**
+   * One line, shown under the diagram on the pillar cards (landing section +
+   * /compare). The diagram carries the argument - this only names it.
+   */
+  caption: string;
+  /**
+   * Full prose. Not rendered on the cards: it feeds the /vs pages and the
+   * machine-readable "How it compares" block in llms-full.txt / agents.md,
+   * where an answer engine has no diagram to read.
+   */
   body: string;
+  /** Selects the diagram in PillarDiagram.astro. */
+  visual: "surface" | "transports" | "selfhost";
 }
 
 export const comparison: {
@@ -68,21 +80,27 @@ export const comparison: {
 } = {
   heading: "How DaySurface compares",
   subhead:
-    "Most Gmail MCPs hand your agent raw API calls and a wall of JSON. DaySurface is a Gmail product: an interactive inbox you can drive from inside the chat, open source and yours to host.",
+    "Most Gmail MCPs hand your agent a wall of JSON. DaySurface is a Gmail product: an inbox you drive from inside the chat, open source and yours to host.",
   asOf: "June 2026",
   disclaimer:
     "Comparison reflects publicly documented capabilities as of June 2026. The MCP ecosystem moves fast - if something here is out of date, open an issue and we'll fix it.",
   pillars: [
     {
       title: "Interactive UI, not just JSON",
+      caption: "A real composer and a ranked inbox, rendered inside the chat.",
+      visual: "surface",
       body: "DaySurface renders MCP Apps - sandboxed UI that lives inside the chat. Review and edit a draft in a real composer, then triage a ranked inbox in an embedded dashboard, all without leaving your agent. The inbox ranking and triage flow exist because the interactive surface makes them useful; other Gmail MCPs return raw search results and stop there.",
     },
     {
       title: "One codebase, three transports",
+      caption: "One service registry, three interfaces. Behaviour never drifts.",
+      visual: "transports",
       body: "Every tool is a pure function in a shared registry, exposed identically over a CLI, an MCP server, and a plain HTTP API. Build once and call it from your shell, any MCP client, or a script - behavior never drifts between interfaces. Most Gmail MCPs are single-transport: stdio-only, or a hosted endpoint you can't run locally.",
     },
     {
       title: "Open source and self-hostable",
+      caption: "Your infrastructure, your OAuth credentials, no gateway in between.",
+      visual: "selfhost",
       body: "The whole server is open source and ships with a Dockerfile and deploy config, so you can run it on your own infrastructure with your own OAuth credentials and encrypted token storage. Aggregator gateways route your mail through a proprietary service you don't control.",
     },
   ],
