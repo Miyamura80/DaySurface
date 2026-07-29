@@ -39,6 +39,19 @@ The generated `dist/<app>-preview.html` is a single self-contained file (the app
 bundle is inlined as base64), which also makes it easy to hand to a viewer that
 renders standalone HTML.
 
+### Build-time knobs
+
+| Env | Default | Effect |
+|---|---|---|
+| `WIDTH` | `760` | Inline widget width in px. A narrow value trips the app's single-column mobile layout. |
+| `CHAT` | *(none)* | `CHAT=claude` wraps the card in a Claude.ai conversation - model pill, prompt, tool-call chip, composer. This is what the README screenshots use, since an MCP App is always a tool result inside a chat, never a page of its own. |
+| `SCENARIO` | `$APP` | Which conversation copy to frame the app in. Comes apart from `APP` when one bundle serves another app's view: the composer shot is `APP=gmail_inbox SCENARIO=gmail_composer`. |
+| `MAXH` | *(uncapped)* | Cap the auto-resized iframe height, the way a real client caps a card rendered inline and lets it scroll. `pdf_signer` measures ~2000px and wants `MAXH=700`. |
+
+The chat chrome mirrors `landing-page/src/components/chat/ClaudeShell.astro`, so
+the README and the marketing site frame the apps the same way. It is inert markup
+around the real committed bundle - the app inside is still fixture-driven.
+
 ## Files
 
 | File | Role |
