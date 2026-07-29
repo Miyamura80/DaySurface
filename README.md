@@ -10,6 +10,7 @@
 
 <p align="center">
   <a href="#mcp-ui">MCP UI</a> •
+  <a href="#connect-your-client">Connect</a> •
   <a href="#architecture">Architecture</a> •
   <a href="#quick-start">Quick Start</a> •
   <a href="#cli-usage">CLI Usage</a> •
@@ -48,6 +49,38 @@ Four MCP Apps ship in the box. Each is a React bundle served as a `ui://` resour
 Screenshots are rendered from the committed app bundles by the fixture host in `mcp_server/dev_preview/` - no server, Gmail account, or OAuth involved. Reproduce any of them with `make preview_app APP=<name>`.
 
 Apps are opt-in. Add an **enhancer** in `mcp_server/enhancers/` when a tool needs elicitation, image output, or an iframe dashboard. Enhancers wrap a service for the MCP transport only - the pure service stays untouched and CLI/API consumers are unaffected. See [`mcp_server/MCP_UI_ARCHITECTURE.md`](mcp_server/MCP_UI_ARCHITECTURE.md) for the full design.
+
+## Connect Your Client
+
+DaySurface is a remote MCP server, so there is nothing to install - point your client at the endpoint and sign in through the browser.
+
+```text
+Endpoint:   https://mcp.daysurface.com/mcp
+Transport:  streamable HTTP (remote, not stdio)
+Auth:       OAuth in the browser, no key to paste
+```
+
+| Client | Add it |
+|:--|:--|
+| <picture><source media="(prefers-color-scheme: dark)" srcset="media/clients/claude-dark.png"><img src="media/clients/claude-light.png" width="17" alt=""></picture> **Claude** | **[Add to Claude](https://claude.ai/new?modal=add-custom-connector&connectorName=DaySurface&connectorUrl=https%3A%2F%2Fmcp.daysurface.com%2Fmcp#settings/customize-connectors)** - opens the *Add custom connector* dialog with the name and URL filled in. Claude flags it as suggested by an external link; that is expected. On Team and Enterprise plans an admin adds it. |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="media/clients/chatgpt-dark.png"><img src="media/clients/chatgpt-light.png" width="17" alt=""></picture> **ChatGPT** | Settings → Connectors → Advanced settings → turn on **Developer mode**. Back on Connectors, click **Create**, paste the endpoint, and name it. Start a new chat so the tools menu refreshes. |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="media/clients/cli-dark.png"><img src="media/clients/cli-light.png" width="17" alt=""></picture> **Claude Code** | `claude mcp add --transport http --scope user daysurface https://mcp.daysurface.com/mcp`<br>Then run `/mcp` in a session to sign in. |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="media/clients/cursor-dark.png"><img src="media/clients/cursor-light.png" width="17" alt=""></picture> **Cursor** | Paste the [Cursor deep link](#one-click-deep-links) into your address bar, or add the endpoint under Settings → MCP. |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="media/clients/vscode-dark.png"><img src="media/clients/vscode-light.png" width="17" alt=""></picture> **VS Code** | **[Add to VS Code](https://vscode.dev/redirect/mcp/install?name=daysurface&config=%7B%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Fmcp.daysurface.com%2Fmcp%22%7D)** - requires Copilot agent mode. |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="media/clients/goose-dark.png"><img src="media/clients/goose-light.png" width="17" alt=""></picture> **Goose** | Paste the [Goose deep link](#one-click-deep-links) into your address bar, or add an extension over streamable HTTP. |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="media/clients/mcp-dark.png"><img src="media/clients/mcp-light.png" width="17" alt=""></picture> **Any MCP client** | Add a remote server pointing at the endpoint. Cline, Zed and Windsurf all work - each spells the config differently (VS Code `servers`, Cursor and Cline `mcpServers`, Zed `context_servers`, and Windsurf wants `serverUrl` where everyone else wants `url`). |
+
+#### One-click deep links
+
+Cursor and Goose install over a custom URL scheme, which GitHub strips from links - copy these into your browser's address bar instead.
+
+```text
+cursor://anysphere.cursor-deeplink/mcp/install?name=daysurface&config=eyJ1cmwiOiJodHRwczovL21jcC5kYXlzdXJmYWNlLmNvbS9tY3AifQ%3D%3D
+
+goose://extension?url=https%3A%2F%2Fmcp.daysurface.com%2Fmcp&type=streamable_http&id=daysurface&name=daysurface&description=daysurface+MCP+server&timeout=300
+```
+
+The same picker, with live one-click buttons, is on the [landing page](https://daysurface.com) - both are generated from `landing-page/src/config/landing/connect.ts`.
 
 ## Agent Prompt
 
