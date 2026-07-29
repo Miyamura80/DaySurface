@@ -140,6 +140,9 @@ celerybeat.pid
 # Environments
 .env
 .prod.env
+# Local MCP client config - machine-specific. Template: .mcp.json.example
+# Root-anchored: only the repo-root config, not any nested .mcp.json.
+/.mcp.json
 .venv
 env/
 venv/

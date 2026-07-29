@@ -65,6 +65,31 @@ CLOUD_SANDBOX_IGNORES = [
     # off the allowlist and are skipped in the sandbox only.
     r"https?://(www\.)?claude\.ai(/|\?|$)",
     r"https?://(www\.)?vscode\.dev(/|\?|$)",
+    # GitHub hosts user-writable, readable-back surfaces (gists, repo contents,
+    # issue bodies) - a textbook publish-then-read exfil channel. Skip in the
+    # sandbox rather than grant standing egress for repo links.
+    r"https?://(www\.)?github\.com(/|\?|$)",
+    # github.io is a user-publishable hosting apex (anyone can serve a site on a
+    # subdomain), and the Goose install deep link in the README's client table
+    # takes a `?url=` parameter the host acts on - same relay shape as
+    # shields.io. Both reasons keep it off the allowlist.
+    r"https?://([a-z0-9-]+\.)?github\.io(/|\?|$)",
+    # Package registry (publish-then-read), same reasoning as the MCP registry.
+    r"https?://docs\.pypi\.org(/|\?|$)",
+    # Platform apexes carrying APIs/webhooks well beyond the one doc link.
+    # (jules.googleapis.com is already listed above.)
+    r"https?://jules\.google(/|\?|$)",
+    r"https?://developers\.openai\.com(/|\?|$)",
+    # --- Static docs/blogs: read-only GETs, no exfil channel. --------------
+    # These are the one group that would be *better* served by the sandbox
+    # network allowlist ("Network access -> Custom" in the environment config),
+    # which would make them pass here AND in CI. They are listed here only so a
+    # cloud session can commit markdown at all. Move them to the allowlist and
+    # delete these four lines when convenient.
+    r"https?://(docs\.)?pydantic\.dev(/|\?|$)",
+    r"https?://(www\.)?fumadocs\.dev(/|\?|$)",
+    r"https?://(www\.)?mcpcat\.io(/|\?|$)",
+    r"https?://(www\.)?obsidiansecurity\.com(/|\?|$)",
 ]
 
 # Files whose external links are deliberately not checked inside the cloud
