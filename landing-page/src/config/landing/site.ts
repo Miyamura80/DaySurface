@@ -10,9 +10,13 @@ export const site = {
   // TODO: product identity
   name: "DaySurface",
   tagline: "An MCP server for Gmail",
-  // Used for <title>, meta description, and OG tags.
+  // Used for <title>, meta description, and OG tags. Lead with `name` verbatim:
+  // Google's OAuth verification checks that the app name on the homepage
+  // matches the one on the consent screen, and the meta description is the
+  // first place an automated reviewer or an LLM looks for it. The full
+  // plain-language purpose statement lives in ./purpose.ts.
   description:
-    "An MCP server for Gmail: triage a ranked inbox, draft replies in a real composer, and fill and sign PDF attachments - inside Claude, ChatGPT, or any MCP client.",
+    "DaySurface connects your Gmail account to the AI client you already use: ask what needs your attention and get a ranked inbox, archive threads, and draft replies in a real composer - inside Claude, ChatGPT, or any MCP client.",
   // TODO: the canonical deployed URL (also set `site` in astro.config.mjs).
   url: "https://daysurface.com",
   // Docs are a path on the apex, not a `docs.` subdomain, so inbound links and

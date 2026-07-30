@@ -4,9 +4,9 @@
     {
       "name": "daysurface",
       "type": "skill-md",
-      "description": "Triage and curate a Gmail inbox by connecting to the DaySurface server over MCP and calling its typed tools.",
+      "description": "Connect a Gmail account to an MCP client via DaySurface - rank and triage the inbox, archive threads, and draft replies the user edits and sends.",
       "url": "/.well-known/agent-skills/daysurface/SKILL.md",
-      "digest": "sha256:ee0c83b0782e3a1b2562cb6d5ae1a555396616510791dfdfb01687163866022b"
+      "digest": "sha256:882612f591d6eaa01630772f7491688609e4900ed0329f150205fe1445c05bdb"
     }
   ]
 }

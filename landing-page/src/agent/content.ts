@@ -5,11 +5,24 @@
  * surface: llms.txt, llms-full.txt, agents.md and the in-page agent view.
  * Rebranding the site (editing landing.ts) keeps all of these in sync.
  */
-import { site, hero, features, faq, compatibility, connect, comparison, pricing, pricingAxes, addOns, selfHost, agentGuide } from "../config/landing";
+import { site, hero, features, faq, compatibility, connect, comparison, pricing, pricingAxes, addOns, selfHost, agentGuide, purpose, purposeText } from "../config/landing";
 
 /** Strip a trailing slash so we can safely append paths. */
 function trimSlash(url: string): string {
   return url.replace(/\/+$/, "");
+}
+
+/**
+ * "What <product> does" - the plain-language purpose + Gmail-permission
+ * statement, identical to the block rendered under the hero (Purpose.astro).
+ *
+ * It leads every agent surface because it is the one thing a reader with no
+ * context needs first: what the product does, what it asks of the user's
+ * mailbox, and what happens to the data. The transport/architecture story
+ * follows it, not the other way round.
+ */
+function purposeSection(origin: string): string {
+  return `## ${purpose.heading}\n\n${purposeText(origin)}`;
 }
 
 /** Full "When to use" section shared by the long-form surfaces (llms-full.txt, agents.md). */
@@ -33,6 +46,8 @@ export function buildLlmsTxt(origin: string): string {
 > ${site.description}
 
 ${hero.subhead}
+
+${purposeSection(o)}
 
 ## When to use
 
@@ -67,7 +82,7 @@ export function buildLlmsFullTxt(origin: string): string {
     .join("\n\n");
   // Per-client connect instructions. Replaces the old three-transports block:
   // an agent needs to know how its host gets wired up, not how the codebase is
-  // layered. The CLI/HTTP story survives under "What it is" and on /api.
+  // layered. The CLI/HTTP story survives under "How it works" and on /api.
   const numbered = (steps?: string[]) =>
     (steps ?? []).map((s, i) => `${i + 1}. ${s}`).join("\n");
   const connectBlock = connect.targets
@@ -123,7 +138,9 @@ ${hero.headline} ${hero.subhead}
 - Documentation: ${site.docsUrl}
 - Source code: ${site.githubUrl}
 
-## What it is
+${purposeSection(o)}
+
+## How it works
 
 ${site.name} is a Model Context Protocol (MCP) server. It exposes a single
 shared service registry over three interfaces - a CLI, an MCP server
@@ -213,8 +230,16 @@ ${faqBlock}
  */
 export function buildSkillsSh(origin: string): string {
   const o = trimSlash(origin);
+  // Wrap the purpose prose into shell comments so a reader who curls this file
+  // learns what the product is before being pointed at the skill index.
+  const purposeComment = purposeText(o)
+    .split("\n")
+    .map((line) => (line ? `# ${line}` : "#"))
+    .join("\n");
   return `#!/usr/bin/env sh
 # ${site.name} - agent skill discovery
+#
+${purposeComment}
 #
 # ${site.name} is an MCP server. The machine-readable skill index lives at the
 # path below (Agent Skills Discovery, schema 0.2.0). This script only prints
@@ -240,6 +265,8 @@ ${site.description}
 
 This site documents an MCP server. Agents should connect over MCP to use its
 tools rather than scraping this page.
+
+${purposeSection(o)}
 
 ${whenToUseSection()}
 
@@ -307,6 +334,8 @@ export function buildAuthMd(origin: string): string {
 - MCP endpoint (streamable HTTP): ${site.mcpUrl}
 - OAuth 2.0 Protected Resource Metadata (RFC 9728): ${mcpOrigin}/.well-known/oauth-protected-resource/mcp
 - Website: ${site.url}
+
+${purposeSection(o)}
 
 ## What is supported today
 

@@ -3,7 +3,7 @@
   "info": {
     "title": "DaySurface API",
     "version": "0.1.0",
-    "description": "An MCP server for Gmail: triage a ranked inbox, draft replies in a real composer, and fill and sign PDF attachments - inside Claude, ChatGPT, or any MCP client."
+    "description": "DaySurface connects your Gmail account to the AI client you already use: ask what needs your attention and get a ranked inbox, archive threads, and draft replies in a real composer - inside Claude, ChatGPT, or any MCP client."
   },
   "paths": {
     "/health": {

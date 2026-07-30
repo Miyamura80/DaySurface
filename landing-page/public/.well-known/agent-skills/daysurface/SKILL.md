@@ -1,9 +1,24 @@
 ---
 name: daysurface
-description: Triage and curate a Gmail inbox by connecting to the DaySurface server over MCP and calling its typed tools.
+description: Connect a Gmail account to an MCP client via DaySurface - rank and triage the inbox, archive threads, and draft replies the user edits and sends.
 ---
 
 # DaySurface
+
+## What DaySurface does
+
+DaySurface connects your Gmail account to the AI client you already use. Ask
+what needs your attention and get a ranked inbox. Archive threads and mark them
+done. Draft a reply in a real composer, edit it yourself, and send it - inside
+Claude, ChatGPT, or any MCP client.
+
+To do this, DaySurface asks permission to read, organise, draft, and send mail
+in your Gmail account. It never permanently deletes mail. Message content is
+fetched only when you ask for it and passed to your AI client; we do not store
+message bodies, and no AI model on our servers reads your mail. See our privacy
+policy: https://daysurface.com/privacy
+
+## How it works
 
 DaySurface is a Model Context Protocol (MCP) server. Use it to rank, triage, and
 draft replies for a Gmail inbox. The same tools are also reachable over a CLI

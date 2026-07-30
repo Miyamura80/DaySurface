@@ -3,6 +3,7 @@
  * launcher, the FAQ, and the final CTA. Pricing lives in ./pricing.ts.
  */
 import { site } from "./site";
+import { purpose } from "./purpose";
 
 export interface Testimonial {
   quote: string;
@@ -88,7 +89,7 @@ export const askAi: {
 } = {
   heading: "Ask AI about this",
   subhead: "Have your assistant explain DaySurface, compare it, or walk you through deploying it.",
-  prompt: `What is the ${site.name} Gmail MCP server? Explain what it does, how the CLI / MCP / HTTP transports share one codebase, and how I'd deploy it. Repo: ${site.githubUrl}`,
+  prompt: `What is ${site.name}? It connects a Gmail account to an AI client like Claude or ChatGPT over MCP. Explain what it does, what Gmail permissions it asks for and how it handles message content, and how I'd connect or self-host it. Site: ${site.url} Repo: ${site.githubUrl}`,
   providers: [
     { id: "chatgpt", name: "ChatGPT", logo: "/logos/chatgpt.svg", url: "https://chatgpt.com/?q={q}" },
     { id: "perplexity", name: "Perplexity", logo: "/logos/perplexity.svg", url: "https://www.perplexity.ai/search?q={q}" },
@@ -99,6 +100,18 @@ export const askAi: {
 export const faq: { heading: string; items: FaqItem[] } = {
   heading: "Frequently asked questions",
   items: [
+    // The first two answers are the purpose block verbatim (see ./purpose.ts).
+    // They lead the list because this section is also emitted as schema.org
+    // FAQPage JSON-LD, which is where a crawler looks for "what is this app
+    // and what does it do with my mail" without reading the page body.
+    {
+      q: `What does ${site.name} do?`,
+      a: purpose.what,
+    },
+    {
+      q: `What permissions does ${site.name} need on my Gmail account?`,
+      a: `${purpose.permissions} ${purpose.privacy.lead} ${purpose.privacy.linkText} at ${site.url}${purpose.privacy.href}.`,
+    },
     {
       q: "Which MCP clients are supported?",
       a: "Any client that speaks the Model Context Protocol: Claude Desktop, Claude Code, Cursor, Cline, VS Code, Windsurf, and more. The server exposes a standard tool/resource surface.",

@@ -21,7 +21,7 @@
  * truth the visible UI uses), so there's no duplicated copy to drift. Install
  * deep links are rebuilt here at build time, mirroring ConnectWidget.astro.
  */
-import { site, connect, faq } from "../config/landing";
+import { site, connect, faq, purposeText } from "../config/landing";
 // Shared with ConnectWidget.astro so install URL formats can't drift.
 import { deepLink } from "../utils/deeplink";
 
@@ -33,6 +33,9 @@ const payload = {
   docsUrl: site.docsUrl,
   githubUrl: site.githubUrl,
   description: site.description,
+  // Same block Purpose.astro renders under the hero - an agent that only ever
+  // calls tools still gets the purpose and permission statement verbatim.
+  purpose: purposeText(new URL(site.url).origin),
   clients: connect.targets.map((t) => ({
     id: t.id,
     name: t.name,
@@ -107,6 +110,7 @@ const payloadJson = JSON.stringify(payload).replace(/</g, "\\u003c");
       docsUrl: string;
       githubUrl: string;
       description: string;
+      purpose: string;
       // Hand-written mirror of the `payload` object above - an inline script is
       // a separate context, so it cannot import InstallTarget. Keep the two in
       // step: this cast still said "deeplink" | "manual" after the config gained
@@ -126,6 +130,19 @@ const payloadJson = JSON.stringify(payload).replace(/</g, "\\u003c");
     };
 
     const tools: WebMcpTool[] = [
+      {
+        name: "describe_product",
+        description:
+          "Explain what this product does, which Gmail permissions it asks for, and how it handles message content. Call this first when asked what the site or app is for.",
+        inputSchema: { type: "object", properties: {} },
+        async execute() {
+          return textResult(data.purpose, {
+            name: data.serverName,
+            purpose: data.purpose,
+            docs_url: data.docsUrl,
+          });
+        },
+      },
       {
         name: "get_mcp_endpoint",
         description:

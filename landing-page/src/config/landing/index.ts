@@ -11,6 +11,7 @@
  * symbol so consumers keep importing from `../config/landing` unchanged.
  */
 export * from "./site";
+export * from "./purpose";
 export * from "./hero";
 export * from "./nav";
 export * from "./connect";

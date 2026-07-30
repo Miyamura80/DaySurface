@@ -57,6 +57,7 @@ No Dockerfile needed - Railpack auto-detects the bun/Node project. Switch `build
 ```
 src/
   config/landing.ts      # ← all copy & content (edit this)
+  config/landing/purpose.ts  # ← "What <product> does" + Gmail permissions (see below)
   styles/global.css      # ← design tokens (@theme)
   layouts/Base.astro     # <head>, meta, OG/Twitter tags
   components/            # one component per page section
@@ -66,4 +67,30 @@ public/favicon.svg
 public/og.png            # ← social-share card (committed, 1200×630)
 ```
 
-Sections, in order: Nav → Hero → TrustStrip → GetStarted → Features → Testimonials → Pricing → AskAi → Faq → FinalCta → Footer.
+Sections, in order: Nav → Hero → Purpose → TrustStrip → GetStarted → Features → Testimonials → Pricing → AskAi → Faq → FinalCta → Footer.
+
+## The purpose block (`src/config/landing/purpose.ts`)
+
+Google's OAuth verification checks that the homepage explains the app's purpose
+and names the app exactly as the OAuth consent screen does. That statement -
+what the product does, which Gmail permissions it asks for, and what happens to
+message content - lives in `purpose.ts` and is rendered verbatim in **six**
+places from that one source:
+
+- `Purpose.astro`, directly under the hero (the human-visible answer);
+- the first two FAQ entries, which also become schema.org `FAQPage` JSON-LD;
+- the `SoftwareApplication` JSON-LD `description` on `/`;
+- `llms.txt`, `llms-full.txt`, `agents.md`, `auth.md`, `skills.sh` and the
+  `?mode=agent` view (all via `src/agent/content.ts`);
+- the WebMCP `describe_product` tool in `WebMcp.astro`.
+
+Two copies live outside this build and don't follow `purpose.ts` automatically:
+
+- `../skills/daysurface/SKILL.md` - the repo-root source of truth for the agent
+  skill. Edit it there, then `make sync-skills` (from the repo root) mirrors it
+  into `public/.well-known/agent-skills/` and refreshes the `digest` in
+  `index.json`. Never hand-edit the mirror; a pre-commit hook fails on drift.
+- `public/.well-known/mcp.json` - hand-maintained; update it in place.
+
+Every claim in this block is a user-facing disclosure - keep it true of the
+shipped OAuth scopes and consistent with `/privacy`.

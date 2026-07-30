@@ -1,0 +1,40 @@
+---
+/*
+ * Plain-language "what this app does" block, rendered directly under the hero.
+ *
+ * Deliberately unstyled-looking prose rather than another card grid: this is
+ * the section a Google OAuth reviewer (and any LLM summarising the page) reads
+ * to learn the app's purpose, the Gmail permissions it requests, and how the
+ * data is handled. The heading names the product with `site.name`, which is the
+ * same string as the OAuth consent screen's app name.
+ *
+ * Copy lives in `src/config/landing/purpose.ts` and is shared verbatim with
+ * every agent surface - do not edit it here.
+ */
+import { purpose } from "../config/landing";
+---
+
+<section
+  id="what-it-does"
+  class="scroll-mt-20 border-t border-border/60 py-14 sm:py-20"
+>
+  <div class="mx-auto max-w-3xl px-4 sm:px-6">
+    <h2 class="text-2xl font-bold tracking-tight sm:text-3xl">
+      {purpose.heading}
+    </h2>
+
+    <p class="mt-5 text-pretty text-base leading-relaxed text-fg-muted sm:text-lg">
+      {purpose.what}
+    </p>
+
+    <p class="mt-4 text-pretty text-base leading-relaxed text-fg-muted sm:text-lg">
+      {purpose.permissions}{" "}
+      {purpose.privacy.lead}{" "}
+      <a
+        href={purpose.privacy.href}
+        class="underline decoration-from-font underline-offset-2 hover:text-fg"
+        >{purpose.privacy.linkText}</a
+      >.
+    </p>
+  </div>
+</section>

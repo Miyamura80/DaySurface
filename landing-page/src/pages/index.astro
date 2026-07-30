@@ -2,6 +2,7 @@
 import Base from "../layouts/Base.astro";
 import Nav from "../components/Nav.astro";
 import Hero from "../components/Hero.astro";
+import Purpose from "../components/Purpose.astro";
 import TrustStrip from "../components/TrustStrip.astro";
 import Features from "../components/Features.astro";
 import Comparison from "../components/Comparison.astro";
@@ -11,20 +12,26 @@ import AskAi from "../components/AskAi.astro";
 import Faq from "../components/Faq.astro";
 import FinalCta from "../components/FinalCta.astro";
 import Footer from "../components/Footer.astro";
-import { site, faq } from "../config/landing";
+import { site, faq, purpose } from "../config/landing";
 import { buildLlmsFullTxt } from "../agent/content";
 
 const origin = (Astro.site ?? new URL(site.url)).origin;
 
 // schema.org structured data (advertised via /schemamap.xml + NLWeb).
+// `description` carries the plain-language purpose statement rather than the
+// marketing meta description: this is the field a crawler or reviewer reads to
+// answer "what does this app do", and it must name the app exactly as the
+// OAuth consent screen does.
 const jsonLd = [
   {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
     name: site.name,
-    description: site.description,
+    description: purpose.what,
+    disambiguatingDescription: purpose.permissions,
     url: site.url,
     applicationCategory: "DeveloperApplication",
+    applicationSubCategory: "Email",
     operatingSystem: "Any",
     offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
     sameAs: [site.githubUrl],
@@ -71,6 +78,7 @@ const agentText = buildLlmsFullTxt(origin);
     <Nav />
     <main>
       <Hero />
+      <Purpose />
       <TrustStrip />
       <Features />
       <Comparison />
