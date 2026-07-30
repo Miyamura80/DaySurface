@@ -7,14 +7,15 @@
  * Accept-Encoding` so CDNs don't cross-serve the HTML and markdown variants.
  * Run with bun: `bun server.ts`. Honors `$PORT`.
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
+import { sep } from "node:path";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import sirv from "sirv";
 
 import { isDocsPath, proxyDocs } from "./docs-proxy.ts";
 
 import { buildAgentsMd, build404Md } from "./src/agent/content.ts";
-import { comparison, connectAliases, site } from "./src/config/landing";
+import { site } from "./src/config/landing";
 
 const PORT = Number(process.env.PORT ?? 8080);
 
@@ -95,25 +96,38 @@ function isCanonical(pathname: string): boolean {
 }
 
 /**
- * HTML routes that have a markdown twin in `dist`, and the file that answers
- * for them. `/` is absent because it is built on the fly from `buildAgentsMd`.
+ * HTML routes that have a markdown twin, discovered by scanning `dist` at boot.
  *
- * The point is that an agent which has already found the page it wants can read
- * it without the surrounding 250KB of Tailwind markup - and without knowing to
- * go back and look for a site-wide index first. Advertised per page as
- * `<link rel="alternate" type="text/markdown">` (see Base.astro).
+ * A route qualifies when the build emitted BOTH `<path>/index.html` and
+ * `<path>.md`. That second condition is what keeps standalone documents out:
+ * `agents.md`, `auth.md` and `llms-full.txt` have no HTML page, so `/agents` is
+ * not a route and must not start answering as one.
+ *
+ * Derived rather than declared. The hand-maintained table this replaces was a
+ * third place - after each page's `markdownPath` prop and the `.md.ts` route
+ * files - that had to agree about which pages have twins, and it pulled two
+ * config imports into the HTTP server purely to rebuild filenames Astro had
+ * just written to disk.
  */
-const MARKDOWN_TWINS: Readonly<Record<string, string>> = {
-  "/connect": "/connect.md",
-  "/pricing": "/pricing.md",
-  "/compare": "/compare.md",
-  "/api": "/api.md",
-  // Every /connect alias answers with the same document its HTML twin shows.
-  ...Object.fromEntries(connectAliases.map((a) => [`/${a}`, "/connect.md"])),
-  ...Object.fromEntries(
-    comparison.competitors.map((c) => [`/vs/${c.id}`, `/vs/${c.id}.md`]),
-  ),
-};
+function discoverMarkdownTwins(root: string): Map<string, string> {
+  const twins = new Map<string, string>();
+  let entries: string[];
+  try {
+    entries = readdirSync(root, { recursive: true, encoding: "utf-8" });
+  } catch {
+    // No build output (e.g. a bare checkout). Static serving 404s anyway.
+    return twins;
+  }
+  const files = new Set(entries.map((e) => e.split(sep).join("/")));
+  for (const file of files) {
+    if (!file.endsWith(".md")) continue;
+    const route = `/${file.slice(0, -".md".length)}`;
+    if (files.has(`${route.slice(1)}/index.html`)) twins.set(route, `/${file}`);
+  }
+  return twins;
+}
+
+const MARKDOWN_TWINS = discoverMarkdownTwins("dist");
 
 /** Strip a trailing slash (but keep the root) so `/connect/` matches `/connect`. */
 function normalize(pathname: string): string {
@@ -154,7 +168,11 @@ function ensureVaryAccept(res: ServerResponse): void {
   }) as typeof res.setHeader;
 }
 
-const server = createServer((req, res) => {
+/**
+ * The request handler, exported so tests can mount it on an ephemeral port
+ * instead of racing for a fixed one (see agent-journey.test.ts).
+ */
+export function handleRequest(req: IncomingMessage, res: ServerResponse): void {
   const method = req.method ?? "GET";
   // Parse the path against a fixed base (the untrusted forwarded host can't
   // affect it, nor crash the handler). On failure leave pathname empty so a
@@ -177,7 +195,7 @@ const server = createServer((req, res) => {
 
   const readable = method === "GET" || method === "HEAD";
   const normalized = normalize(pathname);
-  const twin = MARKDOWN_TWINS[normalized];
+  const twin = MARKDOWN_TWINS.get(normalized);
   const negotiable = readable && (isCanonical(pathname) || twin !== undefined);
 
   if (negotiable && wantsMarkdown(req.headers.accept)) {
@@ -204,7 +222,7 @@ const server = createServer((req, res) => {
   }
 
   assets(req, res, () => notFound(req, res, normalized));
-});
+}
 
 /** Public origin for absolute links, honoring the proxy's forwarded headers. */
 function originOf(req: IncomingMessage): string {
@@ -237,6 +255,11 @@ const NOT_FOUND_HTML: string = (() => {
   try {
     return readFileSync("dist/404.html", "utf-8");
   } catch {
+    // Say so once at boot. Silently degrading every 404 to three lines of HTML
+    // for the life of the process is the kind of fault nobody notices for
+    // months, and the markdown branch keeps passing its tests throughout.
+    // eslint-disable-next-line no-console
+    console.warn("[landing-page] dist/404.html missing - serving a minimal 404 body");
     return `<!doctype html><meta charset="utf-8"><title>Not found</title><h1>No such page</h1><p>See <a href="/connect">/connect</a>.</p>`;
   }
 })();
@@ -259,11 +282,20 @@ function notFound(req: IncomingMessage, res: ServerResponse, pathname: string): 
   res.statusCode = 404;
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.setHeader("Content-Length", String(buf.byteLength));
+  // `Vary: Accept` is required, not optional: this response genuinely differs by
+  // Accept, and without it a CDN could hand the markdown 404 to a browser. The
+  // matching `Cache-Control` is what keeps a probed-and-missing path from
+  // occupying CDN storage under two keys indefinitely.
   res.setHeader("Vary", VARY);
+  res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
   res.end(req.method === "HEAD" ? undefined : buf);
 }
 
-server.listen(PORT, "0.0.0.0", () => {
-  // eslint-disable-next-line no-console
-  console.log(`landing-page serving dist/ on http://0.0.0.0:${PORT}`);
-});
+// Only listen when run directly (`bun server.ts`); importing this module for a
+// test must not bind a port.
+if (import.meta.main) {
+  createServer(handleRequest).listen(PORT, "0.0.0.0", () => {
+    // eslint-disable-next-line no-console
+    console.log(`landing-page serving dist/ on http://0.0.0.0:${PORT}`);
+  });
+}

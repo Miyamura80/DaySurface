@@ -1,7 +1,8 @@
 /**
  * The site-wide agent indexes: llms.txt, llms-full.txt and agents.md.
  */
-import { site, hero, features, faq, compatibility, connect, comparison, connectPage, agentGuide } from "../config/landing";
+import { site, hero, features, faq, compatibility, comparison, connectPage, agentGuide } from "../config/landing";
+import { effortMeta, installMatrix } from "../lib/install";
 import { trimSlash, whenToUseSection } from "./_shared";
 
 /** Concise llms.txt index (see https://llmstxt.org). */
@@ -57,30 +58,38 @@ export function buildLlmsFullTxt(origin: string): string {
   // Per-client connect instructions. Replaces the old three-transports block:
   // an agent needs to know how its host gets wired up, not how the codebase is
   // layered. The CLI/HTTP story survives under "What it is" and on /api.
-  const numbered = (steps?: string[]) =>
+  //
+  // Switches on `effort` rather than re-deriving from method/prefills/setupKind.
+  // Both of the chains this replaced restated the dialog-only rule in their own
+  // words, which is exactly how "ChatGPT is one-click" gets shipped by accident.
+  const numbered = (steps: string[] | null) =>
     (steps ?? []).map((s, i) => `${i + 1}. ${s}`).join("\n");
-  const connectBlock = connect.targets
-    .map((t) => {
+  const connectBlock = installMatrix
+    .map((c) => {
+      const meta = effortMeta[c.effort];
       let how: string;
-      if (t.method === "deeplink" && t.prefills !== false) {
-        how = "One-click install link on the site.";
-      } else if (t.method === "deeplink") {
-        // A deep link that prefills nothing gets the click-path too, but the
-        // steps have to be labelled as the FALLBACK: the link already performs
-        // the first two, so an agent reading them as remaining work would try
-        // to navigate to a dialog that is open in front of it.
-        how =
-          `Install link on the site opens the setup dialog; the fields come up empty, ` +
-          `so paste the server URL there and confirm. If the link is blocked or ` +
-          `unavailable, the full path from scratch is:\n${numbered(t.steps)}`;
-      } else if (t.method === "prompt" && t.setupPrompt) {
-        // Inline the actual text - an agent reading this cannot go and fetch
-        // "the setup prompt from the site".
-        how = `${t.setupKind === "command" ? "Run this in a terminal" : "Paste this into the agent"}:\n\n${t.setupPrompt}`;
-      } else {
-        how = numbered(t.steps);
+      switch (c.effort) {
+        case "one-click":
+          how = "One-click install link on the site.";
+          break;
+        case "dialog-only":
+          // The steps are the REMAINING work here, not a fallback: the link has
+          // opened a dialog that is still empty. An agent reading them as a
+          // fallback would report an install the visitor never completed.
+          how = `Install link on the site opens the setup dialog; the fields come up empty, so paste the server URL there and confirm.\n${meta.stepsLabel}:\n${numbered(c.steps)}`;
+          break;
+        case "command":
+          how = `Run this in a terminal:\n\n${c.setup_prompt}`;
+          break;
+        case "prompt":
+          // Inline the actual text - an agent reading this cannot go and fetch
+          // "the setup prompt from the site".
+          how = c.setup_prompt
+            ? `Paste this into the agent:\n\n${c.setup_prompt}`
+            : numbered(c.steps);
+          break;
       }
-      return `### ${t.name}\n${how}${t.note ? `\n${t.note}` : ""}`;
+      return `### ${c.name}\n${how}${c.note ? `\n${c.note}` : ""}`;
     })
     .join("\n\n");
   const faqBlock = faq.items.map((i) => `### ${i.q}\n${i.a}`).join("\n\n");
@@ -159,23 +168,15 @@ Works with every MCP client, including: ${clients}.
 
 1. Copy the MCP server URL: ${site.mcpUrl}
 2. Add it to your client (server name \`${site.serverName}\`):
-${connect.targets
-  .map((t) => {
-    // Every method needs its own branch. Falling through to `steps` left the
-    // five prompt targets emitting a bare "   - Cline: " with no instructions.
-    if (t.method === "deeplink" && t.prefills !== false)
-      return `   - ${t.name}: one-click install (deep link supported).`;
-    // ChatGPT's deep link only opens the dialog, so it falls through to the
-    // steps below rather than claiming an install the visitor hasn't done.
-    if (t.method === "prompt" && t.setupPrompt) {
-      // A one-line command is worth inlining; the multi-line prompt is not -
-      // it would repeat ~450 chars four times in what is meant to be a quick
-      // reference. The full text is under "Connecting" above, same document.
-      return t.setupKind === "command"
-        ? `   - ${t.name}: run \`${t.setupPrompt}\``
-        : `   - ${t.name}: paste the setup prompt shown under "Connecting" above.`;
-    }
-    return `   - ${t.name}: ${(t.steps ?? []).join(" → ")}`;
+${installMatrix
+  .map((c) => {
+    // A one-line command is worth inlining; the multi-line prompt is not - it
+    // would repeat ~450 chars four times in what is meant to be a quick
+    // reference. The full text is under "Connecting" above, same document.
+    if (c.effort === "command") return `   - ${c.name}: run \`${c.setup_prompt}\``;
+    if (c.effort === "prompt")
+      return `   - ${c.name}: paste the setup prompt shown under "Connecting" above.`;
+    return `   - ${c.name}: ${effortMeta[c.effort].shortHow}`;
   })
   .join("\n")}
 3. Your agent discovers the tools automatically and calls them with typed inputs.

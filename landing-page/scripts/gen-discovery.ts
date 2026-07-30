@@ -22,7 +22,8 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { buildInstallMatrix, serverCard, site } from "../src/config/landing";
+import { serverCard, site } from "../src/config/landing";
+import { installMatrix } from "../src/lib/install";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const publicDir = join(here, "..", "public");
@@ -118,7 +119,7 @@ const install = {
       `No ${site.name} account, signup, or registration is required. Add the MCP ` +
       `endpoint to a client and complete Google OAuth inside that client.`,
   },
-  clients: buildInstallMatrix(),
+  clients: installMatrix,
 };
 
 write(".well-known/mcp/server-card.json", card);

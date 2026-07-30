@@ -162,3 +162,25 @@ export const finalCta: { heading: string; subhead: string; features: string[] } 
     "Open source, self-hostable",
   ],
 };
+
+/**
+ * Copy for the connect page and its markdown twin.
+ *
+ * `noAccount` leads every surface and is the single most load-bearing sentence
+ * on the site for agents: an agent sent to find a signup flow needs the premise
+ * refuted in the first thing it reads, before it starts probing routes. The
+ * words "sign up", "account" and "register" appear here on purpose - they were
+ * absent from the entire site, so an agent searching for them found nothing and
+ * fell back to the GitHub README.
+ */
+export const connectPage = {
+  title: `Connect ${site.name}`,
+  noAccount: `There is no ${site.name} account to create, no signup form, and nothing to install. ${site.name} is a remote MCP server: you add one URL to an MCP client and sign in to Google inside that client.`,
+  agentShortcut: `If you are an agent that can add MCP servers, the endpoint above is the whole job - add it and call \`tools/list\`. Otherwise pick your client below.`,
+  facts: [
+    { label: "Endpoint", value: site.mcpUrl },
+    { label: "Name", value: site.serverName },
+    { label: "Transport", value: "streamable HTTP (remote, not stdio)" },
+    { label: "Auth", value: "OAuth in the browser - no API key to paste" },
+  ],
+} as const;

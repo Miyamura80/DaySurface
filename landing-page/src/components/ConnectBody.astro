@@ -8,7 +8,8 @@
  * truncated it, so it carries no chat mockups, no comparison SVGs and no
  * client-side dropdown - every client's link is in the markup, always visible.
  */
-import { site, connectPage, groupedInstallMatrix } from "../config/landing";
+import { site, connectPage } from "../config/landing";
+import { effortMeta, groupedInstallMatrix } from "../lib/install";
 
 const groups = groupedInstallMatrix();
 ---
@@ -40,6 +41,15 @@ const groups = groupedInstallMatrix();
       groups.map((g) => (
         <section class="mt-10">
           <h2 class="text-2xl font-semibold">{g.heading}</h2>
+          {/* Printed once per group rather than per client: four prompt targets
+              share one ~450-char prompt, and repeating it added ~1.5KB to a page
+              whose whole job is surviving a fetcher's truncation. */}
+          {g.sharedPrompt && (
+            <>
+              <p class="mt-3 text-sm opacity-70">Paste this into any of the clients below:</p>
+              <pre class="mt-2 overflow-x-auto border border-border bg-bg p-3 font-mono text-xs"><code>{g.sharedPrompt}</code></pre>
+            </>
+          )}
           <ul class="mt-4 space-y-6">
             {g.clients.map((c) => (
               <li>
@@ -58,17 +68,13 @@ const groups = groupedInstallMatrix();
                   <pre class="mt-2 overflow-x-auto border border-border bg-bg p-3 font-mono text-xs"><code>{c.setup_prompt}</code></pre>
                 )}
                 {c.note && <p class="mt-2 text-sm opacity-70">{c.note}</p>}
-                {c.setup_prompt && c.setup_kind !== "command" && (
+                {c.setup_prompt && c.setup_kind !== "command" && c.setup_prompt !== g.sharedPrompt && (
                   <pre class="mt-2 overflow-x-auto border border-border bg-bg p-3 font-mono text-xs"><code>{c.setup_prompt}</code></pre>
                 )}
                 {c.steps && c.steps.length > 0 && (
                   <details class="mt-2">
                     <summary class="min-h-11 cursor-pointer py-2 text-sm opacity-70">
-                      {/* A dialog-only link has genuinely not done the work yet,
-                          so its steps are the remaining job, not a fallback. */}
-                      {c.effort === "dialog-only"
-                        ? "Then, in the dialog the link opens"
-                        : "If the link does not work"}
+                      {effortMeta[c.effort].stepsLabel}
                     </summary>
                     <ol class="mt-2 list-decimal space-y-1 pl-6 text-sm opacity-80">
                       {c.steps.map((s) => (

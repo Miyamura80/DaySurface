@@ -4,7 +4,8 @@
  * account" - which is the one an agent asks first and the site could not
  * previously answer at all.
  */
-import { site, connectPage, groupedInstallMatrix, type InstallClient } from "../config/landing";
+import { site, connectPage } from "../config/landing";
+import { effortMeta, groupedInstallMatrix, type InstallClient } from "../lib/install";
 import { trimSlash, indent } from "./_shared";
 
 /**
@@ -21,13 +22,10 @@ function factsBlock(): string {
 /**
  * One client's entry in the connect matrix.
  *
- * `sharedPrompt` is the setup prompt already printed once at the group level;
- * a client carrying that same text omits its own copy. Four prompt targets
- * share one ~450-char prompt, and repeating it inflated the document by a
- * third - in a file whose whole purpose is to stay under a fetcher's
- * truncation limit.
+ * `sharedPrompt` is the group's setup prompt, already printed once above the
+ * list; a client carrying that same text omits its own copy.
  */
-function clientEntry(c: InstallClient, sharedPrompt?: string | null): string {
+function clientEntry(c: InstallClient, sharedPrompt: string | null): string {
   const lines: string[] = [];
   if (c.install_url) {
     lines.push(`- **${c.name}** - ${c.install_url}`);
@@ -42,25 +40,11 @@ function clientEntry(c: InstallClient, sharedPrompt?: string | null): string {
   if (c.setup_prompt && c.setup_kind !== "command" && c.setup_prompt !== sharedPrompt) {
     lines.push("", indent("```"), indent(c.setup_prompt), indent("```"));
   }
-  // Deep links carry their click-path as a FALLBACK; a `dialog-only` link has
-  // genuinely not done the work yet, so the steps are the remaining job. Label
-  // which, or an agent reports an install that never happened.
   if (c.steps?.length) {
-    const label =
-      c.effort === "dialog-only"
-        ? "  Then, in the dialog the link opens:"
-        : "  If the link does not work:";
-    lines.push("", label);
+    lines.push("", `  ${effortMeta[c.effort].stepsLabel}:`);
     lines.push(...c.steps.map((s, i) => `  ${i + 1}. ${s}`));
   }
   return lines.join("\n");
-}
-
-/** The setup prompt every client in a group shares, or null if they differ. */
-function sharedPromptOf(clients: InstallClient[]): string | null {
-  const first = clients[0]?.setup_prompt;
-  if (!first || clients.length < 2) return null;
-  return clients.every((c) => c.setup_prompt === first) ? first : null;
 }
 
 /**
@@ -77,9 +61,10 @@ export function buildConnectMd(origin: string): string {
   const o = trimSlash(origin);
   const groups = groupedInstallMatrix()
     .map((g) => {
-      const shared = sharedPromptOf(g.clients);
-      const preamble = shared ? `Paste this into any of the clients below:\n\n\`\`\`\n${shared}\n\`\`\`\n\n` : "";
-      const body = g.clients.map((c) => clientEntry(c, shared)).join("\n\n");
+      const preamble = g.sharedPrompt
+        ? `Paste this into any of the clients below:\n\n\`\`\`\n${g.sharedPrompt}\n\`\`\`\n\n`
+        : "";
+      const body = g.clients.map((c) => clientEntry(c, g.sharedPrompt)).join("\n\n");
       return `## ${g.heading}\n\n${preamble}${body}`;
     })
     .join("\n\n");

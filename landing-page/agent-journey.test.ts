@@ -20,35 +20,28 @@
  */
 import { describe, expect, test, beforeAll, afterAll } from "bun:test";
 import { existsSync } from "node:fs";
-import type { Subprocess } from "bun";
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 
-const PORT = 8123;
-const BASE = `http://127.0.0.1:${PORT}`;
+import { handleRequest } from "./server.ts";
+import { connectAliases } from "./src/config/landing";
 
-let server: Subprocess;
+// Mount the real handler on an ephemeral port rather than spawning `bun
+// server.ts` on a fixed one: a fixed port races in parallel CI, and a subprocess
+// that dies on boot surfaces only as a timeout with its stderr discarded.
+let server: Server;
+let BASE: string;
 
 beforeAll(async () => {
   if (!existsSync("dist/index.html")) {
     throw new Error("dist/ is missing - run `bun run build` before `bun test`");
   }
-  server = Bun.spawn(["bun", "server.ts"], {
-    env: { ...process.env, PORT: String(PORT) },
-    stdout: "ignore",
-    stderr: "ignore",
-  });
-  // Poll rather than sleep a fixed interval, so a slow machine doesn't flake.
-  for (let i = 0; i < 100; i++) {
-    try {
-      await fetch(`${BASE}/`);
-      return;
-    } catch {
-      await Bun.sleep(50);
-    }
-  }
-  throw new Error("server did not start");
+  server = createServer(handleRequest);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  BASE = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 });
 
-afterAll(() => server?.kill());
+afterAll(() => server?.close());
 
 const md = { Accept: "text/markdown" };
 
@@ -74,7 +67,10 @@ describe("unknown paths 404", () => {
 });
 
 describe("intent aliases answer the signup question", () => {
-  const aliases = ["/signup", "/sign-up", "/register", "/login", "/get-started", "/account"];
+  // Every alias, not a sample. This is also the guard against an alias that
+  // collides with a real page (`api`, `compare`, `pricing`): Astro would let the
+  // static route win and the alias would silently serve something else.
+  const aliases = connectAliases.map((a) => `/${a}`);
 
   test.each(aliases)("%s serves the connect content at a 200", async (path) => {
     const res = await fetch(`${BASE}${path}`);
@@ -99,6 +95,22 @@ describe("intent aliases answer the signup question", () => {
       return body.match(/rel="canonical" href="([^"]+)"/)?.[1];
     };
     expect(await canonicalOf("/signup")).toBe((await canonicalOf("/connect")) as string);
+  });
+
+  test("/connect itself is indexable; only the aliases are not", async () => {
+    const connect = await (await fetch(`${BASE}/connect`)).text();
+    expect(connect).not.toContain('name="robots"');
+  });
+
+  test("the shared setup prompt is printed once per group, not per client", async () => {
+    // Four prompt targets share one ~450-char prompt. Repeating it inflated
+    // connect.md by a third and /connect by ~1.5KB - on the two surfaces whose
+    // whole purpose is surviving a fetcher's truncation.
+    const marker = "Use THIS client's own config keys";
+    const markdown = await (await fetch(`${BASE}/connect.md`)).text();
+    expect(markdown.split(marker).length - 1).toBe(1);
+    const html = await (await fetch(`${BASE}/connect`)).text();
+    expect(html.split("Use THIS client&#39;s own config keys").length - 1).toBe(1);
   });
 
   test("/signup carries EVERY client's install path, not just one", async () => {
@@ -186,7 +198,7 @@ describe("payload budgets", () => {
 
   test("the connect answer is small enough to survive truncation", async () => {
     const html = await (await fetch(`${BASE}/connect`)).text();
-    expect(html.length).toBeLessThan(60_000);
+    expect(html.length).toBeLessThan(30_000);
     const markdown = await (await fetch(`${BASE}/connect.md`)).text();
     expect(markdown.length).toBeLessThan(10_000);
   });
@@ -208,6 +220,18 @@ describe("discovery documents", () => {
     expect(oneClick.every((c) => Boolean(c.install_url))).toBe(true);
     // ChatGPT opens an empty dialog - it must never be classified one-click.
     expect(doc.clients.find((c) => c.id === "chatgpt")?.effort).toBe("dialog-only");
+  });
+
+  test("no route answers markdown unless it also has an HTML page", async () => {
+    // The twin table is derived by scanning dist. A bare `agents.md` with no
+    // `agents/index.html` must not make /agents into a route.
+    for (const path of ["/agents", "/auth", "/llms-full"]) {
+      const res = await fetch(`${BASE}${path}`, { headers: md });
+      expect(res.status).toBe(404);
+    }
+    // ...while the real documents stay reachable at their own URLs.
+    expect((await fetch(`${BASE}/agents.md`)).status).toBe(200);
+    expect((await fetch(`${BASE}/auth.md`)).status).toBe(200);
   });
 
   test("robots.txt no longer advertises an /ask endpoint this origin lacks", async () => {
