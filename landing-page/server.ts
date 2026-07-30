@@ -137,9 +137,21 @@ const server = createServer((req, res) => {
   // the SPA fallback would answer every docs URL with the landing page at a
   // 200 instead of proxying it.
   if (isDocsPath(pathname)) {
-    // proxyDocs never rejects - it reports failures on `res` itself. An escaping
-    // rejection here would kill the process serving the whole marketing site.
-    void proxyDocs(req, res);
+    // proxyDocs never rejects - it reports failures on `res` itself. The
+    // `.catch` is belt-and-braces: an escaping rejection here would be an
+    // unhandled rejection, which kills the process serving the whole marketing
+    // site, so the guarantee is enforced at the call site too rather than only
+    // documented at the callee.
+    void proxyDocs(req, res).catch((error) => {
+      console.error("[landing-page] docs proxy escaped its own handler:", error);
+      if (!res.headersSent) {
+        res.statusCode = 502;
+        res.setHeader("Content-Type", "text/plain; charset=utf-8");
+        res.end("Docs are temporarily unavailable.");
+      } else {
+        res.destroy();
+      }
+    });
     return;
   }
 

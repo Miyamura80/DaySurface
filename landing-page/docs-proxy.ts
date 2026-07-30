@@ -108,16 +108,51 @@ function fail(res: ServerResponse, status: number, message: string): void {
 }
 
 /**
+ * Response headers the proxy must generate itself rather than copy.
+ *
+ * `Date` is the one that matters. It is a singleton field (RFC 9110 §5.3), and
+ * our own http server always emits one, so forwarding the upstream's copy risks
+ * sending it twice. Under Bun that is not a risk but a certainty: `setHeader`
+ * only suppresses the auto-generated `Date` when `date` is assigned *before*
+ * `content-length`, and `Headers` iteration is alphabetical, so a response
+ * carrying both - i.e. every ordinary Next.js response - always assigns them in
+ * the losing order. A duplicate singleton makes the whole response malformed,
+ * which Cloudflare rejects at the edge: it discards the origin response and
+ * serves its own bare `error code: 502` instead. That failure is invisible from
+ * here, because as far as this process is concerned the proxy succeeded.
+ */
+const PROXY_GENERATED = new Set(["date"]);
+
+/**
  * Proxy one request to the docs service.
  *
  * Never rejects: the caller is an http handler with nowhere to put an error,
  * and an unhandled rejection here would kill the process serving the whole
- * marketing site.
+ * marketing site. Everything - including building the upstream request - runs
+ * inside the try for that reason: one malformed inbound header must not be able
+ * to take down the process serving the entire domain.
  */
 export async function proxyDocs(
   req: IncomingMessage,
   res: ServerResponse,
 ): Promise<void> {
+  try {
+    await forward(req, res);
+  } catch (error) {
+    // Defensive boundary: the docs service is a separate deployment that can be
+    // restarting, unreachable, or cut mid-body. Nothing here may escape - this
+    // process is the public entry point for the entire domain.
+    console.error("[landing-page] docs proxy failed:", error);
+    fail(res, 502, "Docs are temporarily unavailable.");
+  }
+}
+
+/**
+ * The proxy itself. Free to throw - `proxyDocs` is the only caller and owns the
+ * failure response, which keeps every step of the forward inside one boundary
+ * instead of leaving the request-building phase uncovered.
+ */
+async function forward(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const upstreamOrigin = docsUpstream();
   if (!upstreamOrigin) {
     fail(res, 503, "Docs are temporarily unavailable.");
@@ -129,83 +164,85 @@ export async function proxyDocs(
     if (value === undefined || HOP_BY_HOP.has(key.toLowerCase())) continue;
     headers.set(key, Array.isArray(value) ? value.join(", ") : value);
   }
-  // Ask the upstream for identity encoding. fetch transparently decompresses,
-  // so a compressed upstream response would leave `content-encoding` and
-  // `content-length` describing bytes we no longer hold - forcing us to strip
-  // both and buffer the body to recompute the length. Declining compression on
-  // this private hop lets the response stream through untouched instead.
+  // Ask the upstream for identity encoding. fetch transparently decompresses, so
+  // a compressed upstream response leaves `content-encoding` and
+  // `content-length` describing bytes we no longer hold. Declining compression
+  // on this private hop lets the response stream through with both intact and
+  // its length preserved; the copy loop below still strips them if the upstream
+  // compresses anyway, since we cannot assume it honors this.
   headers.set("accept-encoding", "identity");
 
   const method = req.method ?? "GET";
   const hasBody = method !== "GET" && method !== "HEAD";
 
-  try {
-    const upstream = await fetch(`${upstreamOrigin}${req.url ?? "/"}`, {
-      method,
-      headers,
-      // Node's `stream/web` ReadableStream and the global one are structurally
-      // distinct under these lib types even though they are the same object at
-      // runtime, so this has to launder through `unknown`.
-      body: hasBody
-        ? (Readable.toWeb(req) as unknown as ReadableStream)
-        : undefined,
-      // Required by undici whenever a streaming body is sent.
-      ...(hasBody ? { duplex: "half" } : {}),
-      // Pass 3xx through to the browser: the docs app redirects for locale
-      // normalization, and the address bar must agree with the canonical URL.
-      redirect: "manual",
-      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
-    } as RequestInit);
+  const upstream = await fetch(`${upstreamOrigin}${req.url ?? "/"}`, {
+    method,
+    headers,
+    // Node's `stream/web` ReadableStream and the global one are structurally
+    // distinct under these lib types even though they are the same object at
+    // runtime, so this has to launder through `unknown`.
+    body: hasBody
+      ? (Readable.toWeb(req) as unknown as ReadableStream)
+      : undefined,
+    // Required by undici whenever a streaming body is sent.
+    ...(hasBody ? { duplex: "half" } : {}),
+    // Pass 3xx through to the browser: the docs app redirects for locale
+    // normalization, and the address bar must agree with the canonical URL.
+    redirect: "manual",
+    signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+  } as RequestInit);
 
-    res.statusCode = upstream.status;
-    upstream.headers.forEach((value, key) => {
-      // `Set-Cookie` is the one header that legitimately repeats; it is copied
-      // separately below because `setHeader` would overwrite each prior value.
-      if (HOP_BY_HOP.has(key.toLowerCase()) || key.toLowerCase() === "set-cookie") {
-        return;
-      }
-      res.setHeader(key, value);
-    });
-    const cookies = upstream.headers.getSetCookie();
-    if (cookies.length > 0) res.setHeader("set-cookie", cookies);
-
-    if (method === "HEAD" || !upstream.body) {
-      // Release the upstream connection rather than leaving the body dangling.
-      await upstream.body?.cancel();
-      res.end();
+  res.statusCode = upstream.status;
+  // `fetch` decompresses transparently but leaves the headers that described
+  // the compressed bytes in place. If the upstream ignored our `identity`
+  // request, `content-encoding` and `content-length` both now describe a body
+  // we no longer hold, and forwarding either yields a response the client
+  // cannot decode. Drop both and let the body stream out chunked.
+  const wasDecompressed = upstream.headers.has("content-encoding");
+  upstream.headers.forEach((value, key) => {
+    const name = key.toLowerCase();
+    // `Set-Cookie` is the one header that legitimately repeats; it is copied
+    // separately below because `setHeader` would overwrite each prior value.
+    if (HOP_BY_HOP.has(name) || name === "set-cookie") return;
+    if (PROXY_GENERATED.has(name)) return;
+    if (wasDecompressed && (name === "content-encoding" || name === "content-length")) {
       return;
     }
+    res.setHeader(key, value);
+  });
+  const cookies = upstream.headers.getSetCookie();
+  if (cookies.length > 0) res.setHeader("set-cookie", cookies);
 
-    // Stream rather than buffer: `_next` chunks and OG images would otherwise
-    // sit in memory in full, and time-to-first-byte would wait on the last byte.
-    await new Promise<void>((resolve, reject) => {
-      const body = Readable.fromWeb(upstream.body as never);
-      const done = (err?: Error) => {
-        body.off("error", done);
-        res.off("error", done);
-        res.off("finish", onFinish);
-        res.off("close", onClose);
-        if (err) reject(err);
-        else resolve();
-      };
-      const onFinish = () => done();
-      const onClose = () => {
-        // If the client went away before the response finished, stop pulling
-        // bytes we can no longer deliver instead of draining the upstream.
-        if (!res.writableFinished) body.destroy();
-        done();
-      };
-      body.once("error", done);
-      res.once("error", done);
-      res.once("finish", onFinish);
-      res.once("close", onClose);
-      body.pipe(res);
-    });
-  } catch (error) {
-    // Defensive boundary: the docs service is a separate deployment that can be
-    // restarting, unreachable, or cut mid-body. Nothing here may escape - this
-    // process is the public entry point for the entire domain.
-    console.error("[landing-page] docs proxy failed:", error);
-    fail(res, 502, "Docs are temporarily unavailable.");
+  if (method === "HEAD" || !upstream.body) {
+    // Release the upstream connection rather than leaving the body dangling.
+    await upstream.body?.cancel();
+    res.end();
+    return;
   }
+
+  // Stream rather than buffer: `_next` chunks and OG images would otherwise
+  // sit in memory in full, and time-to-first-byte would wait on the last byte.
+  await new Promise<void>((resolve, reject) => {
+    const body = Readable.fromWeb(upstream.body as never);
+    const done = (err?: Error) => {
+      body.off("error", done);
+      res.off("error", done);
+      res.off("finish", onFinish);
+      res.off("close", onClose);
+      if (err) reject(err);
+      else resolve();
+    };
+    const onFinish = () => done();
+    const onClose = () => {
+      // If the client went away before the response finished, stop pulling
+      // bytes we can no longer deliver instead of draining the upstream.
+      if (!res.writableFinished) body.destroy();
+      done();
+    };
+    body.once("error", done);
+    res.once("error", done);
+    res.once("finish", onFinish);
+    res.once("close", onClose);
+    body.pipe(res);
+  });
 }
