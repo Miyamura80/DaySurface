@@ -167,17 +167,32 @@ function normalize(pathname: string): string {
  * self-hosted mirror) set `PUBLIC_ORIGIN` explicitly rather than having it
  * inferred from whatever arrives on the wire.
  */
-const PUBLIC_ORIGIN: string = (() => {
-  const configured = process.env.PUBLIC_ORIGIN?.trim();
-  if (!configured) return new URL(site.url).origin;
+export function resolvePublicOrigin(configured: string | undefined): string {
+  const fallback = new URL(site.url).origin;
+  if (!configured?.trim()) return fallback;
+  configured = configured.trim();
   try {
-    return new URL(configured).origin;
+    const parsed = new URL(configured);
+    // Parsing is not enough. `new URL("mailto:x").origin` is the *string*
+    // "null" and ftp:// yields "ftp://host", either of which would sail through
+    // a try/catch and turn every generated link into `null/connect`. Only a
+    // web origin can prefix the absolute URLs these documents hand to agents.
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[landing-page] PUBLIC_ORIGIN must be http(s) (got ${configured}) - using ${fallback}`,
+      );
+      return fallback;
+    }
+    return parsed.origin;
   } catch {
     // eslint-disable-next-line no-console
-    console.warn(`[landing-page] PUBLIC_ORIGIN is not a valid URL (${configured}) - using ${site.url}`);
-    return new URL(site.url).origin;
+    console.warn(`[landing-page] PUBLIC_ORIGIN is not a valid URL (${configured}) - using ${fallback}`);
+    return fallback;
   }
-})();
+}
+
+const PUBLIC_ORIGIN: string = resolvePublicOrigin(process.env.PUBLIC_ORIGIN);
 
 const VARY = "Accept, Accept-Encoding";
 
@@ -242,8 +257,10 @@ export function handleRequest(req: IncomingMessage, res: ServerResponse): void {
       assets(req, res, () => notFound(req, res, normalized));
       return;
     }
-    // `/` has no file twin - its markdown is the agent guide, built per request
-    // so the absolute links carry the forwarded host.
+    // `/` has no file twin - its markdown is the agent guide, generated here.
+    // Its absolute links use the fixed PUBLIC_ORIGIN, never anything off the
+    // request, which is what makes this body identical for every caller and so
+    // safe to cache under the `Vary` above.
     sendMarkdown(req, res, buildAgentsMd(PUBLIC_ORIGIN), 200);
     return;
   }

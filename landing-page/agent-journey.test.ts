@@ -23,7 +23,7 @@ import { existsSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 
-import { handleRequest } from "./server.ts";
+import { handleRequest, resolvePublicOrigin } from "./server.ts";
 import { connectAliases } from "./src/config/landing";
 
 // Mount the real handler on an ephemeral port rather than spawning `bun
@@ -206,6 +206,38 @@ describe("indexing controls", () => {
     expect(res.headers.get("x-robots-tag")).toBe("noindex, follow");
     expect((await fetch(`${BASE}/connect`, { headers: md })).headers.get("x-robots-tag"))
       .toBeNull();
+  });
+});
+
+describe("PUBLIC_ORIGIN resolution", () => {
+  const CANONICAL = "https://daysurface.com";
+
+  test.each([
+    // Unset / blank falls back to the canonical origin.
+    [undefined, CANONICAL],
+    ["", CANONICAL],
+    ["   ", CANONICAL],
+    // A real web origin is honoured, path and query stripped.
+    ["https://preview.example.com", "https://preview.example.com"],
+    ["http://localhost:8080/ignored?x=1", "http://localhost:8080"],
+    ["  https://spaced.example.com  ", "https://spaced.example.com"],
+    // Parsing alone is not enough: these all parse. `new URL("mailto:x").origin`
+    // is the literal string "null", which would render every generated link as
+    // `null/connect`; ftp:// yields a non-web origin just as unusable.
+    ["mailto:hi@example.com", CANONICAL],
+    ["javascript:alert(1)", CANONICAL],
+    ["ftp://files.example.com", CANONICAL],
+    ["file:///etc/passwd", CANONICAL],
+    // Unparseable.
+    ["not a url", CANONICAL],
+  ])("%s -> %s", (configured, expected) => {
+    expect(resolvePublicOrigin(configured as string | undefined)).toBe(expected);
+  });
+
+  test("never returns the string 'null' as an origin", () => {
+    for (const bad of ["mailto:x@y.z", "javascript:1", "data:text/plain,hi"]) {
+      expect(resolvePublicOrigin(bad)).not.toContain("null");
+    }
   });
 });
 
