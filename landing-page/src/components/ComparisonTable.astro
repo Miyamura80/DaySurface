@@ -5,6 +5,7 @@
  * show as columns - the /compare hub passes all of them, each /vs page passes
  * just one.
  */
+import { readFileSync } from "node:fs";
 import type { Competitor, MatrixRow, MatrixCell } from "../config/landing";
 import { comparison } from "../config/landing";
 
@@ -22,6 +23,36 @@ const MARK: Record<MatrixCell["state"], { glyph: string; cls: string; label: str
   partial: { glyph: "~", cls: "text-fg-muted", label: "Partial" },
   no: { glyph: "–", cls: "text-fg-subtle", label: "No" },
 };
+
+/*
+ * A masked span has no intrinsic size, so the aspect ratio has to come from the
+ * file or a wordmark gets squeezed into a square (Zapier's is ~3:1). Read it at
+ * build time rather than duplicating it in config, where it would silently rot
+ * the next time a mark is replaced. PNG keeps width/height as big-endian uint32
+ * at bytes 16 and 20; the .svg marks here are square.
+ *
+ * Memoised at module scope: the same mark is read once per build rather than
+ * once per column per page. Deliberately no try/catch - a missing or malformed
+ * mark should fail the build, not ship a silently squashed logo.
+ */
+const ASPECTS = new Map<string, number>();
+
+const aspect = (file: string): number => {
+  const cached = ASPECTS.get(file);
+  if (cached !== undefined) return cached;
+  let value = 1;
+  if (file.endsWith(".png")) {
+    const buf = readFileSync(new URL(`../../public/logos/${file}`, import.meta.url));
+    value = buf.readUInt32BE(16) / buf.readUInt32BE(20);
+  }
+  ASPECTS.set(file, value);
+  return value;
+};
+
+const maskStyle = (file: string) =>
+  `aspect-ratio:${aspect(file).toFixed(3)};` +
+  `-webkit-mask:url('/logos/${file}') center/contain no-repeat;` +
+  `mask:url('/logos/${file}') center/contain no-repeat;`;
 ---
 
 <div class="-mx-4 overflow-x-auto overscroll-x-contain px-4 sm:mx-0 sm:px-0" tabindex="0" role="region" aria-label="Capability comparison, scrollable">
@@ -38,9 +69,28 @@ const MARK: Record<MatrixCell["state"], { glyph: string; cls: string; label: str
           DaySurface
         </th>
         {
+          /*
+           * The mark sits above the name rather than inline: these columns are
+           * narrow enough that most names already wrap to two lines, and an
+           * inline icon would tighten the wrap further. `align-bottom` on the
+           * th keeps every name on a common baseline whether or not its column
+           * has a mark. Masked (not <img>) so the silhouette takes the link's
+           * colour and lifts to white on hover with the text.
+           */
           competitors.map((c) => (
             <th scope="col" class="px-4 py-4 align-bottom text-sm font-semibold text-fg-muted">
-              <a href={`/vs/${c.id}`} class="transition hover:text-fg">
+              <a href={`/vs/${c.id}`} class="block transition hover:text-fg">
+                {c.logos && c.logos.length > 0 && (
+                  <span class="mb-2 flex items-center gap-2.5">
+                    {c.logos.map((file) => (
+                      <span
+                        class="block h-5 bg-current"
+                        style={maskStyle(file)}
+                        aria-hidden="true"
+                      />
+                    ))}
+                  </span>
+                )}
                 {c.name}
               </a>
             </th>
