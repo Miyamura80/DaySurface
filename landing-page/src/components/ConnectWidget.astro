@@ -6,16 +6,18 @@
  * steps (Claude / ChatGPT). Deep links are built here at build time so no
  * client JS has to know the encoding rules.
  */
-import { connect, site } from "../config/landing";
-import { deepLink } from "../utils/deeplink";
+import { connect, buildInstallMatrix } from "../config/landing";
 
-const { mcpUrl, serverName, defaultId, targets } = connect;
+const { mcpUrl, defaultId, targets } = connect;
 
-// site.name is the human-facing label a client shows in its install dialog
-// (Claude's connectorName field); serverName is the machine-readable key.
+// Install URLs come from the shared matrix (config/landing/install.ts) rather
+// than a local deepLink() call, so this widget, WebMcp.astro, /connect and
+// /.well-known/mcp/install.json cannot disagree about what the link is. `logo`
+// stays on `targets` - it is presentation, and the matrix is the agent contract.
+const installUrlById = new Map(buildInstallMatrix().map((c) => [c.id, c.install_url]));
 const enriched = targets.map((t) => ({
   ...t,
-  href: deepLink(t.id, mcpUrl, serverName, site.name),
+  href: installUrlById.get(t.id) ?? null,
 }));
 const selected = enriched.find((t) => t.id === defaultId) ?? enriched[0];
 ---

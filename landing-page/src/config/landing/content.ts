@@ -99,6 +99,15 @@ export const askAi: {
 export const faq: { heading: string; items: FaqItem[] } = {
   heading: "Frequently asked questions",
   items: [
+    // First, and phrased in the words people (and agents acting for them)
+    // actually search: "sign up", "account", "register". None of those strings
+    // appeared anywhere on the site, so an agent asked to create an account
+    // found nothing here and fell back to the GitHub README to learn that no
+    // signup exists. This entry also feeds the FAQPage JSON-LD.
+    {
+      q: "Do I need to sign up or create an account?",
+      a: "No. There is no DaySurface account, no signup form, and no registration step. DaySurface is a remote MCP server: you add its URL to an MCP client (Claude, ChatGPT, Cursor, VS Code, Goose, or any other) and sign in to Google inside that client. Per-client install links are at /connect.",
+    },
     {
       q: "Which MCP clients are supported?",
       a: "Any client that speaks the Model Context Protocol: Claude Desktop, Claude Code, Cursor, Cline, VS Code, Windsurf, and more. The server exposes a standard tool/resource surface.",
@@ -129,7 +138,7 @@ export const faq: { heading: string; items: FaqItem[] } = {
     },
     {
       q: "Is there an /ask (NLWeb) endpoint?",
-      a: "Yes. There's a public, NLWeb-conformant /ask endpoint for natural-language questions answered from the docs (server-side Q&A with SSE streaming). It's distinct from the /mcp action-tool surface, which exposes callable tools. /ask is disabled by default; enable it via config (ask.enabled: true).",
+      a: "The server ships an NLWeb-conformant /ask endpoint for natural-language questions answered from the docs (server-side Q&A with SSE streaming), distinct from the /mcp action-tool surface that exposes callable tools. It is disabled by default and currently off on the hosted service - enable it on your own deployment with ask.enabled: true.",
     },
     {
       q: "Is this just another Gmail API wrapper?",

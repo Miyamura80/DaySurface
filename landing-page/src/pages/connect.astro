@@ -1,0 +1,22 @@
+---
+/*
+ * /connect - the canonical answer to "how do I sign up / get started".
+ *
+ * The same content is served at every intent alias (/signup, /login, /account,
+ * ...) by `[intent].astro`. Those URLs used to be answered by the SPA fallback
+ * with a 200 and the 272KB homepage, which is indistinguishable from a real
+ * page: an agent sent to find a signup flow probed them, got byte-identical
+ * HTML each time, and concluded the site was client-rendered and unreadable.
+ */
+import Base from "../layouts/Base.astro";
+import ConnectBody from "../components/ConnectBody.astro";
+import { site, connectPage } from "../config/landing";
+---
+
+<Base
+  title={`Connect ${site.name} - no account needed`}
+  description={connectPage.noAccount}
+  markdownPath="/connect.md"
+>
+  <ConnectBody />
+</Base>

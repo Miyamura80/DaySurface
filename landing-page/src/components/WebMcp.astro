@@ -18,12 +18,14 @@
  * assuming one shape. Re-verify against the current spec before extending.
  *
  * Every tool is sourced from `src/config/landing.ts` (the same single source of
- * truth the visible UI uses), so there's no duplicated copy to drift. Install
- * deep links are rebuilt here at build time, mirroring ConnectWidget.astro.
+ * truth the visible UI uses), so there's no duplicated copy to drift. The
+ * install matrix comes from `config/landing/install.ts`, shared with the
+ * connect page, its markdown twin and `/.well-known/mcp/install.json` - this
+ * component used to build its own copy, and hand-rolling `deepLink` here
+ * silently passed `serverName` where the visible UI passes `site.name`, so
+ * agents were handed a lowercased `daysurface` as the connector label.
  */
-import { site, connect, faq } from "../config/landing";
-// Shared with ConnectWidget.astro so install URL formats can't drift.
-import { deepLink } from "../utils/deeplink";
+import { site, faq, buildInstallMatrix } from "../config/landing";
 
 // Build-time payload the client script reads to register tools. Sourced
 // entirely from config so the agent-facing tools and the visible UI never drift.
@@ -33,23 +35,7 @@ const payload = {
   docsUrl: site.docsUrl,
   githubUrl: site.githubUrl,
   description: site.description,
-  clients: connect.targets.map((t) => ({
-    id: t.id,
-    name: t.name,
-    method: t.method,
-    install_url: t.method === "deeplink" ? deepLink(t.id, site.mcpUrl, site.serverName) : null,
-    // Whether that install_url arrives with the fields filled in. ChatGPT's
-    // does not, and an agent told "one-click install" would report the job
-    // finished while the dialog on screen is still empty.
-    prefills: t.method === "deeplink" ? t.prefills !== false : null,
-    steps: t.steps ?? null,
-    // Prompt targets carry their setup text here; without it an agent asking
-    // get_install_instructions for Claude Code / Cline / Zed / Windsurf gets a
-    // bare URL and nothing to act on.
-    setup_prompt: t.setupPrompt ?? null,
-    setup_kind: t.setupKind ?? null,
-    note: t.note ?? null,
-  })),
+  clients: buildInstallMatrix(),
   faqs: faq.items.map((f) => ({ q: f.q, a: f.a })),
 };
 
@@ -107,14 +93,16 @@ const payloadJson = JSON.stringify(payload).replace(/</g, "\\u003c");
       docsUrl: string;
       githubUrl: string;
       description: string;
-      // Hand-written mirror of the `payload` object above - an inline script is
-      // a separate context, so it cannot import InstallTarget. Keep the two in
-      // step: this cast still said "deeplink" | "manual" after the config gained
-      // a third method, and nothing caught it until a consumer touched it.
+      // Hand-written mirror of `InstallClient` (config/landing/install.ts) - an
+      // inline script is a separate context, so it cannot import the type. Keep
+      // the two in step: this cast still said "deeplink" | "manual" after the
+      // config gained a third method, and nothing caught it until a consumer
+      // touched it.
       clients: {
         id: string;
         name: string;
         method: "deeplink" | "manual" | "prompt";
+        effort: "one-click" | "command" | "dialog-only" | "prompt" | "manual";
         install_url: string | null;
         prefills: boolean | null;
         steps: string[] | null;

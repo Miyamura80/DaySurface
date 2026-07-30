@@ -34,7 +34,11 @@ export const nav: {
     label: "Open source",
     title: "Open source & self-hostable, view on GitHub",
   },
-  cta: { label: "Get started", href: "/#connect" },
+  // Points at the /connect page rather than the homepage's #connect anchor: a
+  // fragment is invisible to anything that fetches rather than renders, so an
+  // agent following the primary CTA used to be handed the whole 272KB homepage
+  // instead of the install instructions. Humans land on the same content.
+  cta: { label: "Get started", href: "/connect" },
 };
 
 export const footer: { columns: FooterColumn[]; copyright: string } = {
@@ -42,6 +46,7 @@ export const footer: { columns: FooterColumn[]; copyright: string } = {
     {
       heading: "Product",
       links: [
+        { label: "Get started", href: "/connect" },
         { label: "Features", href: "/#features" },
         { label: "Compare", href: "/compare" },
         // The /pricing page only ships when pricing.enabled - don't link a dead route otherwise.

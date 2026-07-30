@@ -44,7 +44,11 @@ Sitemap: ${origin}/docs/sitemap.xml
 
 # NLWeb / Schema Map feed of structured (schema.org) data
 Schemamap: ${origin}/schemamap.xml
-# NLWeb ask endpoint: ${origin}/ask
+# No NLWeb /ask endpoint is advertised here. The server ships one
+# (api_server/routes/ask.py) but it is disabled by default and off on the hosted
+# service, and this apex never served it at all - the line that used to point
+# here sent agents to the SPA fallback, i.e. 272KB of homepage at a 200. Restore
+# it only once /ask actually answers on this origin.
 
 # LLM-friendly documentation
 # llms.txt: ${origin}/llms.txt

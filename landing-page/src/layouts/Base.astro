@@ -11,13 +11,29 @@ interface Props {
   image?: string;
   /** Alt text describing the share image (accessibility + some crawlers). */
   imageAlt?: string;
+  /**
+   * Root-relative path to canonicalise to, when this URL is an alias for
+   * another page. Used by the `/connect` intent aliases (/signup, /login, ...),
+   * which all serve the connect content so an agent probing them lands on the
+   * answer rather than the SPA fallback - but must not each be indexed.
+   */
+  canonicalPath?: string;
+  /** Emit `noindex, follow`. Set on alias URLs so only the canonical is indexed. */
+  noindex?: boolean;
+  /**
+   * Root-relative path of this page's markdown twin, advertised to agents as a
+   * `<link rel="alternate" type="text/markdown">`. The same path also answers
+   * `Accept: text/markdown` on the HTML URL (see server.ts).
+   */
+  markdownPath?: string;
 }
 
-const { title, description, image, imageAlt } = Astro.props;
+const { title, description, image, imageAlt, canonicalPath, noindex, markdownPath } =
+  Astro.props;
 const pageTitle = title ?? `${site.name} - ${site.tagline}`;
 const pageDescription = description ?? site.description;
 const base = Astro.site ?? new URL(site.url);
-const canonical = new URL(Astro.url.pathname, base).href;
+const canonical = new URL(canonicalPath ?? Astro.url.pathname, base).href;
 // OG/Twitter image must be an absolute URL for crawlers to resolve it.
 const ogImage = new URL(image ?? "/og.png", base).href;
 const ogImageAlt = imageAlt ?? `${site.name} - ${site.tagline}`;
@@ -60,6 +76,7 @@ const fontHref =
     <title>{pageTitle}</title>
     <meta name="description" content={pageDescription} />
     <link rel="canonical" href={canonical} />
+    {noindex && <meta name="robots" content="noindex, follow" />}
 
     <!-- Open Graph -->
     <meta property="og:type" content="website" />
@@ -80,6 +97,14 @@ const fontHref =
     <meta name="twitter:image:alt" content={ogImageAlt} />
 
     <!-- Machine-readable / agent discovery -->
+    {
+      /* This page's own markdown twin comes first: an agent that has already
+         found the page it wants should not have to route back through a
+         site-wide index to read it without 250KB of markup. */
+      markdownPath && (
+        <link rel="alternate" type="text/markdown" title="Markdown" href={markdownPath} />
+      )
+    }
     <link rel="alternate" type="text/plain" title="llms.txt" href="/llms.txt" />
     <link rel="alternate" type="text/plain" title="llms-full.txt" href="/llms-full.txt" />
     <link rel="alternate" type="text/markdown" title="agents.md" href="/agents.md" />

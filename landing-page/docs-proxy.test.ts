@@ -11,7 +11,25 @@ import { describe, expect, test, beforeAll, afterAll } from "bun:test";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 
-import { isDocsPath, proxyDocs } from "./docs-proxy.ts";
+import { isDocsPath, proxyDocs, upstreamTarget } from "./docs-proxy.ts";
+
+describe("upstreamTarget", () => {
+  test.each([
+    // The docs app serves its corpus dump at its own origin root, so the apex
+    // path has to be rewritten back down on the way out.
+    ["/docs/llms-full.txt", "/llms-full.txt"],
+    ["/docs/llms-full.txt?v=2", "/llms-full.txt?v=2"],
+    // Everything else passes through untouched.
+    ["/docs/cli", "/docs/cli"],
+    ["/_next/static/chunk.js", "/_next/static/chunk.js"],
+    // Prefix-looking near misses must not rewrite - the map is exact-match.
+    ["/docs/llms-full.txt/extra", "/docs/llms-full.txt/extra"],
+    // A malformed target is returned as-is rather than throwing.
+    ["//", "//"],
+  ])("%s -> %s", (url, expected) => {
+    expect(upstreamTarget(url as string)).toBe(expected);
+  });
+});
 
 describe("isDocsPath", () => {
   test.each([
@@ -24,7 +42,7 @@ describe("isDocsPath", () => {
     ["/_next/static/chunk.js", true],
     ["/og/en/docs/x/og.png", true],
     ["/api/search", true],
-    ["/llms-full.txt", true],
+    ["/docs/llms-full.txt", true],
     // Root assets from docs/public, referenced by the docs icon metadata.
     // Without these the apex serves SPA-fallback HTML at a 200 instead.
     ["/favicon.ico", true],
@@ -32,6 +50,11 @@ describe("isDocsPath", () => {
     ["/icon-dark.png", true],
     // Must NOT match: these belong to the landing page.
     ["/", false],
+    // The apex serves its own product llms-full.txt; the docs corpus dump is
+    // one level down at /docs/llms-full.txt. Proxying this handed the URL
+    // advertised in llms.txt and agents.md to a docs dump opening on
+    // "# Deployment".
+    ["/llms-full.txt", false],
     ["/docsomething", false],
     ["/compare", false],
     ["/api", false],

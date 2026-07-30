@@ -4,6 +4,11 @@ import { site, comparison, pricing } from "../config/landing";
 // Static routes that ship in dist/. Keep in sync with src/pages/*.astro.
 const routes = [
   { path: "/", priority: "1.0", changefreq: "weekly" },
+  // The canonical "how do I get started / is there an account" answer. High
+  // priority: it is the page every onboarding query should resolve to, and the
+  // one the /signup, /login and /get-started aliases canonicalise onto. Those
+  // aliases are deliberately absent - they are noindex duplicates of this URL.
+  { path: "/connect", priority: "0.9", changefreq: "monthly" },
   // Entry point into the docs section, which is proxied from the Next.js docs
   // service (see `server.ts`) and ships its own `/docs/sitemap.xml` covering
   // every page. Listing the index here gives crawlers a path in from the apex.

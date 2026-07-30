@@ -1,0 +1,145 @@
+{
+  "server": {
+    "name": "io.github.Miyamura80/DaySurface",
+    "title": "DaySurface",
+    "url": "https://mcp.daysurface.com/mcp"
+  },
+  "website": "https://daysurface.com",
+  "connectUrl": "https://daysurface.com/connect",
+  "account": {
+    "required": false,
+    "summary": "No DaySurface account, signup, or registration is required. Add the MCP endpoint to a client and complete Google OAuth inside that client."
+  },
+  "clients": [
+    {
+      "id": "claude",
+      "name": "Claude",
+      "method": "deeplink",
+      "effort": "one-click",
+      "install_url": "https://claude.ai/new?modal=add-custom-connector&connectorName=DaySurface&connectorUrl=https%3A%2F%2Fmcp.daysurface.com%2Fmcp#settings/customize-connectors",
+      "prefills": true,
+      "steps": [
+        "Open Claude → Settings → Connectors",
+        "Click “Add custom connector”",
+        "Paste the URL above, then click Add and complete sign-in"
+      ],
+      "setup_prompt": null,
+      "setup_kind": null,
+      "note": "Opens Claude with the name and URL already filled in - just click Add. Claude flags it as suggested by an external link; that's expected. On Team and Enterprise plans an admin adds it."
+    },
+    {
+      "id": "chatgpt",
+      "name": "ChatGPT",
+      "method": "deeplink",
+      "effort": "dialog-only",
+      "install_url": "https://chatgpt.com/plugins#settings/Connectors?create-connector=true&redirectAfter=%2Fplugins",
+      "prefills": false,
+      "steps": [
+        "Settings → Connectors → Advanced settings → Developer mode on",
+        "Back on Connectors, click Create",
+        "Paste the URL, name it, Authentication → OAuth",
+        "Tick the risk box, click Create",
+        "New chat, so the tools menu refreshes"
+      ],
+      "setup_prompt": null,
+      "setup_kind": null,
+      "note": "Copies the URL, then opens the empty dialog - just paste. Needs Developer mode on first."
+    },
+    {
+      "id": "claude-code",
+      "name": "Claude Code",
+      "method": "prompt",
+      "effort": "command",
+      "install_url": null,
+      "prefills": null,
+      "steps": null,
+      "setup_prompt": "claude mcp add --transport http --scope user daysurface https://mcp.daysurface.com/mcp",
+      "setup_kind": "command",
+      "note": "Run it in your terminal, then /mcp in a session to sign in."
+    },
+    {
+      "id": "cursor",
+      "name": "Cursor",
+      "method": "deeplink",
+      "effort": "one-click",
+      "install_url": "cursor://anysphere.cursor-deeplink/mcp/install?name=daysurface&config=eyJ1cmwiOiJodHRwczovL21jcC5kYXlzdXJmYWNlLmNvbS9tY3AifQ%3D%3D",
+      "prefills": true,
+      "steps": null,
+      "setup_prompt": null,
+      "setup_kind": null,
+      "note": "Opens Cursor and adds the server. Not working? Copy the URL above and add it under Settings → MCP."
+    },
+    {
+      "id": "vscode",
+      "name": "VS Code",
+      "method": "deeplink",
+      "effort": "one-click",
+      "install_url": "https://vscode.dev/redirect/mcp/install?name=daysurface&config=%7B%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Fmcp.daysurface.com%2Fmcp%22%7D",
+      "prefills": true,
+      "steps": null,
+      "setup_prompt": null,
+      "setup_kind": null,
+      "note": "Opens VS Code and adds the server. Requires Copilot agent mode."
+    },
+    {
+      "id": "goose",
+      "name": "Goose",
+      "method": "deeplink",
+      "effort": "one-click",
+      "install_url": "goose://extension?url=https%3A%2F%2Fmcp.daysurface.com%2Fmcp&type=streamable_http&id=daysurface&name=daysurface&description=daysurface+MCP+server&timeout=300",
+      "prefills": true,
+      "steps": null,
+      "setup_prompt": null,
+      "setup_kind": null,
+      "note": "Opens Goose and adds the extension over streamable HTTP."
+    },
+    {
+      "id": "cline",
+      "name": "Cline",
+      "method": "prompt",
+      "effort": "prompt",
+      "install_url": null,
+      "prefills": null,
+      "steps": null,
+      "setup_prompt": "Add a remote MCP server, then verify it connects.\n\n  Name:      daysurface\n  Endpoint:  https://mcp.daysurface.com/mcp\n  Transport: streamable HTTP (remote, not stdio)\n  Auth:      OAuth in the browser, no key to paste\n\nUse THIS client's own config keys - they differ:\nVS Code \"servers\", Cursor/Cline \"mcpServers\",\nZed \"context_servers\", Windsurf \"serverUrl\" not \"url\".\nKeep existing servers. Show me the diff, then say\nwhat to click to finish sign-in.",
+      "setup_kind": null,
+      "note": "Or add it by hand: MCP Servers → Remote Servers → Streamable HTTP."
+    },
+    {
+      "id": "zed",
+      "name": "Zed",
+      "method": "prompt",
+      "effort": "prompt",
+      "install_url": null,
+      "prefills": null,
+      "steps": null,
+      "setup_prompt": "Add a remote MCP server, then verify it connects.\n\n  Name:      daysurface\n  Endpoint:  https://mcp.daysurface.com/mcp\n  Transport: streamable HTTP (remote, not stdio)\n  Auth:      OAuth in the browser, no key to paste\n\nUse THIS client's own config keys - they differ:\nVS Code \"servers\", Cursor/Cline \"mcpServers\",\nZed \"context_servers\", Windsurf \"serverUrl\" not \"url\".\nKeep existing servers. Show me the diff, then say\nwhat to click to finish sign-in.",
+      "setup_kind": null,
+      "note": "Or add it by hand: Settings → AI → MCP Servers → Add Remote Server."
+    },
+    {
+      "id": "windsurf",
+      "name": "Windsurf",
+      "method": "prompt",
+      "effort": "prompt",
+      "install_url": null,
+      "prefills": null,
+      "steps": null,
+      "setup_prompt": "Add a remote MCP server, then verify it connects.\n\n  Name:      daysurface\n  Endpoint:  https://mcp.daysurface.com/mcp\n  Transport: streamable HTTP (remote, not stdio)\n  Auth:      OAuth in the browser, no key to paste\n\nUse THIS client's own config keys - they differ:\nVS Code \"servers\", Cursor/Cline \"mcpServers\",\nZed \"context_servers\", Windsurf \"serverUrl\" not \"url\".\nKeep existing servers. Show me the diff, then say\nwhat to click to finish sign-in.",
+      "setup_kind": null,
+      "note": "Windsurf uses “serverUrl”, not “url” - a snippet copied from another client will fail silently."
+    },
+    {
+      "id": "other",
+      "name": "Any MCP client",
+      "method": "prompt",
+      "effort": "prompt",
+      "install_url": null,
+      "prefills": null,
+      "steps": null,
+      "setup_prompt": "Add a remote MCP server, then verify it connects.\n\n  Name:      daysurface\n  Endpoint:  https://mcp.daysurface.com/mcp\n  Transport: streamable HTTP (remote, not stdio)\n  Auth:      OAuth in the browser, no key to paste\n\nUse THIS client's own config keys - they differ:\nVS Code \"servers\", Cursor/Cline \"mcpServers\",\nZed \"context_servers\", Windsurf \"serverUrl\" not \"url\".\nKeep existing servers. Show me the diff, then say\nwhat to click to finish sign-in.",
+      "setup_kind": null,
+      "note": "Anything that speaks MCP over streamable HTTP works - there is nothing to install."
+    }
+  ]
+}
