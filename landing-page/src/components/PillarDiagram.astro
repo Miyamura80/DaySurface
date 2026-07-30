@@ -16,8 +16,12 @@
  * aria-hidden because the pillar title + caption next to each diagram already
  * say the same thing to a screen reader.
  */
+import type { ComparisonPillar } from "../config/landing";
+
+// Reuses the config union rather than `string`, so a typo in a caller is a
+// build error instead of a silently empty diagram container.
 interface Props {
-  name: string;
+  name: ComparisonPillar["visual"];
 }
 const { name } = Astro.props;
 

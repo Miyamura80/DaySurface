@@ -30,11 +30,23 @@ const MARK: Record<MatrixCell["state"], { glyph: string; cls: string; label: str
  * build time rather than duplicating it in config, where it would silently rot
  * the next time a mark is replaced. PNG keeps width/height as big-endian uint32
  * at bytes 16 and 20; the .svg marks here are square.
+ *
+ * Memoised at module scope: the same mark is read once per build rather than
+ * once per column per page. Deliberately no try/catch - a missing or malformed
+ * mark should fail the build, not ship a silently squashed logo.
  */
+const ASPECTS = new Map<string, number>();
+
 const aspect = (file: string): number => {
-  if (!file.endsWith(".png")) return 1;
-  const buf = readFileSync(new URL(`../../public/logos/${file}`, import.meta.url));
-  return buf.readUInt32BE(16) / buf.readUInt32BE(20);
+  const cached = ASPECTS.get(file);
+  if (cached !== undefined) return cached;
+  let value = 1;
+  if (file.endsWith(".png")) {
+    const buf = readFileSync(new URL(`../../public/logos/${file}`, import.meta.url));
+    value = buf.readUInt32BE(16) / buf.readUInt32BE(20);
+  }
+  ASPECTS.set(file, value);
+  return value;
 };
 
 const maskStyle = (file: string) =>
