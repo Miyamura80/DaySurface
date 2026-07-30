@@ -113,7 +113,7 @@ export interface InstallClient {
   install_url: string | null;
   /** Deep links only: does the link arrive with the fields filled in? */
   prefills: boolean | null;
-  /** Click-path: the remaining job or a fallback - see `stepsAreRemainingWork`. */
+  /** Click-path: the remaining job or a fallback - see `effortMeta.stepsLabel`. */
   steps: string[] | null;
   /** Prompt targets: the text to paste (or run - see `setup_kind`). */
   setup_prompt: string | null;
