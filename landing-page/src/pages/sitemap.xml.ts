@@ -24,6 +24,7 @@ const routes = [
     priority: "0.7",
     changefreq: "monthly",
   })),
+  { path: "/about", priority: "0.5", changefreq: "yearly" },
   { path: "/privacy", priority: "0.3", changefreq: "yearly" },
   { path: "/terms", priority: "0.3", changefreq: "yearly" },
 ];

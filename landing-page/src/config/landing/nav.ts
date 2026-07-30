@@ -65,7 +65,7 @@ export const footer: { columns: FooterColumn[]; copyright: string } = {
     {
       heading: "Company",
       links: [
-        { label: "About", href: "#" },
+        { label: "About", href: "/about" },
         { label: "Blog", href: "#" },
         { label: "Contact", href: "#" },
       ],
@@ -73,6 +73,7 @@ export const footer: { columns: FooterColumn[]; copyright: string } = {
     {
       heading: "Legal",
       links: [
+        { label: "About", href: "/about" },
         { label: "Privacy", href: "/privacy" },
         { label: "Terms", href: "/terms" },
         { label: "Security", href: "#" },

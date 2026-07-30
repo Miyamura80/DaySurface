@@ -1,0 +1,44 @@
+---
+/**
+ * Plain-language description of what the product is and what it does with a
+ * user's Gmail account, written for a Google OAuth verification reviewer
+ * checking that the app's purpose and name are stated on a public page.
+ * Deliberately prose-only, no marketing sections - the shell, typography, and
+ * theme tokens are the same ones /privacy and /terms use.
+ */
+import Base from "../layouts/Base.astro";
+import { site } from "../config/landing";
+---
+
+<Base
+  title={`About ${site.name}`}
+  description={`What ${site.name} is, what it does with your Gmail account, and which permissions it asks for.`}
+>
+  <main class="mx-auto max-w-3xl px-4 py-12 leading-relaxed sm:px-6 sm:py-16">
+    <a href="/" class="inline-flex min-h-11 items-center text-sm opacity-70 hover:opacity-100">&larr; Back to {site.name}</a>
+    <h1 class="mt-6 text-4xl font-bold">{site.name}</h1>
+
+    <p class="mt-8">
+      {site.name} connects your Gmail account to the AI client you already use.
+      Ask what needs your attention and get a ranked inbox. Archive threads and
+      mark them done. Draft a reply in a real composer, edit it yourself, and
+      send it &mdash; inside Claude, ChatGPT, or any MCP client.
+    </p>
+
+    <p class="mt-6">
+      To do this, {site.name} asks permission to read, organise, draft, and send
+      mail in your Gmail account. It never permanently deletes mail and never
+      bypasses Trash. Message content is fetched only when you ask for it and is
+      passed to your AI client; we do not store message bodies, and no AI model
+      on our servers reads your mail. You can disconnect at any time, which
+      revokes the token with Google and erases it from our database.
+    </p>
+
+    <p class="mt-6">
+      Read our
+      <a class="underline decoration-from-font underline-offset-2" href="/privacy">privacy policy</a>
+      and
+      <a class="underline decoration-from-font underline-offset-2" href="/terms">terms of service</a>.
+    </p>
+  </main>
+</Base>
