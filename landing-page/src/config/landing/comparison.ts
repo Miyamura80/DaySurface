@@ -92,8 +92,8 @@ export const comparison: {
       body: "DaySurface renders MCP Apps - sandboxed UI that lives inside the chat. Review and edit a draft in a real composer, then triage a ranked inbox in an embedded dashboard, all without leaving your agent. The inbox ranking and triage flow exist because the interactive surface makes them useful; other Gmail MCPs return raw search results and stop there.",
     },
     {
-      title: "One codebase, three transports",
-      caption: "One service registry, three interfaces. Behaviour never drifts.",
+      title: "MCP, CLI, API",
+      caption: "One service registry behind all three. Behaviour never drifts.",
       visual: "transports",
       body: "Every tool is a pure function in a shared registry, exposed identically over a CLI, an MCP server, and a plain HTTP API. Build once and call it from your shell, any MCP client, or a script - behavior never drifts between interfaces. Most Gmail MCPs are single-transport: stdio-only, or a hosted endpoint you can't run locally.",
     },
