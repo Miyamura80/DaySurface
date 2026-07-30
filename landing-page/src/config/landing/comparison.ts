@@ -39,6 +39,14 @@ export interface Competitor {
   blurb: string;
   /** Canonical link to the competitor. */
   url: string;
+  /**
+   * Mark shown above the name in the comparison matrix, as a filename under
+   * public/logos/. Rendered as a CSS mask so it takes the surrounding text
+   * colour - which means the file must be a single-colour silhouette, not a
+   * multi-colour brand lockup. Open-source projects with no brand of their own
+   * use github.svg. Omit and the column falls back to the name alone.
+   */
+  logo?: string;
   /** Headline contrast for the /vs page hero. */
   headline: string;
   /** Paragraph summary of the difference. */
@@ -112,6 +120,7 @@ export const comparison: {
       blurb:
         "The most-starred open-source Gmail MCP: a local stdio server wrapping the Gmail API.",
       url: "https://github.com/GongRzhe/Gmail-MCP-Server",
+      logo: "github.svg",
       headline: "The open-source Gmail MCP, upgraded.",
       summary:
         "GongRzhe's server is a faithful, well-loved wrapper around the Gmail API - around a dozen tools for send, draft, read, search, labels and attachments, run locally over stdio with a credentials file on disk. You get clean primitives and JSON back. DaySurface shares the open-source spirit but goes further: it renders an interactive composer and a ranked-inbox dashboard inside the chat, and the same tools are reachable over a CLI and an HTTP API, not just stdio.",
@@ -157,6 +166,7 @@ export const comparison: {
       blurb:
         "Broad Google Workspace coverage (Gmail, Calendar, Drive, Docs) over MCP.",
       url: "https://github.com/taylorwilsdon/google_workspace_mcp",
+      logo: "github.svg",
       headline: "Gmail done deeply vs. Workspace done broadly.",
       summary:
         "Google Workspace MCP covers a huge surface - Gmail, Calendar, Drive and Docs - as headless tools you run yourself. It's a great fit when you need the whole suite. DaySurface goes the other way: deep on Gmail with an interactive in-chat composer and ranked-inbox dashboard, a minimal single Gmail scope, and the same tools exposed over CLI and HTTP as well as MCP.",

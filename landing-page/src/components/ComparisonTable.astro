@@ -38,9 +38,24 @@ const MARK: Record<MatrixCell["state"], { glyph: string; cls: string; label: str
           DaySurface
         </th>
         {
+          /*
+           * The mark sits above the name rather than inline: these columns are
+           * narrow enough that most names already wrap to two lines, and an
+           * inline icon would tighten the wrap further. `align-bottom` on the
+           * th keeps every name on a common baseline whether or not its column
+           * has a mark. Masked (not <img>) so the silhouette takes the link's
+           * colour and lifts to white on hover with the text.
+           */
           competitors.map((c) => (
             <th scope="col" class="px-4 py-4 align-bottom text-sm font-semibold text-fg-muted">
-              <a href={`/vs/${c.id}`} class="transition hover:text-fg">
+              <a href={`/vs/${c.id}`} class="block transition hover:text-fg">
+                {c.logo && (
+                  <span
+                    class="mb-2 block size-5 bg-current"
+                    style={`-webkit-mask:url('/logos/${c.logo}') center/contain no-repeat;mask:url('/logos/${c.logo}') center/contain no-repeat;`}
+                    aria-hidden="true"
+                  />
+                )}
                 {c.name}
               </a>
             </th>
