@@ -9,10 +9,9 @@
  * Colours come from Tailwind utilities (fill-accent, stroke-border, ...) so a
  * token change in global.css re-skins them.
  *
- * The marks are real: the MCP logo is the path from public/logos/mcp.svg, the
- * Gmail mark the one from public/favicon.svg, and the robot is
- * eito.me/icons/library/generic_logos/ai/robot.svg. Only generic primitives
- * (arrows, a key, panel chrome) are drawn by hand.
+ * The marks are real: the MCP logo is the path from public/logos/mcp.svg and
+ * the robot is eito.me/icons/library/generic_logos/ai/robot.svg. Only generic
+ * primitives (arrows, an envelope, a key, panel chrome) are drawn by hand.
  *
  * aria-hidden because the pillar title + caption next to each diagram already
  * say the same thing to a screen reader.
@@ -199,19 +198,23 @@ const JSON_BARS = [
        your perimeter, with nobody's gateway in the path. */
     name === "selfhost" && (
       <svg viewBox="0 0 320 150" class="w-full" aria-hidden="true">
-        {/* Gmail, outside. The mark is the one from public/favicon.svg. */}
+        {/*
+          The mailbox, outside. A generic envelope rather than the Gmail mark:
+          the argument here is about where the server and the keys live, which
+          holds for any mail provider, so the node shouldn't pin it to one.
+        */}
         <rect x="4" y="47" width="74" height="56" fill="none" class="stroke-border" />
-        <g transform="translate(25.9 57.6) scale(0.0589)" fill-rule="evenodd" class="fill-fg-muted">
-          <g fill-rule="nonzero">
-            <path d="M34.91 448.818h81.454V251L0 163.727V413.91c0 19.287 15.622 34.91 34.91 34.91z" />
-            <path d="M395.636 448.818h81.455c19.287 0 34.909-15.622 34.909-34.909V163.727L395.636 251z" />
-            <path d="M395.636 99.727V251L512 163.727v-46.545c0-43.142-49.25-67.782-83.782-41.891z" />
-          </g>
-          <path d="M116.364 251V99.727L256 204.455 395.636 99.727V251L256 355.727z" />
-          <path d="M0 117.182v46.545L116.364 251V99.727L83.782 75.291C49.25 49.4 0 74.04 0 117.18z" />
+        <g
+          fill="none"
+          stroke-width="1.6"
+          stroke-linejoin="round"
+          class="stroke-fg-muted"
+        >
+          <rect x="27" y="64" width="28" height="20" />
+          <path d="M27 64 L41 76 L55 64" />
         </g>
         <text x="41" y="97" font-size="9" text-anchor="middle" class="fill-fg-muted font-sans">
-          Gmail
+          email
         </text>
 
         <line x1="78" y1="75" x2="94" y2="75" class="stroke-border" />
