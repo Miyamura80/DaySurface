@@ -60,9 +60,13 @@ export const effortMeta: Record<
     /** Short badge in the client picker dropdown. */
     badge: string;
     /**
-     * Label for the steps disclosure. Carries whether `steps` are a fallback
-     * for a link that failed or the REMAINING job - getting that backwards
-     * tells an agent to navigate to a dialog already open in front of it.
+     * Label for the steps disclosure.
+     *
+     * `steps` is ALWAYS the full click-path from scratch - connect.ts is
+     * explicit that a dialog-only target "keeps its full click-path in
+     * `steps`". So every label here has to read as a fallback. Labelling them
+     * as the remaining work tells a ChatGPT user to turn on Developer mode and
+     * click Create again, both of which the link they just followed performed.
      */
     stepsLabel: string;
     /** One-line "how" for the quick-reference list in llms-full.txt. */
@@ -84,7 +88,7 @@ export const effortMeta: Record<
   "dialog-only": {
     heading: "Opens the dialog, but you still paste the URL",
     badge: "shortcut",
-    stepsLabel: "Then, in the dialog the link opens",
+    stepsLabel: "Full click-path, if the link does not work",
     shortHow: "install link opens the setup dialog, but the fields come up empty - paste the URL there.",
   },
   prompt: {

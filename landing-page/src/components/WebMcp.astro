@@ -28,7 +28,7 @@
  * re-deriving "is this one click?" from method/prefills a fourth time.
  */
 import { site, faq } from "../config/landing";
-import { installMatrix } from "../lib/install";
+import { effortMeta, installMatrix } from "../lib/install";
 
 // Build-time payload the client script reads to register tools. Sourced
 // entirely from config so the agent-facing tools and the visible UI never drift.
@@ -39,6 +39,10 @@ const payload = {
   githubUrl: site.githubUrl,
   description: site.description,
   clients: installMatrix,
+  // Serialized so the inline script below reads the same labels every other
+  // surface uses. It previously kept a hand-written copy, which is precisely
+  // how the agent-facing tool output goes stale when effortMeta changes.
+  effortMeta,
   faqs: faq.items.map((f) => ({ q: f.q, a: f.a })),
 };
 
@@ -72,15 +76,6 @@ const payloadJson = JSON.stringify(payload).replace(/</g, "\\u003c");
     const doc = (document as unknown as { modelContext?: ModelContext }).modelContext;
     return nav ?? doc ?? null;
   }
-
-  // Mirrors `effortMeta[...].shortHow` in src/lib/install.ts. The inline script
-  // is a separate context and cannot import it; keep the two in step.
-  const EFFORT_HOW: Record<string, string> = {
-    "one-click": "one-click install (deep link fills in the name and URL)",
-    command: "one command to run in a terminal",
-    "dialog-only": "deep link to the setup dialog, URL still pasted by hand",
-    prompt: "paste a setup prompt into the client",
-  };
 
   function textResult(text: string, structuredContent?: unknown) {
     return { content: [{ type: "text" as const, text }], structuredContent };
@@ -122,6 +117,12 @@ const payloadJson = JSON.stringify(payload).replace(/</g, "\\u003c");
         setup_kind: "prompt" | "command" | null;
         note: string | null;
       }[];
+      // Shipped in the payload rather than mirrored here - see the note above
+      // the `effortMeta` key in the build-time payload.
+      effortMeta: Record<
+        string,
+        { heading: string; badge: string; stepsLabel: string; shortHow: string }
+      >;
       faqs: { q: string; a: string }[];
     };
 
@@ -147,7 +148,9 @@ const payloadJson = JSON.stringify(payload).replace(/</g, "\\u003c");
           "List the AI agent clients this MCP server can be installed into, and whether each supports one-click install or manual setup.",
         inputSchema: { type: "object", properties: {} },
         async execute() {
-          const lines = data.clients.map((c) => `- ${c.name} (${c.id}): ${EFFORT_HOW[c.effort]}`);
+          const lines = data.clients.map(
+            (c) => `- ${c.name} (${c.id}): ${data.effortMeta[c.effort].shortHow}`,
+          );
           return textResult(`Supported clients:\n${lines.join("\n")}`, {
             clients: data.clients.map((c) => ({ id: c.id, name: c.name, effort: c.effort })),
           });
@@ -186,7 +189,9 @@ const payloadJson = JSON.stringify(payload).replace(/</g, "\\u003c");
                 ? ""
                 : `\nThis link only opens the setup dialog - the fields come up empty.` +
                   `\nAfter it opens: paste ${data.mcpUrl} as the server URL, then confirm.` +
-                  `\nThe rest of the flow:\n` +
+                  // The steps are the full path from scratch, NOT what is left
+                  // to do - the link already performed the first two of them.
+                  `\n${data.effortMeta[client.effort].stepsLabel}:\n` +
                   (client.steps ?? []).map((s, i) => `${i + 1}. ${s}`).join("\n");
             return textResult(
               `${client.effort === "dialog-only" ? "Setup shortcut" : "One-click install"} for ${client.name}: ${client.install_url}${rest}${note}`,

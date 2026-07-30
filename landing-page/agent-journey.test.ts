@@ -41,7 +41,12 @@ beforeAll(async () => {
   BASE = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 });
 
-afterAll(() => server?.close());
+// Await the close callback: returning before the server has drained leaves it
+// accepting connections until process exit, and hangs frameworks that wait on
+// open handles.
+afterAll(async () => {
+  if (server) await new Promise<void>((resolve) => server.close(() => resolve()));
+});
 
 const md = { Accept: "text/markdown" };
 
@@ -127,6 +132,18 @@ describe("intent aliases answer the signup question", () => {
     ]) {
       expect(body).toContain(link);
     }
+  });
+
+  test("dialog-only steps are labelled a fallback, not remaining work", async () => {
+    // ChatGPT's `steps` are the FULL path from scratch - the deep link already
+    // performs the first two. Labelling them as what is left tells the reader to
+    // turn on Developer mode and click Create again, both already done.
+    const body = await (await fetch(`${BASE}/connect.md`)).text();
+    const idx = body.indexOf("Settings → Connectors → Advanced settings");
+    expect(idx).toBeGreaterThan(-1);
+    const label = body.slice(Math.max(0, idx - 120), idx);
+    expect(label).toContain("if the link does not work");
+    expect(body).not.toContain("The rest of the flow");
   });
 
   test("ChatGPT is never presented as one-click", async () => {

@@ -81,11 +81,14 @@ export function buildVsMd(origin: string, id: string): string {
   const c = comparison.competitors.find((x) => x.id === id);
   if (!c) return `# Not found\n\nNo comparison page for \`${id}\`. See ${o}/compare.md.\n`;
 
+  // Carry each row's `detail` (why the capability matters), same as the hub.
+  // Without it /vs/<id>.md is not self-contained: an answer engine quoting a
+  // bare capability label loses the qualifier the config exists to supply.
   const rows = comparison.matrix
-    .map(
-      (r) =>
-        `| ${r.capability} | ${cellText(r.us)} | ${cellText(r.cells[c.id])} |`,
-    )
+    .map((r) => {
+      const capability = r.detail ? `${r.capability} - ${r.detail}` : r.capability;
+      return `| ${capability} | ${cellText(r.us)} | ${cellText(r.cells[c.id])} |`;
+    })
     .join("\n");
 
   return `# ${site.name} vs ${c.name}
