@@ -176,7 +176,10 @@ export const finalCta: { heading: string; subhead: string; features: string[] } 
 export const connectPage = {
   title: `Connect ${site.name}`,
   noAccount: `There is no ${site.name} account to create, no signup form, and nothing to install. ${site.name} is a remote MCP server: you add one URL to an MCP client and sign in to Google inside that client.`,
-  agentShortcut: `If you are an agent that can add MCP servers, the endpoint above is the whole job - add it and call \`tools/list\`. Otherwise pick your client below.`,
+  // No inline-code backticks: this string renders verbatim into the HTML page as
+  // well as into connect.md, and markdown syntax that survives to the browser
+  // shows up as literal `backticks` on the page.
+  agentShortcut: `If you are an agent that can add MCP servers, the endpoint above is the whole job - add it and call tools/list. Otherwise pick your client below.`,
   facts: [
     { label: "Endpoint", value: site.mcpUrl },
     { label: "Name", value: site.serverName },

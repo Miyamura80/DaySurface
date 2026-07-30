@@ -118,6 +118,14 @@ describe("intent aliases answer the signup question", () => {
     expect(html.split("Use THIS client&#39;s own config keys").length - 1).toBe(1);
   });
 
+  test("no markdown syntax leaks into the rendered HTML page", async () => {
+    // connectPage copy feeds both the HTML page and connect.md verbatim, so a
+    // backtick meant as inline code renders as a literal backtick in a browser.
+    const html = await (await fetch(`${BASE}/connect`)).text();
+    const body = html.slice(html.indexOf("<main"), html.indexOf("</main>"));
+    expect(body).not.toContain("`");
+  });
+
   test("/signup carries EVERY client's install path, not just one", async () => {
     // We do not know which client the agent is running in, so a response that
     // only covers Claude is a failure even though it returns 200 with content.
