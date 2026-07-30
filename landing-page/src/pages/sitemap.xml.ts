@@ -29,6 +29,22 @@ const routes = [
   { path: "/terms", priority: "0.3", changefreq: "yearly" },
 ];
 
+/**
+ * The form a page's own `<link rel="canonical">` uses.
+ *
+ * Astro builds each page as `<path>/index.html` and canonicalises to the
+ * trailing-slash URL, so listing `/compare` here pointed crawlers at a
+ * non-canonical variant of every page and made them lean on canonical
+ * consolidation for something the sitemap could just state correctly.
+ *
+ * `/docs` is exempt: it is proxied to the Next.js docs service, which owns its
+ * own canonical form and ships its own sitemap.
+ */
+function canonicalPath(path: string): string {
+  if (path === "/" || path === "/docs") return path;
+  return path.endsWith("/") ? path : `${path}/`;
+}
+
 export const GET: APIRoute = ({ site: astroSite }) => {
   const origin = (astroSite ?? new URL(site.url)).origin;
   const lastmod = new Date().toISOString().split("T")[0];
@@ -37,7 +53,7 @@ export const GET: APIRoute = ({ site: astroSite }) => {
     .map(
       (r) =>
         `  <url>\n` +
-        `    <loc>${origin}${r.path}</loc>\n` +
+        `    <loc>${origin}${canonicalPath(r.path)}</loc>\n` +
         `    <lastmod>${lastmod}</lastmod>\n` +
         `    <changefreq>${r.changefreq}</changefreq>\n` +
         `    <priority>${r.priority}</priority>\n` +

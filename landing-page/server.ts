@@ -15,7 +15,7 @@ import sirv from "sirv";
 import { isDocsPath, proxyDocs } from "./docs-proxy.ts";
 
 import { buildAgentsMd, build404Md } from "./src/agent/content.ts";
-import { site } from "./src/config/landing";
+import { connectAliases, site } from "./src/config/landing";
 
 const PORT = Number(process.env.PORT ?? 8080);
 
@@ -129,24 +129,55 @@ function discoverMarkdownTwins(root: string): Map<string, string> {
 
 const MARKDOWN_TWINS = discoverMarkdownTwins("dist");
 
+/**
+ * Alias URLs that must carry `X-Robots-Tag: noindex, follow`.
+ *
+ * The HTML aliases get `<meta name="robots">` from Base.astro, but their
+ * markdown twins are plain files - `/signup.md` has nowhere to put a meta tag,
+ * and the markdown served by content negotiation on `/signup` has no <head> at
+ * all. Both were indexable duplicates of /connect.
+ *
+ * This has to live in the server: setting headers on the Astro `APIRoute`
+ * response would be silently dropped, because a static build writes the body to
+ * `dist/signup.md` and throws the Response headers away. Only `/connect` and
+ * `/connect.md` stay indexable.
+ */
+const NOINDEX_PATHS: ReadonlySet<string> = new Set(
+  connectAliases.flatMap((a) => [`/${a}`, `/${a}.md`]),
+);
+
 /** Strip a trailing slash (but keep the root) so `/connect/` matches `/connect`. */
 function normalize(pathname: string): string {
   return pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
 }
 
-/** First entry of a comma-joined or repeated header (e.g. `X-Forwarded-*`). */
-function firstHeaderToken(value: string | string[] | undefined): string | undefined {
-  if (!value) return undefined;
-  const raw = Array.isArray(value) ? value[0] : value;
-  const first = raw.split(",")[0]?.trim();
-  return first || undefined;
-}
-
-/** Public origin for absolute links in the markdown body; forwarded host wins. */
-function originFor(host: string | undefined, proto: string | undefined): string {
-  if (host) return `${proto || "https"}://${host}`;
-  return new URL(site.url).origin;
-}
+/**
+ * Public origin for the absolute links inside generated markdown bodies.
+ *
+ * Fixed per process, NOT read from `Host`/`X-Forwarded-Host` per request. Those
+ * headers are client-controlled unless every hop in front of this process
+ * rewrites them, so deriving the body from them let a request choose the
+ * absolute URLs in the response - and because the markdown responses only
+ * `Vary` on `Accept`/`Accept-Encoding`, a shared cache had no way to keep those
+ * bodies apart and could serve one request's origin to everyone else.
+ *
+ * Pinning it fixes both halves at once: nothing attacker-controlled reaches the
+ * body, and the body is now deterministic, so the existing `Vary` is accurate.
+ * Deployments that legitimately answer on another hostname (a preview deploy, a
+ * self-hosted mirror) set `PUBLIC_ORIGIN` explicitly rather than having it
+ * inferred from whatever arrives on the wire.
+ */
+const PUBLIC_ORIGIN: string = (() => {
+  const configured = process.env.PUBLIC_ORIGIN?.trim();
+  if (!configured) return new URL(site.url).origin;
+  try {
+    return new URL(configured).origin;
+  } catch {
+    // eslint-disable-next-line no-console
+    console.warn(`[landing-page] PUBLIC_ORIGIN is not a valid URL (${configured}) - using ${site.url}`);
+    return new URL(site.url).origin;
+  }
+})();
 
 const VARY = "Accept, Accept-Encoding";
 
@@ -195,6 +226,9 @@ export function handleRequest(req: IncomingMessage, res: ServerResponse): void {
 
   const readable = method === "GET" || method === "HEAD";
   const normalized = normalize(pathname);
+  // Keyed on the path the client asked for, not the file we end up serving: the
+  // twin rewrite below repoints /signup at /connect.md, which IS indexable.
+  if (NOINDEX_PATHS.has(normalized)) res.setHeader("X-Robots-Tag", "noindex, follow");
   const twin = MARKDOWN_TWINS.get(normalized);
   const negotiable = readable && (isCanonical(pathname) || twin !== undefined);
 
@@ -210,7 +244,7 @@ export function handleRequest(req: IncomingMessage, res: ServerResponse): void {
     }
     // `/` has no file twin - its markdown is the agent guide, built per request
     // so the absolute links carry the forwarded host.
-    sendMarkdown(req, res, buildAgentsMd(originOf(req)), 200);
+    sendMarkdown(req, res, buildAgentsMd(PUBLIC_ORIGIN), 200);
     return;
   }
 
@@ -222,13 +256,6 @@ export function handleRequest(req: IncomingMessage, res: ServerResponse): void {
   }
 
   assets(req, res, () => notFound(req, res, normalized));
-}
-
-/** Public origin for absolute links, honoring the proxy's forwarded headers. */
-function originOf(req: IncomingMessage): string {
-  const host = firstHeaderToken(req.headers["x-forwarded-host"] ?? req.headers.host);
-  const proto = firstHeaderToken(req.headers["x-forwarded-proto"]);
-  return originFor(host, proto);
 }
 
 /** Send a markdown body with the negotiation headers a variant response needs. */
@@ -275,7 +302,7 @@ const NOT_FOUND_HTML: string = (() => {
 function notFound(req: IncomingMessage, res: ServerResponse, pathname: string): void {
   res.setHeader("Access-Control-Allow-Origin", "*");
   if (wantsMarkdown(req.headers.accept)) {
-    sendMarkdown(req, res, build404Md(originOf(req), pathname), 404);
+    sendMarkdown(req, res, build404Md(PUBLIC_ORIGIN, pathname), 404);
     return;
   }
   const buf = Buffer.from(NOT_FOUND_HTML, "utf-8");

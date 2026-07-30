@@ -187,6 +187,52 @@ describe("markdown negotiation", () => {
   });
 });
 
+describe("indexing controls", () => {
+  test("alias markdown twins are noindex, canonical /connect.md is not", async () => {
+    // The HTML aliases get <meta name="robots"> from Base.astro, but a .md file
+    // has nowhere to put one - and a static build discards headers set on the
+    // Astro APIRoute, so this has to come from the server.
+    for (const path of ["/signup.md", "/login.md", "/get-started.md"]) {
+      const res = await fetch(`${BASE}${path}`);
+      expect(res.status).toBe(200);
+      expect(res.headers.get("x-robots-tag")).toBe("noindex, follow");
+    }
+    expect((await fetch(`${BASE}/connect.md`)).headers.get("x-robots-tag")).toBeNull();
+  });
+
+  test("markdown served by negotiation on an alias is noindex too", async () => {
+    // /signup with Accept: text/markdown returns a body with no <head> at all.
+    const res = await fetch(`${BASE}/signup`, { headers: md });
+    expect(res.headers.get("x-robots-tag")).toBe("noindex, follow");
+    expect((await fetch(`${BASE}/connect`, { headers: md })).headers.get("x-robots-tag"))
+      .toBeNull();
+  });
+});
+
+describe("generated markdown does not trust request headers", () => {
+  test("a spoofed X-Forwarded-Host cannot choose the links in the body", async () => {
+    // The body embeds absolute URLs. Deriving them from a client-controlled
+    // header let a request pick them, and because these responses only Vary on
+    // Accept, a shared cache could then serve that body to everyone else.
+    const evil = { ...md, "X-Forwarded-Host": "evil.example.com" };
+    for (const path of ["/", "/definitely-not-a-page"]) {
+      const body = await (await fetch(`${BASE}${path}`, { headers: evil })).text();
+      expect(body).not.toContain("evil.example.com");
+      expect(body).toContain("https://daysurface.com");
+    }
+  });
+
+  test("the body is identical regardless of forwarded headers", async () => {
+    const plain = await (await fetch(`${BASE}/`, { headers: md })).text();
+    const forwarded = await (
+      await fetch(`${BASE}/`, {
+        headers: { ...md, "X-Forwarded-Host": "other.example.com", "X-Forwarded-Proto": "http" },
+      })
+    ).text();
+    expect(forwarded).toBe(plain);
+  });
+});
+
 describe("payload budgets", () => {
   // The homepage is 15% visible text: ~95KB of Tailwind class attributes and
   // ~41KB of inline SVG. A fetcher that truncates raw HTML never reaches the
@@ -247,8 +293,26 @@ describe("discovery documents", () => {
 
   test("the sitemap lists /connect but not the noindex aliases", async () => {
     const body = await (await fetch(`${BASE}/sitemap.xml`)).text();
-    expect(body).toContain("<loc>https://daysurface.com/connect</loc>");
-    expect(body).not.toContain("<loc>https://daysurface.com/signup</loc>");
+    expect(body).toContain("<loc>https://daysurface.com/connect/</loc>");
+    expect(body).not.toContain("<loc>https://daysurface.com/signup/</loc>");
+  });
+
+  test("every sitemap URL is the page's own canonical form", async () => {
+    // Listing /compare while the page canonicalises to /compare/ points crawlers
+    // at a non-canonical variant of every page and makes them lean on canonical
+    // consolidation for something the sitemap can just state correctly.
+    const sitemap = await (await fetch(`${BASE}/sitemap.xml`)).text();
+    const locs = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
+    expect(locs.length).toBeGreaterThan(5);
+    for (const loc of locs) {
+      const path = new URL(loc).pathname;
+      // /docs is proxied to the Next.js docs service, which owns its canonical.
+      if (path === "/docs") continue;
+      const res = await fetch(`${BASE}${path}`);
+      if (res.status !== 200) continue;
+      const canonical = (await res.text()).match(/rel="canonical" href="([^"]+)"/)?.[1];
+      if (canonical) expect(canonical).toBe(loc);
+    }
   });
 });
 
