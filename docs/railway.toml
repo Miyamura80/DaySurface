@@ -2,12 +2,18 @@
 # Deploy this folder as its own Railway service with Root Directory = docs.
 # Docs: https://docs.railway.com/reference/config-as-code
 #
-# Sibling services in the same Railway project (eito-projects). The names are
-# the Railway service names, which also determine each `*.railway.internal`
-# private domain - keep them in sync with the console:
-#   - gmailmcp-backend       -> /railway.json        (Python API, mcp.daysurface.com)
-#   - gmailmcp-landing-page  -> /landing-page/...     (Astro static, daysurface.com)
-#   - gmailmcp-docs          -> this file             (Next.js docs, docs.daysurface.com)
+# Sibling services in the same Railway project (eito-projects), by role rather
+# than by name - the Railway service names have been renamed more than once and
+# a stale list here is worse than no list:
+#   - the backend service       -> /railway.json        (Python API, mcp.daysurface.com)
+#   - the landing-page service  -> /landing-page/...     (Astro static, daysurface.com)
+#   - this service              -> this file             (Next.js docs, docs.daysurface.com)
+#
+# Renaming THIS service moves its `*.railway.internal` private domain, which
+# the landing page dials to serve `daysurface.com/docs`. After any rename,
+# update `DOCS_UPSTREAM` on the landing-page service AND redeploy it, or the
+# apex docs paths 502 while this service still serves fine on its own domain.
+# See landing-page/railway.toml.
 #
 # Builder is RAILPACK: Railway auto-detects the bun/Next.js project from bun.lock.
 # `bun install` runs the `postinstall` hook (fumadocs-mdx) to generate .source.

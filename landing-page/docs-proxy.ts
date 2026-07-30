@@ -16,9 +16,13 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { Readable } from "node:stream";
 
 /**
- * Origin of the docs service, e.g. `http://gmailmcp-docs.railway.internal:8080`.
- * On Railway set it from the reference `http://${{gmailmcp-docs.RAILWAY_PRIVATE_DOMAIN}}:8080`
- * so renaming the docs service cannot leave this pointing at a dead host.
+ * Origin of the docs service, e.g. `http://<docs-service>.railway.internal:8080`.
+ * On Railway set it from a `${{<docs-service>.RAILWAY_PRIVATE_DOMAIN}}` reference.
+ *
+ * Note that reading this per request does NOT make it live: a container's
+ * environment is fixed at process start, so renaming the docs service or
+ * editing the variable requires redeploying this service before the new value
+ * is visible here. See landing-page/railway.toml.
  *
  * Read per request rather than captured at import time: a module-level snapshot
  * cannot be configured by a test that imports this file, and it silently bakes
@@ -73,7 +77,7 @@ const PROXY_PREFIXES: readonly string[] = [
 if (!docsUpstream()) {
   console.warn(
     "[landing-page] DOCS_UPSTREAM is not set - docs paths will return 503. " +
-      "Set it to the docs service origin (e.g. http://gmailmcp-docs.railway.internal:8080).",
+      "Set it to the docs service origin (e.g. http://<docs-service>.railway.internal:8080).",
   );
 }
 
