@@ -43,6 +43,9 @@ export const footer: { columns: FooterColumn[]; copyright: string } = {
       heading: "Product",
       links: [
         { label: "Features", href: "/#features" },
+        // Site-wide internal link so the page is reachable by a crawler that
+        // never sees the sitemap; it is not in the header, which stays short.
+        { label: "Gmail webhooks", href: "/gmail-webhooks" },
         { label: "Compare", href: "/compare" },
         // The /pricing page only ships when pricing.enabled - don't link a dead route otherwise.
         ...(pricing.enabled ? [{ label: "Pricing", href: "/pricing" }] : []),

@@ -17,6 +17,22 @@ export const GET: APIRoute = ({ site: astroSite }) => {
     { path: "/", type: "SoftwareApplication", sources: ROUTE_SOURCES["/"]! },
     { path: "/", type: "Organization", sources: ROUTE_SOURCES["/"]! },
     { path: "/", type: "FAQPage", sources: ROUTE_SOURCES["/"]! },
+    // /gmail-webhooks embeds WebPage + FAQPage + BreadcrumbList JSON-LD.
+    {
+      path: "/gmail-webhooks",
+      type: "WebPage",
+      sources: ROUTE_SOURCES["/gmail-webhooks"]!,
+    },
+    {
+      path: "/gmail-webhooks",
+      type: "FAQPage",
+      sources: ROUTE_SOURCES["/gmail-webhooks"]!,
+    },
+    {
+      path: "/gmail-webhooks",
+      type: "BreadcrumbList",
+      sources: ROUTE_SOURCES["/gmail-webhooks"]!,
+    },
     // /compare embeds WebPage + ItemList + BreadcrumbList JSON-LD.
     { path: "/compare", type: "WebPage", sources: ROUTE_SOURCES["/compare"]! },
     { path: "/compare", type: "ItemList", sources: ROUTE_SOURCES["/compare"]! },

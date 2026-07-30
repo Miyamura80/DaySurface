@@ -1,0 +1,163 @@
+---
+import Base from "../layouts/Base.astro";
+import Nav from "../components/Nav.astro";
+import Footer from "../components/Footer.astro";
+import { site, webhooks } from "../config/landing";
+
+const origin = (Astro.site ?? new URL(site.url)).origin;
+
+// Distinct from the docs page's "Gmail Webhooks" on purpose - see webhooks.ts.
+const pageTitle = "Gmail webhooks - signed events for a connected inbox";
+const pageDescription = webhooks.subhead;
+
+// schema.org: a WebPage plus the FAQ, so the question/answer pairs are eligible
+// as rich results and readable by answer engines. Advertised via /schemamap.xml.
+const jsonLd = [
+  {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    name: pageTitle,
+    description: pageDescription,
+    url: `${origin}/gmail-webhooks`,
+    isPartOf: { "@type": "WebSite", name: site.name, url: site.url },
+    about: { "@type": "Thing", name: "Gmail webhooks" },
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: webhooks.faqs.map((f) => ({
+      "@type": "Question",
+      name: f.question,
+      acceptedAnswer: { "@type": "Answer", text: f.answer },
+    })),
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: site.url },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "Gmail webhooks",
+        item: `${origin}/gmail-webhooks`,
+      },
+    ],
+  },
+];
+
+/** Whose leg of the trip this is - only ours gets emphasis. */
+const OWNER_STYLE: Record<string, string> = {
+  gmail: "border-border text-fg-muted",
+  daysurface: "border-accent text-fg",
+  you: "border-border text-fg-muted",
+};
+---
+
+<Base title={pageTitle} description={pageDescription}>
+  <script
+    type="application/ld+json"
+    is:inline
+    slot="head"
+    set:html={JSON.stringify(jsonLd)}
+  />
+
+  <Nav />
+  <main class="mx-auto max-w-5xl px-4 py-12 sm:px-6 sm:py-16">
+    <a
+      href="/"
+      class="inline-flex min-h-11 items-center text-sm opacity-70 hover:opacity-100"
+      >&larr; Back to {site.name}</a
+    >
+
+    <header class="mt-6 max-w-3xl">
+      <h1 class="text-4xl font-bold tracking-tight sm:text-5xl">
+        {webhooks.heading}
+      </h1>
+      <p class="mt-4 text-lg text-fg-muted">{webhooks.subhead}</p>
+    </header>
+
+    <!-- The whole pitch in one glance: three hops, and the middle one is ours. -->
+    <section class="mt-14" aria-label="How a delivery travels">
+      <ol class="grid gap-4 sm:grid-cols-3">
+        {
+          webhooks.stages.map((s, i) => (
+            <li
+              class={`relative border-2 bg-surface-1 p-5 ${OWNER_STYLE[s.owner]}`}
+            >
+              <span class="font-mono text-xs uppercase tracking-widest text-fg-subtle">
+                {`0${i + 1}`}
+              </span>
+              <h2 class="mt-2 text-lg font-semibold">{s.label}</h2>
+              <p class="mt-2 text-sm leading-relaxed text-fg-muted">{s.detail}</p>
+              {i < webhooks.stages.length - 1 && (
+                <span
+                  class="pointer-events-none absolute -right-3 top-1/2 hidden -translate-y-1/2 text-fg-subtle sm:block"
+                  aria-hidden="true"
+                >
+                  →
+                </span>
+              )}
+            </li>
+          ))
+        }
+      </ol>
+    </section>
+
+    <section class="mt-16">
+      <h2 class="text-2xl font-bold tracking-tight">What you get</h2>
+      <div class="mt-6 grid gap-6 sm:grid-cols-3">
+        {
+          webhooks.benefits.map((b) => (
+            <div class="border-t-2 border-border pt-4">
+              <h3 class="font-semibold">{b.title}</h3>
+              <p class="mt-2 text-pretty text-sm leading-relaxed text-fg-muted">
+                {b.body}
+              </p>
+            </div>
+          ))
+        }
+      </div>
+    </section>
+
+    <!-- Answers stay collapsed: the questions are the scannable part. -->
+    <section class="mt-16">
+      <h2 class="text-2xl font-bold tracking-tight">Common questions</h2>
+      <div class="mt-6 divide-y divide-border/60 border-y border-border/60">
+        {
+          webhooks.faqs.map((f) => (
+            <details class="group">
+              <summary class="flex min-h-11 cursor-pointer list-none items-center justify-between gap-4 py-4 font-medium">
+                {f.question}
+                <span
+                  class="shrink-0 text-fg-subtle transition group-open:rotate-45"
+                  aria-hidden="true"
+                >
+                  +
+                </span>
+              </summary>
+              <p class="pb-4 text-pretty leading-relaxed text-fg-muted">{f.answer}</p>
+            </details>
+          ))
+        }
+      </div>
+    </section>
+
+    <p class="mt-10 text-sm text-fg-muted">
+      {webhooks.selfHostNote}{" "}
+      <a href={webhooks.docsHref} class="text-accent underline underline-offset-4"
+        >Read the webhook docs</a
+      >.
+    </p>
+
+    <div class="mt-12 border-t border-border/60 pt-10 text-center">
+      <a
+        href="/#connect"
+        class="inline-flex items-center gap-2 bg-accent px-5 py-2.5 font-semibold text-accent-fg transition hover:bg-accent-strong"
+      >
+        Add DaySurface to your client
+      </a>
+    </div>
+  </main>
+  <Footer />
+</Base>

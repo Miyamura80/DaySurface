@@ -18,6 +18,9 @@ const routes: Route[] = [
   // every page. Listing the index here gives crawlers a path in from the apex.
   { path: "/docs", priority: "0.9", changefreq: "weekly" },
   { path: "/compare", priority: "0.8", changefreq: "monthly" },
+  // Commercial-intent counterpart to /docs/gmail-webhooks; see webhooks.ts for
+  // why the two are kept separate.
+  { path: "/gmail-webhooks", priority: "0.8", changefreq: "monthly" },
   ...(pricing.enabled
     ? [{ path: "/pricing", priority: "0.9", changefreq: "monthly" }]
     : []),

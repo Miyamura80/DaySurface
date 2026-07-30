@@ -65,6 +65,12 @@ export const ROUTE_SOURCES: Record<string, readonly string[]> = {
   // Served by the Next.js docs service through the reverse proxy, so its
   // freshness comes from the docs content rather than anything in this project.
   "/docs": ["docs/content"],
+  "/gmail-webhooks": [
+    `${LP}/src/pages/gmail-webhooks.astro`,
+    `${CFG}/webhooks.ts`,
+    ...NAV_FOOTER,
+    ...CHROME,
+  ],
   "/compare": [
     `${LP}/src/pages/compare.astro`,
     `${CMP}/ComparisonTable.astro`,
