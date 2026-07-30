@@ -5,7 +5,7 @@
  * surface: llms.txt, llms-full.txt, agents.md and the in-page agent view.
  * Rebranding the site (editing landing.ts) keeps all of these in sync.
  */
-import { site, hero, features, faq, compatibility, connect, comparison, pricing, pricingAxes, addOns, selfHost, agentGuide } from "../config/landing";
+import { site, hero, purpose, features, faq, compatibility, connect, comparison, pricing, pricingAxes, addOns, selfHost, agentGuide } from "../config/landing";
 
 /** Strip a trailing slash so we can safely append paths. */
 function trimSlash(url: string): string {
@@ -125,11 +125,14 @@ ${hero.headline} ${hero.subhead}
 
 ## What it is
 
-${site.name} is a Model Context Protocol (MCP) server. It exposes a single
-shared service registry over three interfaces - a CLI, an MCP server
-(streamable HTTP), and a plain HTTP API - so the same typed tools behave
-identically no matter how they are called. Any agent that speaks MCP can
-discover and call its tools.
+${purpose.lead}
+
+Under the hood it exposes a single shared service registry over three
+interfaces - a CLI, an MCP server (streamable HTTP), and a plain HTTP API - so
+the same typed tools behave identically no matter how they are called. Any agent
+that speaks MCP can discover and call its tools.
+
+Google access is user-authorized and revocable: ${purpose.consent}
 
 ${whenToUseSection()}
 

@@ -49,7 +49,11 @@ export const agentGuide: {
 };
 
 export const testimonials: { enabled: boolean; heading: string; items: Testimonial[] } = {
-  enabled: true,
+  // Off until the quotes below are real. Placeholder names beside AI-generated
+  // faces read as fabricated endorsements to anyone reviewing the site -
+  // including Google's OAuth app reviewers, who check that the home page
+  // represents a real, finished product. Flip back to true with real quotes.
+  enabled: false,
   heading: "Trusted by builders",
   items: [
     {
@@ -143,13 +147,18 @@ export const faq: { heading: string; items: FaqItem[] } = {
 };
 
 export const finalCta: { heading: string; subhead: string; features: string[] } = {
-  heading: "Ship your MCP server today.",
-  subhead: "Clone the repo, deploy it, and point your agent at the URL.",
-  // Four flagship features, 3–4 words each, shown beside the final CTA.
+  // Addressed to the person connecting their own mailbox, not to a developer
+  // cloning a repo: this is the last thing an OAuth reviewer reads, and
+  // "clone the repo" made the page look like a template rather than the app
+  // that requested Gmail access.
+  heading: `Put ${site.name} in your AI client.`,
+  subhead:
+    "Add the server, sign in with Google, and ask your assistant what needs a reply. Takes about a minute, with nothing to install.",
+  // Four flagship features, 3-4 words each, shown beside the final CTA.
   features: [
-    "Three transports, one codebase",
-    "Headless or interactive tools",
-    "Streamable HTTP, one port",
+    "Works in any MCP client",
+    "Drafts you edit before sending",
+    "Nothing to install",
     "Open source, self-hostable",
   ],
 };

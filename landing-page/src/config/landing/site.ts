@@ -7,7 +7,10 @@
  */
 
 export const site = {
-  // TODO: product identity
+  // Product identity. `name` is also the OAuth consent screen's "App name" -
+  // Google verification rejects the homepage if the two differ, so keep this
+  // string identical to the Google Cloud OAuth branding and render it visibly
+  // on the home page (nav, hero headline, purpose section).
   name: "DaySurface",
   tagline: "An MCP server for Gmail",
   // Used for <title>, meta description, and OG tags.
@@ -27,6 +30,21 @@ export const site = {
   apiUrl: "https://api.daysurface.com",
   // Server name used in client configs / deep links (no spaces).
   serverName: "daysurface",
+} as const;
+
+/**
+ * Who operates the Service, and where to reach us.
+ *
+ * Shared by /privacy, /terms, and the home-page purpose section so the legal
+ * entity, address, and support address can never drift between them. Google's
+ * OAuth verification cross-checks the operator and support contact shown on the
+ * home page against the privacy policy and the Cloud project's branding.
+ */
+export const legal = {
+  operator: "GPU-EVM LTD",
+  operatorAddress: "3rd Floor, 86-90 Paul Street, London, England, EC2A 4NE",
+  jurisdiction: "England and Wales",
+  supportEmail: "support@daysurface.com",
 } as const;
 
 /**

@@ -1,11 +1,10 @@
 ---
 import Base from "../layouts/Base.astro";
-import { site } from "../config/landing";
+import { site, legal } from "../config/landing";
 
-const operator = "GPU-EVM LTD";
-const operatorAddress = "3rd Floor, 86-90 Paul Street, London, England, EC2A 4NE";
-const supportEmail = "support@daysurface.com";
-const jurisdiction = "England and Wales";
+// Operator identity is shared with /privacy and the home-page purpose section
+// (config/landing/site.ts) so the three can never disagree.
+const { operator, operatorAddress, supportEmail, jurisdiction } = legal;
 const effectiveDate = "June 20, 2026";
 ---
 

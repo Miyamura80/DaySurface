@@ -1,6 +1,7 @@
 /**
  * Hero section: headline copy, the client-toggle chat mock, and the feature grid.
  */
+import { site } from "./site";
 
 export interface Feature {
   /** Selects the bespoke diagram in FeatureVisual.astro (by key). */
@@ -16,10 +17,13 @@ export const hero: {
 } = {
   // Optional eyebrow pill (launch/funding/release). Set to "" to hide.
   eyebrow: "",
-  // Keep the headline short (< ~44 chars) and benefit/identity-driven.
-  headline: "Triage, draft, sign - without leaving chat.",
+  // Keep the headline short (< ~44 chars) and benefit/identity-driven. It must
+  // also lead with `site.name`: this <h1> is what a Google OAuth reviewer reads
+  // to check the home page is branded with the same app name as the consent
+  // screen, and a headline that only sells the benefit fails that check.
+  headline: `${site.name}: Gmail, inside your AI chat.`,
   subhead:
-    "A real email composer and a ranked inbox, right inside Claude, ChatGPT, or your favorite agent. Your agent triages and writes; you edit and send.",
+    "Connect your Google account once and the assistant you already use - Claude, ChatGPT, Cursor, or any MCP client - can triage your inbox, draft replies in a real composer, and fill PDF attachments for you to sign. You edit and send; nothing goes out on its own.",
 };
 
 /**

@@ -1,0 +1,103 @@
+---
+/**
+ * Plain-language purpose section, rendered immediately after the hero.
+ *
+ * Placement is deliberate: this is the block a Google OAuth reviewer must find
+ * without hunting, so it sits above the compatibility strip rather than further
+ * down with the marketing sections. Content lives in config/landing/purpose.ts.
+ */
+import { purpose, site } from "../config/landing";
+---
+
+<section id="about" class="scroll-mt-20 border-t border-border/60 py-16 sm:py-20">
+  <div class="mx-auto max-w-6xl px-4 sm:px-6">
+    <div
+      class="grid gap-12 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] lg:gap-16"
+    >
+      <!-- Left: what the app is, who it is for, who runs it. -->
+      <div class="min-w-0">
+        <h2 class="text-balance text-3xl font-bold tracking-tight sm:text-4xl">
+          {purpose.heading}
+        </h2>
+        <p class="mt-5 text-pretty text-base leading-relaxed text-fg-muted sm:text-lg">
+          {purpose.lead}
+        </p>
+
+        <dl class="mt-10 space-y-7 border-l-2 border-border pl-5 sm:pl-6">
+          {
+            purpose.points.map((point) => (
+              <div class="min-w-0">
+                <dt class="font-semibold">{point.label}</dt>
+                <dd class="mt-1.5 text-pretty leading-relaxed text-fg-muted">
+                  {point.body}
+                </dd>
+              </div>
+            ))
+          }
+        </dl>
+      </div>
+
+      <!-- Right: the Google data the app requests, why, and the legal links.
+           Kept as its own card so the scope list reads as a disclosure rather
+           than as another marketing claim. -->
+      <div class="min-w-0">
+        <div class="relative border-2 border-accent bg-surface-1">
+          <!-- Edison corner tag, same treatment as the feature panel. -->
+          <span
+            class="absolute top-[-2px] left-[-2px] flex h-7 items-center bg-accent px-3 font-mono text-xs font-bold tracking-widest text-accent-fg"
+          >
+            GOOGLE DATA
+          </span>
+
+          <div class="px-5 pt-12 pb-6 sm:px-6 sm:pt-14">
+            <h3 class="text-lg font-semibold sm:text-xl">
+              {purpose.scopesHeading}
+            </h3>
+
+            <ul class="mt-5 space-y-5">
+              {
+                purpose.scopes.map((s) => (
+                  <li class="min-w-0 border-t border-border pt-5 first:border-t-0 first:pt-0">
+                    <p class="font-medium">{s.name}</p>
+                    <p class="mt-1 font-mono text-xs break-words text-accent">
+                      {s.scope}
+                    </p>
+                    <p class="mt-2 text-sm leading-relaxed text-fg-muted">
+                      {s.why}
+                    </p>
+                  </li>
+                ))
+              }
+            </ul>
+
+            <p
+              class="mt-6 border-t border-border pt-5 text-sm leading-relaxed text-fg-muted"
+            >
+              {purpose.consent}
+            </p>
+
+            <div class="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-sm">
+              {
+                purpose.links.map((link) => (
+                  <a
+                    href={link.href}
+                    target={link.external ? "_blank" : undefined}
+                    rel={link.external ? "noopener noreferrer" : undefined}
+                    class="underline decoration-from-font underline-offset-4 transition hover:text-accent"
+                  >
+                    {link.label}
+                  </a>
+                ))
+              }
+            </div>
+          </div>
+        </div>
+
+        <p class="mt-4 text-xs text-fg-subtle">
+          {site.name} requests these scopes from your own Google account; it
+          never asks for credentials outside Google's sign-in.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>

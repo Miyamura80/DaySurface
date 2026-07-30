@@ -32,8 +32,8 @@ ACCENT = (195, 255, 253)  # Core Cyan 500
 # --- copy (keep in sync with src/config/landing.ts) -------------------------
 EYEBROW = "AN MCP SERVER FOR GMAIL"
 WORDMARK = "DaySurface"
-HEADLINE = ["Triage, draft, sign -", "without leaving chat."]
-SUBHEAD = "A real composer and a ranked inbox, inside any MCP client."
+HEADLINE = ["DaySurface: Gmail,", "inside your AI chat."]
+SUBHEAD = "Triage, draft, and sign - inside any MCP client."
 PILLS = ["Gmail", "MCP", "Open source"]
 REPO = "github.com/Miyamura80/DaySurface"
 

@@ -66,4 +66,6 @@ public/favicon.svg
 public/og.png            # ← social-share card (committed, 1200×630)
 ```
 
-Sections, in order: Nav → Hero → TrustStrip → GetStarted → Features → Testimonials → Pricing → AskAi → Faq → FinalCta → Footer.
+Sections, in order: Nav → Hero → Purpose → TrustStrip → Features → Comparison → Testimonials → Pricing → AskAi → Faq → FinalCta → Footer.
+
+> **Don't remove or bury the Purpose section (`#about`).** Google's OAuth verification requires the home page to state the app's name (identical to the consent screen's "App name"), explain in plain language what the app does, disclose which Google user data it requests and why, and link to the privacy policy. That block, plus the app name in the `<h1>`, is what satisfies it. Copy lives in `src/config/landing/purpose.ts`; keep its scope list in step with `/privacy` and with the scopes the server actually requests.

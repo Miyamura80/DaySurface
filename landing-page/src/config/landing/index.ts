@@ -12,6 +12,7 @@
  */
 export * from "./site";
 export * from "./hero";
+export * from "./purpose";
 export * from "./nav";
 export * from "./connect";
 export * from "./comparison";

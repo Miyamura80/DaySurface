@@ -60,7 +60,9 @@ export const footer: { columns: FooterColumn[]; copyright: string } = {
     {
       heading: "Company",
       links: [
-        { label: "About", href: "#" },
+        // Anchors the purpose section on the home page - what the product is,
+        // what Google data it uses, and who operates it.
+        { label: "About", href: "/#about" },
         { label: "Blog", href: "#" },
         { label: "Contact", href: "#" },
       ],
