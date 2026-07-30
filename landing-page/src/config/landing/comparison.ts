@@ -40,13 +40,16 @@ export interface Competitor {
   /** Canonical link to the competitor. */
   url: string;
   /**
-   * Mark shown above the name in the comparison matrix, as a filename under
-   * public/logos/. Rendered as a CSS mask so it takes the surrounding text
-   * colour - which means the file must be a single-colour silhouette, not a
-   * multi-colour brand lockup. Open-source projects with no brand of their own
-   * use github.svg. Omit and the column falls back to the name alone.
+   * Marks shown above the name in the comparison matrix, as filenames under
+   * public/logos/. Rendered as CSS masks so each silhouette takes the column
+   * link's colour - which means the file has to carry the mark in its alpha
+   * channel, not as a multi-colour brand lockup. Competitor marks came from
+   * logo.dev (which serves raster tiles only, hence .png) with the flat brand
+   * background keyed out; open-source projects with no brand of their own use
+   * github.svg. A column covering two products lists both. Omit and the column
+   * falls back to the name alone.
    */
-  logo?: string;
+  logos?: string[];
   /** Headline contrast for the /vs page hero. */
   headline: string;
   /** Paragraph summary of the difference. */
@@ -120,7 +123,7 @@ export const comparison: {
       blurb:
         "The most-starred open-source Gmail MCP: a local stdio server wrapping the Gmail API.",
       url: "https://github.com/GongRzhe/Gmail-MCP-Server",
-      logo: "github.svg",
+      logos: ["github.svg"],
       headline: "The open-source Gmail MCP, upgraded.",
       summary:
         "GongRzhe's server is a faithful, well-loved wrapper around the Gmail API - around a dozen tools for send, draft, read, search, labels and attachments, run locally over stdio with a credentials file on disk. You get clean primitives and JSON back. DaySurface shares the open-source spirit but goes further: it renders an interactive composer and a ranked-inbox dashboard inside the chat, and the same tools are reachable over a CLI and an HTTP API, not just stdio.",
@@ -136,6 +139,7 @@ export const comparison: {
       blurb:
         "Gmail as one toolkit inside a managed 500+ app MCP gateway with hosted OAuth.",
       url: "https://composio.dev/toolkits/gmail",
+      logos: ["composio.png"],
       headline: "A Gmail product, not a Gmail endpoint in a 500-app gateway.",
       summary:
         "Composio's strength is breadth: one managed endpoint and hosted OAuth across hundreds of SaaS apps, with Gmail exposed as a generic search / read / draft / send toolkit. DaySurface trades breadth for depth on email - an interactive composer and ranked-inbox dashboard rendered in the chat - and it's open source, so you self-host with your own credentials instead of routing mail through a proprietary gateway.",
@@ -151,6 +155,7 @@ export const comparison: {
       blurb:
         "Gmail actions inside no-code automation platforms exposed as MCP tools.",
       url: "https://zapier.com/mcp",
+      logos: ["zapier.png", "pipedream.png"],
       headline: "Built for an agent in the loop, not a no-code workflow.",
       summary:
         "Zapier and Pipedream expose Gmail as actions inside their automation platforms - great for fire-and-forget workflows, with tools often auto-generated from API specs. DaySurface is purpose-built for a human-in-the-loop agent: an interactive composer where you review and edit before anything sends, a ranked inbox you triage in-chat, and an open-source codebase you host yourself rather than orchestrate through a workflow runner.",
@@ -166,7 +171,7 @@ export const comparison: {
       blurb:
         "Broad Google Workspace coverage (Gmail, Calendar, Drive, Docs) over MCP.",
       url: "https://github.com/taylorwilsdon/google_workspace_mcp",
-      logo: "github.svg",
+      logos: ["github.svg"],
       headline: "Gmail done deeply vs. Workspace done broadly.",
       summary:
         "Google Workspace MCP covers a huge surface - Gmail, Calendar, Drive and Docs - as headless tools you run yourself. It's a great fit when you need the whole suite. DaySurface goes the other way: deep on Gmail with an interactive in-chat composer and ranked-inbox dashboard, a minimal single Gmail scope, and the same tools exposed over CLI and HTTP as well as MCP.",

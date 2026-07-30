@@ -5,6 +5,7 @@
  * show as columns - the /compare hub passes all of them, each /vs page passes
  * just one.
  */
+import { readFileSync } from "node:fs";
 import type { Competitor, MatrixRow, MatrixCell } from "../config/landing";
 import { comparison } from "../config/landing";
 
@@ -22,6 +23,24 @@ const MARK: Record<MatrixCell["state"], { glyph: string; cls: string; label: str
   partial: { glyph: "~", cls: "text-fg-muted", label: "Partial" },
   no: { glyph: "–", cls: "text-fg-subtle", label: "No" },
 };
+
+/*
+ * A masked span has no intrinsic size, so the aspect ratio has to come from the
+ * file or a wordmark gets squeezed into a square (Zapier's is ~3:1). Read it at
+ * build time rather than duplicating it in config, where it would silently rot
+ * the next time a mark is replaced. PNG keeps width/height as big-endian uint32
+ * at bytes 16 and 20; the .svg marks here are square.
+ */
+const aspect = (file: string): number => {
+  if (!file.endsWith(".png")) return 1;
+  const buf = readFileSync(new URL(`../../public/logos/${file}`, import.meta.url));
+  return buf.readUInt32BE(16) / buf.readUInt32BE(20);
+};
+
+const maskStyle = (file: string) =>
+  `aspect-ratio:${aspect(file).toFixed(3)};` +
+  `-webkit-mask:url('/logos/${file}') center/contain no-repeat;` +
+  `mask:url('/logos/${file}') center/contain no-repeat;`;
 ---
 
 <div class="-mx-4 overflow-x-auto overscroll-x-contain px-4 sm:mx-0 sm:px-0" tabindex="0" role="region" aria-label="Capability comparison, scrollable">
@@ -49,12 +68,16 @@ const MARK: Record<MatrixCell["state"], { glyph: string; cls: string; label: str
           competitors.map((c) => (
             <th scope="col" class="px-4 py-4 align-bottom text-sm font-semibold text-fg-muted">
               <a href={`/vs/${c.id}`} class="block transition hover:text-fg">
-                {c.logo && (
-                  <span
-                    class="mb-2 block size-5 bg-current"
-                    style={`-webkit-mask:url('/logos/${c.logo}') center/contain no-repeat;mask:url('/logos/${c.logo}') center/contain no-repeat;`}
-                    aria-hidden="true"
-                  />
+                {c.logos && c.logos.length > 0 && (
+                  <span class="mb-2 flex items-center gap-2.5">
+                    {c.logos.map((file) => (
+                      <span
+                        class="block h-5 bg-current"
+                        style={maskStyle(file)}
+                        aria-hidden="true"
+                      />
+                    ))}
+                  </span>
                 )}
                 {c.name}
               </a>
