@@ -1,8 +1,17 @@
 import type { APIRoute } from "astro";
 import { site, comparison, pricing } from "../config/landing";
+import { ROUTE_SOURCES, VS_SOURCES, lastmodTag } from "../lib/lastmod";
+
+/** `sources` defaults to the ROUTE_SOURCES entry for `path` when omitted. */
+type Route = {
+  path: string;
+  priority: string;
+  changefreq: string;
+  sources?: readonly string[];
+};
 
 // Static routes that ship in dist/. Keep in sync with src/pages/*.astro.
-const routes = [
+const routes: Route[] = [
   { path: "/", priority: "1.0", changefreq: "weekly" },
   // Entry point into the docs section, which is proxied from the Next.js docs
   // service (see `server.ts`) and ships its own `/docs/sitemap.xml` covering
@@ -18,6 +27,7 @@ const routes = [
     path: `/vs/${c.id}`,
     priority: "0.7",
     changefreq: "monthly",
+    sources: VS_SOURCES,
   })),
   { path: "/privacy", priority: "0.3", changefreq: "yearly" },
   { path: "/terms", priority: "0.3", changefreq: "yearly" },
@@ -25,14 +35,13 @@ const routes = [
 
 export const GET: APIRoute = ({ site: astroSite }) => {
   const origin = (astroSite ?? new URL(site.url)).origin;
-  const lastmod = new Date().toISOString().split("T")[0];
 
   const urls = routes
     .map(
       (r) =>
         `  <url>\n` +
         `    <loc>${origin}${r.path}</loc>\n` +
-        `    <lastmod>${lastmod}</lastmod>\n` +
+        lastmodTag(r.sources ?? ROUTE_SOURCES[r.path] ?? []) +
         `    <changefreq>${r.changefreq}</changefreq>\n` +
         `    <priority>${r.priority}</priority>\n` +
         `  </url>`,

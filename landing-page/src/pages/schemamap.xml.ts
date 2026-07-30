@@ -1,5 +1,6 @@
 import type { APIRoute } from "astro";
 import { site, comparison, pricing } from "../config/landing";
+import { ROUTE_SOURCES, VS_SOURCES, lastmodTag } from "../lib/lastmod";
 
 /**
  * NLWeb / Schema Map feed (referenced via the `Schemamap:` directive in
@@ -9,28 +10,33 @@ import { site, comparison, pricing } from "../config/landing";
  */
 export const GET: APIRoute = ({ site: astroSite }) => {
   const origin = (astroSite ?? new URL(site.url)).origin;
-  const lastmod = new Date().toISOString();
 
-  const feeds = [
-    { loc: `${origin}/`, type: "SoftwareApplication" },
-    { loc: `${origin}/`, type: "Organization" },
-    { loc: `${origin}/`, type: "FAQPage" },
+  // `sources` feeds the per-URL <lastmod>; see src/lib/lastmod.ts for why these
+  // are git dates rather than the build clock.
+  const feeds: { path: string; type: string; sources: readonly string[] }[] = [
+    { path: "/", type: "SoftwareApplication", sources: ROUTE_SOURCES["/"]! },
+    { path: "/", type: "Organization", sources: ROUTE_SOURCES["/"]! },
+    { path: "/", type: "FAQPage", sources: ROUTE_SOURCES["/"]! },
     // /compare embeds WebPage + ItemList + BreadcrumbList JSON-LD.
-    { loc: `${origin}/compare`, type: "WebPage" },
-    { loc: `${origin}/compare`, type: "ItemList" },
-    { loc: `${origin}/compare`, type: "BreadcrumbList" },
+    { path: "/compare", type: "WebPage", sources: ROUTE_SOURCES["/compare"]! },
+    { path: "/compare", type: "ItemList", sources: ROUTE_SOURCES["/compare"]! },
+    { path: "/compare", type: "BreadcrumbList", sources: ROUTE_SOURCES["/compare"]! },
     // /pricing embeds Product (with an Offer per tier) + FAQPage + BreadcrumbList.
     ...(pricing.enabled
       ? [
-          { loc: `${origin}/pricing`, type: "Product" },
-          { loc: `${origin}/pricing`, type: "FAQPage" },
-          { loc: `${origin}/pricing`, type: "BreadcrumbList" },
+          { path: "/pricing", type: "Product", sources: ROUTE_SOURCES["/pricing"]! },
+          { path: "/pricing", type: "FAQPage", sources: ROUTE_SOURCES["/pricing"]! },
+          {
+            path: "/pricing",
+            type: "BreadcrumbList",
+            sources: ROUTE_SOURCES["/pricing"]!,
+          },
         ]
       : []),
     // Each /vs/<slug> page embeds WebPage + BreadcrumbList JSON-LD.
     ...comparison.competitors.flatMap((c) => [
-      { loc: `${origin}/vs/${c.id}`, type: "WebPage" },
-      { loc: `${origin}/vs/${c.id}`, type: "BreadcrumbList" },
+      { path: `/vs/${c.id}`, type: "WebPage", sources: VS_SOURCES },
+      { path: `/vs/${c.id}`, type: "BreadcrumbList", sources: VS_SOURCES },
     ]),
   ];
 
@@ -38,8 +44,8 @@ export const GET: APIRoute = ({ site: astroSite }) => {
     .map(
       (f) =>
         `  <url>\n` +
-        `    <loc>${f.loc}</loc>\n` +
-        `    <lastmod>${lastmod}</lastmod>\n` +
+        `    <loc>${origin}${f.path}</loc>\n` +
+        lastmodTag(f.sources) +
         `    <schemamap:schema>\n` +
         `      <schemamap:type>${f.type}</schemamap:type>\n` +
         `      <schemamap:format>application/ld+json</schemamap:format>\n` +
