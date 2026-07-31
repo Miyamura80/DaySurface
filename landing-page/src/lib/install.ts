@@ -154,6 +154,9 @@ export const installMatrix: readonly InstallClient[] = connect.targets.map((t) =
   note: t.note ?? null,
 }));
 
+/** A client as the UI surfaces need it: the agent contract plus its logo. */
+export type InstallClientUi = InstallClient & { logo: string };
+
 /**
  * The matrix with each client's logo, for the UI surfaces.
  *
@@ -161,8 +164,10 @@ export const installMatrix: readonly InstallClient[] = connect.targets.map((t) =
  * a site-relative asset path, but joined here rather than at each call site -
  * ConnectWidget used to rebuild this join by hand from `connect.targets`.
  */
-export const installClientsForUi: readonly (InstallClient & { logo: string })[] =
-  installMatrix.map((c, i) => ({ ...c, logo: connect.targets[i].logo }));
+export const installClientsForUi: readonly InstallClientUi[] = installMatrix.map((c, i) => ({
+  ...c,
+  logo: connect.targets[i].logo,
+}));
 
 export interface InstallGroup {
   effort: InstallEffort;
@@ -175,13 +180,19 @@ export interface InstallGroup {
    * ~1.5KB - on two surfaces whose whole purpose is surviving truncation.
    */
   sharedPrompt: string | null;
-  clients: InstallClient[];
+  /**
+   * Carries `logo` so /connect can show each client's mark the way the homepage
+   * picker does. The markdown builder consumes the same groups and simply
+   * ignores the field - one grouping function, not two that can disagree about
+   * ordering or shared-prompt detection.
+   */
+  clients: InstallClientUi[];
 }
 
 /** The matrix bucketed by effort, in render order, empty groups dropped. */
 export function groupedInstallMatrix(): InstallGroup[] {
   return EFFORT_ORDER.map((effort) => {
-    const clients = installMatrix.filter((c) => c.effort === effort);
+    const clients = installClientsForUi.filter((c) => c.effort === effort);
     const first = clients[0]?.setup_prompt ?? null;
     const shared =
       first && clients.length > 1 && clients.every((c) => c.setup_prompt === first)
