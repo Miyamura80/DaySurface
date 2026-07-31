@@ -151,6 +151,23 @@ def _build_cmd(extra_ignores: list[str]) -> list[str]:
         "-not",
         "-path",
         "*/node_modules/*",
+        # Build output, gitignored and regenerated on every build. Linting it is
+        # not just redundant - it is unsatisfiable: the generated markdown links
+        # to the site's own pages by absolute production URL, so every newly
+        # added page fails the check until it is deployed, and a check that
+        # cannot pass before the deploy that would fix it blocks the commit.
+        # Excluded everywhere (not sandbox-gated): the chicken-and-egg is the
+        # same in GitHub Actions. The source these files are generated from is
+        # still linted.
+        "-not",
+        "-path",
+        "*/dist/*",
+        "-not",
+        "-path",
+        "*/.next/*",
+        "-not",
+        "-path",
+        "*/.astro/*",
     ]
     if _in_claude_code_cloud():
         for path in CLOUD_SANDBOX_IGNORE_FILES:

@@ -6,17 +6,17 @@
  * steps (Claude / ChatGPT). Deep links are built here at build time so no
  * client JS has to know the encoding rules.
  */
-import { connect, site } from "../config/landing";
-import { deepLink } from "../utils/deeplink";
+import { connect } from "../config/landing";
+import { effortMeta, installClientsForUi } from "../lib/install";
 
-const { mcpUrl, serverName, defaultId, targets } = connect;
+const { mcpUrl, defaultId } = connect;
 
-// site.name is the human-facing label a client shows in its install dialog
-// (Claude's connectorName field); serverName is the machine-readable key.
-const enriched = targets.map((t) => ({
-  ...t,
-  href: deepLink(t.id, mcpUrl, serverName, site.name),
-}));
+// The shared matrix IS the list this renders - not a lookup table joined back
+// onto connect.targets. Every label that varies by install effort ("1-click" vs
+// "shortcut", which steps-summary to show) comes from `effortMeta`, so this
+// widget cannot disagree with /connect, connect.md or install.json about
+// whether a given client is one click.
+const enriched = installClientsForUi;
 const selected = enriched.find((t) => t.id === defaultId) ?? enriched[0];
 ---
 
@@ -80,19 +80,14 @@ const selected = enriched.find((t) => t.id === defaultId) ?? enriched[0];
                 style={`-webkit-mask:url('${t.logo}') center/contain no-repeat;mask:url('${t.logo}') center/contain no-repeat;`}
                 aria-hidden="true"></span>
               <span class="flex-1">{t.name}</span>
-              {t.method === "deeplink" && (
-                /* A deep link that prefills nothing (ChatGPT) opens the dialog
-                   but does not finish the job - saying "1-click" there would
-                   promise a connector the visitor still has to type in. */
-                <span class="font-mono text-[10px] uppercase tracking-wider text-accent">
-                  {t.prefills === false ? "shortcut" : "1-click"}
-                </span>
-              )}
-              {t.method === "prompt" && (
-                <span class="font-mono text-[10px] uppercase tracking-wider text-fg-subtle">
-                  {t.setupKind === "command" ? "command" : "prompt"}
-                </span>
-              )}
+              <span
+                class:list={[
+                  "font-mono text-[10px] uppercase tracking-wider",
+                  t.install_url ? "text-accent" : "text-fg-subtle",
+                ]}
+              >
+                {effortMeta[t.effort].badge}
+              </span>
             </button>
           </li>
         ))
@@ -105,15 +100,15 @@ const selected = enriched.find((t) => t.id === defaultId) ?? enriched[0];
     {
       enriched.map((t) => (
         <div data-panel={t.id} hidden={t.id !== selected.id}>
-          {t.method === "deeplink" && t.href ? (
+          {t.install_url ? (
             <>
               {/* A link that prefills nothing drops the visitor into an empty
                   dialog, so data-copy-on-open puts the URL on their clipboard
                   on the way out - the paste is the only step left. Astro omits
                   the attribute entirely when the value is undefined. */}
               <a
-                href={t.href}
-                data-copy-on-open={t.prefills === false ? mcpUrl : undefined}
+                href={t.install_url}
+                data-copy-on-open={t.effort === "dialog-only" ? mcpUrl : undefined}
                 class="flex min-h-12 w-full items-center justify-center gap-2.5 bg-accent px-4 text-center font-semibold text-accent-fg transition hover:bg-accent-strong"
               >
                 <span
@@ -121,7 +116,7 @@ const selected = enriched.find((t) => t.id === defaultId) ?? enriched[0];
                   style={`-webkit-mask:url('${t.logo}') center/contain no-repeat;mask:url('${t.logo}') center/contain no-repeat;`}
                   aria-hidden="true"
                 />
-                {t.prefills === false ? `Open ${t.name} connector setup` : `Add to ${t.name}`}
+                {t.effort === "dialog-only" ? `Open ${t.name} connector setup` : `Add to ${t.name}`}
               </a>
               {t.note && <p class="mt-2.5 text-xs leading-relaxed text-fg-subtle">{t.note}</p>}
               {/* A deep-link target may ALSO carry steps: the manual fallback
@@ -131,7 +126,7 @@ const selected = enriched.find((t) => t.id === defaultId) ?? enriched[0];
                 <details class="mt-3 group">
                   <summary class="cursor-pointer list-none text-xs text-fg-subtle transition hover:text-accent">
                     <span class="underline decoration-dotted underline-offset-4">
-                      {t.prefills === false ? "Full click-path" : "Didn't work? Add it manually"}
+                      {effortMeta[t.effort].stepsLabel}
                     </span>
                   </summary>
                   <ol class="mt-2.5 space-y-2.5">
@@ -147,19 +142,19 @@ const selected = enriched.find((t) => t.id === defaultId) ?? enriched[0];
                 </details>
               )}
             </>
-          ) : t.method === "prompt" && t.setupPrompt ? (
+          ) : t.setup_prompt ? (
             <>
               <p class="text-xs leading-relaxed text-fg-subtle">
-                {t.setupKind === "command"
+                {t.effort === "command"
                   ? `Run this in your terminal - it adds the server to ${t.name}.`
                   : `Paste this into ${t.name} - it will add the server for you.`}
               </p>
               <div class="mt-2 flex items-stretch border border-border bg-bg">
-                <pre class="max-h-64 flex-1 overflow-y-auto whitespace-pre-wrap break-words px-3 py-2.5 font-mono text-xs leading-relaxed text-fg-muted">{t.setupPrompt}</pre>
+                <pre class="max-h-64 flex-1 overflow-y-auto whitespace-pre-wrap break-words px-3 py-2.5 font-mono text-xs leading-relaxed text-fg-muted">{t.setup_prompt}</pre>
                 <button
                   type="button"
                   class="copy-btn grid shrink-0 place-items-center border-l border-border px-3 text-fg-muted transition hover:bg-surface-2 hover:text-accent"
-                  data-code={t.setupPrompt}
+                  data-code={t.setup_prompt}
                   aria-label={`Copy the ${t.name} setup prompt`}
                 >
                   <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>

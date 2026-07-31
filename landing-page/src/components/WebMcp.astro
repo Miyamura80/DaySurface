@@ -18,12 +18,17 @@
  * assuming one shape. Re-verify against the current spec before extending.
  *
  * Every tool is sourced from `src/config/landing.ts` (the same single source of
- * truth the visible UI uses), so there's no duplicated copy to drift. Install
- * deep links are rebuilt here at build time, mirroring ConnectWidget.astro.
+ * truth the visible UI uses), so there's no duplicated copy to drift. The
+ * install matrix comes from `src/lib/install.ts`, shared with the connect page,
+ * its markdown twin and `/.well-known/mcp/install.json` - this component used to
+ * build its own copy, and hand-rolling `deepLink` here silently passed
+ * `serverName` where the visible UI passes `site.name`, so agents were handed a
+ * lowercased `daysurface` as the connector label. The payload carries each
+ * client's derived `effort`, so the script below branches on that rather than
+ * re-deriving "is this one click?" from method/prefills a fourth time.
  */
-import { site, connect, faq } from "../config/landing";
-// Shared with ConnectWidget.astro so install URL formats can't drift.
-import { deepLink } from "../utils/deeplink";
+import { site, faq } from "../config/landing";
+import { effortMeta, installMatrix } from "../lib/install";
 
 // Build-time payload the client script reads to register tools. Sourced
 // entirely from config so the agent-facing tools and the visible UI never drift.
@@ -33,23 +38,11 @@ const payload = {
   docsUrl: site.docsUrl,
   githubUrl: site.githubUrl,
   description: site.description,
-  clients: connect.targets.map((t) => ({
-    id: t.id,
-    name: t.name,
-    method: t.method,
-    install_url: t.method === "deeplink" ? deepLink(t.id, site.mcpUrl, site.serverName) : null,
-    // Whether that install_url arrives with the fields filled in. ChatGPT's
-    // does not, and an agent told "one-click install" would report the job
-    // finished while the dialog on screen is still empty.
-    prefills: t.method === "deeplink" ? t.prefills !== false : null,
-    steps: t.steps ?? null,
-    // Prompt targets carry their setup text here; without it an agent asking
-    // get_install_instructions for Claude Code / Cline / Zed / Windsurf gets a
-    // bare URL and nothing to act on.
-    setup_prompt: t.setupPrompt ?? null,
-    setup_kind: t.setupKind ?? null,
-    note: t.note ?? null,
-  })),
+  clients: installMatrix,
+  // Serialized so the inline script below reads the same labels every other
+  // surface uses. It previously kept a hand-written copy, which is precisely
+  // how the agent-facing tool output goes stale when effortMeta changes.
+  effortMeta,
   faqs: faq.items.map((f) => ({ q: f.q, a: f.a })),
 };
 
@@ -107,14 +100,16 @@ const payloadJson = JSON.stringify(payload).replace(/</g, "\\u003c");
       docsUrl: string;
       githubUrl: string;
       description: string;
-      // Hand-written mirror of the `payload` object above - an inline script is
-      // a separate context, so it cannot import InstallTarget. Keep the two in
-      // step: this cast still said "deeplink" | "manual" after the config gained
-      // a third method, and nothing caught it until a consumer touched it.
+      // Hand-written mirror of `InstallClient` (src/lib/install.ts) - an
+      // inline script is a separate context, so it cannot import the type. Keep
+      // the two in step: this cast still said "deeplink" | "manual" after the
+      // config gained a third method, and nothing caught it until a consumer
+      // touched it.
       clients: {
         id: string;
         name: string;
         method: "deeplink" | "manual" | "prompt";
+        effort: "one-click" | "command" | "dialog-only" | "prompt";
         install_url: string | null;
         prefills: boolean | null;
         steps: string[] | null;
@@ -122,6 +117,12 @@ const payloadJson = JSON.stringify(payload).replace(/</g, "\\u003c");
         setup_kind: "prompt" | "command" | null;
         note: string | null;
       }[];
+      // Shipped in the payload rather than mirrored here - see the note above
+      // the `effortMeta` key in the build-time payload.
+      effortMeta: Record<
+        string,
+        { heading: string; badge: string; stepsLabel: string; shortHow: string }
+      >;
       faqs: { q: string; a: string }[];
     };
 
@@ -147,19 +148,12 @@ const payloadJson = JSON.stringify(payload).replace(/</g, "\\u003c");
           "List the AI agent clients this MCP server can be installed into, and whether each supports one-click install or manual setup.",
         inputSchema: { type: "object", properties: {} },
         async execute() {
-          const lines = data.clients.map((c) => {
-            const how =
-              c.method !== "deeplink"
-                ? "manual setup"
-                : c.prefills
-                  ? "one-click install"
-                  : "deep link to the setup dialog, URL still pasted by hand";
-            return `- ${c.name} (${c.id}): ${how}`;
-          });
-          return textResult(
-            `Supported clients:\n${lines.join("\n")}`,
-            { clients: data.clients.map((c) => ({ id: c.id, name: c.name, method: c.method })) },
+          const lines = data.clients.map(
+            (c) => `- ${c.name} (${c.id}): ${data.effortMeta[c.effort].shortHow}`,
           );
+          return textResult(`Supported clients:\n${lines.join("\n")}`, {
+            clients: data.clients.map((c) => ({ id: c.id, name: c.name, effort: c.effort })),
+          });
         },
       },
       {
@@ -183,33 +177,36 @@ const payloadJson = JSON.stringify(payload).replace(/</g, "\\u003c");
             const valid = data.clients.map((c) => c.id).join(", ");
             return textResult(`Unknown client "${String(client_id)}". Valid clients: ${valid}.`);
           }
-          if (client.method === "deeplink" && client.install_url) {
+          if (client.install_url) {
             const note = client.note ? `\nNote: ${client.note}` : "";
             // A link that prefills nothing is half the answer: without the URL
             // the agent hands over a blank dialog. The steps come along as an
             // explicitly labelled FALLBACK - the link already performs the
             // first two, so presenting them as remaining work would have the
             // agent navigate to a dialog that is already open.
-            const rest = client.prefills
-              ? ""
-              : `\nThis link only opens the setup dialog - the fields come up empty.` +
-                `\nAfter it opens: paste ${data.mcpUrl} as the server URL, then confirm.` +
-                `\nOnly if the link is blocked or unavailable, the full path from scratch:\n` +
-                (client.steps ?? []).map((s, i) => `${i + 1}. ${s}`).join("\n");
+            const rest =
+              client.effort !== "dialog-only"
+                ? ""
+                : `\nThis link only opens the setup dialog - the fields come up empty.` +
+                  `\nAfter it opens: paste ${data.mcpUrl} as the server URL, then confirm.` +
+                  // The steps are the full path from scratch, NOT what is left
+                  // to do - the link already performed the first two of them.
+                  `\n${data.effortMeta[client.effort].stepsLabel}:\n` +
+                  (client.steps ?? []).map((s, i) => `${i + 1}. ${s}`).join("\n");
             return textResult(
-              `${client.prefills ? "One-click install" : "Setup shortcut"} for ${client.name}: ${client.install_url}${rest}${note}`,
+              `${client.effort === "dialog-only" ? "Setup shortcut" : "One-click install"} for ${client.name}: ${client.install_url}${rest}${note}`,
               {
                 client_id: client.id,
                 install_url: client.install_url,
-                prefills: client.prefills,
+                effort: client.effort,
                 mcp_url: data.mcpUrl,
-                steps: client.prefills ? null : client.steps,
+                steps: client.effort === "dialog-only" ? client.steps : null,
               },
             );
           }
-          if (client.method === "prompt" && client.setup_prompt) {
+          if (client.setup_prompt) {
             const how =
-              client.setup_kind === "command"
+              client.effort === "command"
                 ? `Run this in a terminal to add ${data.serverName} to ${client.name}:`
                 : `Paste this into ${client.name} to add ${data.serverName}:`;
             const note = client.note ? `\nNote: ${client.note}` : "";

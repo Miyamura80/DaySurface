@@ -44,3 +44,10 @@ jobs:
 
       - name: Build
         run: bun run build
+
+      # After the build: agent-journey.test.ts drives the real server against
+      # `dist/`, because the behaviour it pins (404s on unknown paths, the
+      # /signup aliases, Accept: text/markdown negotiation) lives in the routing
+      # rather than in any page.
+      - name: Test
+        run: bun test

@@ -99,6 +99,15 @@ export const askAi: {
 export const faq: { heading: string; items: FaqItem[] } = {
   heading: "Frequently asked questions",
   items: [
+    // First, and phrased in the words people (and agents acting for them)
+    // actually search: "sign up", "account", "register". None of those strings
+    // appeared anywhere on the site, so an agent asked to create an account
+    // found nothing here and fell back to the GitHub README to learn that no
+    // signup exists. This entry also feeds the FAQPage JSON-LD.
+    {
+      q: "Do I need to sign up or create an account?",
+      a: "No. There is no DaySurface account, no signup form, and no registration step. DaySurface is a remote MCP server: you add its URL to an MCP client (Claude, ChatGPT, Cursor, VS Code, Goose, or any other) and sign in to Google inside that client. Per-client install links are at /connect.",
+    },
     {
       q: "Which MCP clients are supported?",
       a: "Any client that speaks the Model Context Protocol: Claude Desktop, Claude Code, Cursor, Cline, VS Code, Windsurf, and more. The server exposes a standard tool/resource surface.",
@@ -129,7 +138,7 @@ export const faq: { heading: string; items: FaqItem[] } = {
     },
     {
       q: "Is there an /ask (NLWeb) endpoint?",
-      a: "Yes. There's a public, NLWeb-conformant /ask endpoint for natural-language questions answered from the docs (server-side Q&A with SSE streaming). It's distinct from the /mcp action-tool surface, which exposes callable tools. /ask is disabled by default; enable it via config (ask.enabled: true).",
+      a: "The server ships an NLWeb-conformant /ask endpoint for natural-language questions answered from the docs (server-side Q&A with SSE streaming), distinct from the /mcp action-tool surface that exposes callable tools. It is disabled by default and currently off on the hosted service - enable it on your own deployment with ask.enabled: true.",
     },
     {
       q: "Is this just another Gmail API wrapper?",
@@ -153,3 +162,28 @@ export const finalCta: { heading: string; subhead: string; features: string[] } 
     "Open source, self-hostable",
   ],
 };
+
+/**
+ * Copy for the connect page and its markdown twin.
+ *
+ * `noAccount` leads every surface and is the single most load-bearing sentence
+ * on the site for agents: an agent sent to find a signup flow needs the premise
+ * refuted in the first thing it reads, before it starts probing routes. The
+ * words "sign up", "account" and "register" appear here on purpose - they were
+ * absent from the entire site, so an agent searching for them found nothing and
+ * fell back to the GitHub README.
+ */
+export const connectPage = {
+  title: `Connect ${site.name}`,
+  noAccount: `There is no ${site.name} account to create, no signup form, and nothing to install. ${site.name} is a remote MCP server: you add one URL to an MCP client and sign in to Google inside that client.`,
+  // No inline-code backticks: this string renders verbatim into the HTML page as
+  // well as into connect.md, and markdown syntax that survives to the browser
+  // shows up as literal `backticks` on the page.
+  agentShortcut: `If you are an agent that can add MCP servers, the endpoint above is the whole job - add it and call tools/list. Otherwise pick your client below.`,
+  facts: [
+    { label: "Endpoint", value: site.mcpUrl },
+    { label: "Name", value: site.serverName },
+    { label: "Transport", value: "streamable HTTP (remote, not stdio)" },
+    { label: "Auth", value: "OAuth in the browser - no API key to paste" },
+  ],
+} as const;

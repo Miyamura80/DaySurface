@@ -1,0 +1,43 @@
+---
+/*
+ * /connect and its intent aliases: /signup, /login, /account, /get-started, ...
+ *
+ * One route renders all of them. These are the paths an agent probes when it is
+ * asked to create an account, before it reads anything on the site. Serving the
+ * connect content at a 200 - rather than redirecting - means the answer arrives
+ * in the FIRST response, with no hop to follow and no body dropped by a fetcher
+ * that treats a 3xx or 4xx as a failure. The honesty a 404 status would carry is
+ * done instead by the first sentence of the body: there is no account to create.
+ *
+ * `/connect` is the canonical URL and the only one indexed; every alias points
+ * its canonical at `/connect` and carries `noindex`. Deriving both from the same
+ * `getStaticPaths` is what stops the two from disagreeing - when /connect was a
+ * separate page it computed its canonical from `Astro.url.pathname` while the
+ * aliases hardcoded a string, and the trailing slash had to match by hand.
+ *
+ * `getStaticPaths` emits only these names, so this dynamic route catches nothing
+ * else and unknown paths still 404 (see server.ts).
+ */
+import type { GetStaticPaths } from "astro";
+import Base from "../layouts/Base.astro";
+import ConnectBody from "../components/ConnectBody.astro";
+import { site, connectPage, connectRoutes } from "../config/landing";
+
+export const getStaticPaths = (() =>
+  connectRoutes.map((intent) => ({
+    params: { intent },
+    props: { isCanonical: intent === "connect" },
+  }))) satisfies GetStaticPaths;
+
+const { isCanonical } = Astro.props;
+---
+
+<Base
+  title={`Connect ${site.name} - no account needed`}
+  description={connectPage.noAccount}
+  canonicalPath="/connect/"
+  noindex={!isCanonical}
+  markdownPath="/connect.md"
+>
+  <ConnectBody />
+</Base>

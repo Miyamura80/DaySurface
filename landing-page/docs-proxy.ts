@@ -48,6 +48,14 @@ const DOCS_LOCALES = ["en", "es", "ja", "zh"] as const;
  *
  * `/api/search` is listed rather than `/api` because the landing page serves
  * its own `/api` page.
+ *
+ * `/llms-full.txt` is deliberately NOT here. Both services generate a document
+ * at that name, and listing it handed the apex copy to the docs service - so
+ * `daysurface.com/llms-full.txt`, the URL advertised in `llms.txt`, `agents.md`
+ * and the `<link rel="alternate">` in every page head, answered with 90KB of
+ * reference pages opening on "# Deployment" instead of the product overview an
+ * agent came for. The apex now serves `src/pages/llms-full.txt.ts`; the docs
+ * copy is reachable at `/docs/llms-full.txt` via UPSTREAM_REWRITES below.
  */
 const PROXY_PREFIXES: readonly string[] = [
   "/docs",
@@ -56,7 +64,6 @@ const PROXY_PREFIXES: readonly string[] = [
   "/og",
   "/api/search",
   "/llms.mdx",
-  "/llms-full.txt",
   // Root assets from `docs/public`, referenced by the icon metadata in
   // `docs/app/layout.tsx`. Next serves `public/` at its origin root, so these
   // are docs-owned paths despite not starting with `/docs`. Without them the
@@ -75,11 +82,40 @@ if (!docsUpstream()) {
   );
 }
 
+/**
+ * Apex paths that reach the docs service under a different upstream path.
+ *
+ * The docs app is a Next project served at its origin root, so its whole-corpus
+ * dump lives at `/llms-full.txt` there. That name is taken on the apex (see
+ * PROXY_PREFIXES), so we expose it one level down and rewrite on the way out.
+ * Exact-match only - these are single documents, not prefixes.
+ */
+const UPSTREAM_REWRITES: Readonly<Record<string, string>> = {
+  "/docs/llms-full.txt": "/llms-full.txt",
+};
+
 /** True when `pathname` is owned by the docs service. */
 export function isDocsPath(pathname: string): boolean {
   return PROXY_PREFIXES.some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );
+}
+
+/**
+ * The request target to send upstream: `url` with any rewritten path swapped
+ * in, query string preserved. Returns `url` unchanged when nothing matches.
+ */
+export function upstreamTarget(url: string): string {
+  // Fixed base - the path is all we key on, and a malformed target must not throw.
+  let parsed: URL;
+  try {
+    parsed = new URL(url, "http://localhost");
+  } catch {
+    return url;
+  }
+  const rewritten = UPSTREAM_REWRITES[parsed.pathname];
+  if (!rewritten) return url;
+  return `${rewritten}${parsed.search}`;
 }
 
 // Hop-by-hop headers are connection-scoped (RFC 9110 §7.6.1) and must not be
@@ -140,7 +176,7 @@ export async function proxyDocs(
   const hasBody = method !== "GET" && method !== "HEAD";
 
   try {
-    const upstream = await fetch(`${upstreamOrigin}${req.url ?? "/"}`, {
+    const upstream = await fetch(`${upstreamOrigin}${upstreamTarget(req.url ?? "/")}`, {
       method,
       headers,
       // Node's `stream/web` ReadableStream and the global one are structurally

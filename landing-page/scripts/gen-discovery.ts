@@ -23,6 +23,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { serverCard, site } from "../src/config/landing";
+import { installMatrix } from "../src/lib/install";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const publicDir = join(here, "..", "public");
@@ -97,5 +98,30 @@ function write(relPath: string, data: unknown): void {
   console.log(`✓ generated public/${relPath}`);
 }
 
+/**
+ * Install matrix - how a human gets this server into each MCP client.
+ *
+ * Deliberately a sibling document rather than a key on the server card: the
+ * SEP-2127 card follows a schema we do not control, and the card above already
+ * omits `$schema` because the draft URL 404s. Inventing an `installLinks` key
+ * on it would be the first thing a validator rejects. Agents find this via
+ * /connect.md, llms.txt, agents.md and the `<link rel="alternate">` in the head.
+ */
+const install = {
+  server: { name: serverCard.name, title: site.name, url: site.mcpUrl },
+  website: site.url,
+  connectUrl: new URL("/connect", site.url).href,
+  // The premise-refuting sentence, in the JSON too: an agent that reaches only
+  // this document must still learn there is no signup flow to look for.
+  account: {
+    required: false,
+    summary:
+      `No ${site.name} account, signup, or registration is required. Add the MCP ` +
+      `endpoint to a client and complete Google OAuth inside that client.`,
+  },
+  clients: installMatrix,
+};
+
 write(".well-known/mcp/server-card.json", card);
 write("server.json", registry);
+write(".well-known/mcp/install.json", install);

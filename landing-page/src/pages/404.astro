@@ -1,0 +1,51 @@
+---
+/*
+ * The HTML 404. `server.ts` serves this from `dist/404.html` for any path it
+ * cannot resolve - a real 404, not the SPA fallback that used to answer every
+ * unknown path with a 200 and the full homepage.
+ *
+ * Leads with the connect answer because the wrong guesses that land here are
+ * overwhelmingly onboarding guesses (/create-account, /join, /app). Agents
+ * asking with `Accept: text/markdown` get `build404Md` instead.
+ */
+import Base from "../layouts/Base.astro";
+import { site } from "../config/landing";
+
+const pages: { href: string; label: string }[] = [
+  { href: "/connect", label: `Connect ${site.name} to your client` },
+  { href: "/pricing", label: "Pricing" },
+  { href: "/compare", label: "How it compares" },
+  { href: "/api", label: "HTTP API" },
+  { href: "/docs", label: "Documentation" },
+];
+---
+
+<Base title={`Not found - ${site.name}`} description="No such page." noindex={true}>
+  <main class="mx-auto max-w-2xl px-4 py-20 leading-relaxed sm:px-6">
+    <p class="font-mono text-sm uppercase tracking-widest text-fg-subtle">404</p>
+    <h1 class="mt-3 text-4xl font-bold">No such page</h1>
+    <p class="mt-6 text-lg">
+      {site.name} is an MCP server for Gmail. There is no account to create and
+      nothing to install &mdash; you add one URL to an MCP client and sign in there.
+    </p>
+    <a
+      class="mt-8 inline-flex min-h-11 items-center border-2 border-accent px-5 font-semibold text-accent hover:bg-accent hover:text-bg"
+      href="/connect">How to connect</a
+    >
+    <ul class="mt-10 space-y-2 border-t border-border pt-8">
+      {
+        pages.map((p) => (
+          <li>
+            <a class="text-accent underline" href={p.href}>
+              {p.label}
+            </a>
+          </li>
+        ))
+      }
+    </ul>
+    <p class="mt-10 text-sm opacity-70">
+      Agents: <a class="text-accent underline" href="/llms.txt">/llms.txt</a> indexes every
+      machine-readable surface, and this page answers <code>Accept: text/markdown</code>.
+    </p>
+  </main>
+</Base>
