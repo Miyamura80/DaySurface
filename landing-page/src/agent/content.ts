@@ -14,8 +14,10 @@
  *   llms.ts      - llms.txt, llms-full.txt, agents.md
  *   compare.ts   - compare.md, vs/<id>.md, api.md
  *   manifests.ts - skills.sh, auth.md, pricing.md
+ *   webhooks.ts  - gmail-webhooks.md
  */
 export * from "./connect";
 export * from "./llms";
 export * from "./compare";
 export * from "./manifests";
+export * from "./webhooks";

@@ -12,6 +12,57 @@ import { createRelativeLink } from "fumadocs-ui/mdx";
 import { LLMCopyButton, ViewOptions } from "@/components/ai/page-actions";
 import { i18n } from "@/lib/i18n";
 import { SITE_NAME, absoluteUrl } from "@/lib/site";
+import { buildDocsJsonLd } from "@/lib/structured-data";
+import { findPath } from "fumadocs-core/page-tree";
+
+/**
+ * Ancestor trail for a page's breadcrumbs, e.g. `/docs/mcp/setup` yields
+ * Documentation -> MCP Server.
+ *
+ * Walks the page tree rather than the slug segments so each folder is named by
+ * its `meta.json` title, exactly as the sidebar names it. Deriving the name
+ * from the folder's index page instead would label `/docs/mcp` "Overview" -
+ * that page's own title - which is meaningless as a breadcrumb.
+ *
+ * The folder's URL comes from the slug rather than `Folder.index`, which is
+ * only populated when the index page is *implicit*. Every `meta.json` here
+ * lists `"index"` in `pages`, so the landing page is an ordinary child and
+ * `Folder.index` is undefined - reading it dropped the folder crumb entirely.
+ * Nth folder in the tree path therefore pairs with the first N slug segments,
+ * and the pairing is confirmed against the loader before a crumb is emitted, so
+ * a folder with no landing page is skipped instead of linking to a 404.
+ */
+function buildBreadcrumbs(
+  slug: string[],
+  url: string,
+  lang: string,
+): { name: string; url: string }[] {
+  const tree = source.pageTree[lang];
+  const rootName = tree?.name;
+  const crumbs = [
+    {
+      name: typeof rootName === "string" ? rootName : "Documentation",
+      url: "/docs",
+    },
+  ];
+
+  const path =
+    findPath(
+      tree?.children ?? [],
+      (node) => node.type === "page" && node.url === url,
+    ) ?? [];
+
+  let depth = 0;
+  for (const node of path) {
+    if (node.type !== "folder") continue;
+    const prefix = slug.slice(0, ++depth);
+    const index = source.getPage(prefix, lang);
+    if (!index || typeof node.name !== "string") continue;
+    crumbs.push({ name: node.name, url: index.url });
+  }
+
+  return crumbs;
+}
 
 export default async function Page({
   params,
@@ -23,6 +74,13 @@ export default async function Page({
   if (!page) notFound();
 
   const MDX = page.data.body;
+  const jsonLd = buildDocsJsonLd({
+    url: page.url,
+    title: page.data.title,
+    description: page.data.description,
+    imageUrl: getPageImage(page).url,
+    breadcrumbs: buildBreadcrumbs(slug ?? [], page.url, lang),
+  });
   const gitConfig = {
     user: "Miyamura80",
     repo: "DaySurface",
@@ -31,6 +89,14 @@ export default async function Page({
 
   return (
     <DocsPage toc={page.data.toc} full={page.data.full}>
+      {/* Rendered in the body rather than via Next metadata: `generateMetadata`
+          has no hook for arbitrary JSON-LD, and Google reads it from anywhere in
+          the document. */}
+      <script
+        type="application/ld+json"
+        // Serialized from typed page data, never user input.
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       <DocsTitle>{page.data.title}</DocsTitle>
       <DocsDescription className="mb-0">
         {page.data.description}
