@@ -3,14 +3,10 @@ import { CheckCircle, PaperclipHorizontal, Trash } from "@phosphor-icons/react";
 import type {
   ComposerDraft,
   ComposerSaveStatus,
-  DraftAttachment,
-  ExistingAttachment,
-  FileAttachment,
   McpAppLike,
   Thread,
 } from "./types";
 import {
-  base64ToBlobUrl,
   buildAttachmentsPayload,
   draftFieldsEqual,
   errMsg,
@@ -19,8 +15,9 @@ import {
   formatFileSize,
   isPreviewable,
 } from "./helpers";
+import { useComposerAttachments } from "./useComposerAttachments";
 import { ComposerThreadPanel, renderComposerStatus } from "./ComposerThread";
-import { PreviewModal, type PreviewData } from "./AttachmentPreview";
+import { PreviewModal } from "./AttachmentPreview";
 import { attachmentChipStyle } from "./messageStyles";
 import {
   attachmentRemoveBtn,
@@ -69,27 +66,27 @@ export function InlineComposer({
   const [localThread, setLocalThread] = useState<Thread | null>(thread);
   const [loadingThread, setLoadingThread] = useState(false);
   const [pendingAgent, setPendingAgent] = useState<ComposerDraft | null>(null);
-  const [attachments, setAttachments] = useState<FileAttachment[]>([]);
-  const [existingAttachments, setExistingAttachments] = useState<ExistingAttachment[]>(
-    () => (draft.attachments || [])
-      .filter((a): a is DraftAttachment & { filename: string } => !!a.filename)
-      .map((a) => ({ filename: a.filename, mime_type: a.mime_type, size: a.size, attachment_id: a.attachment_id, message_id: a.message_id })),
-  );
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  // True once the user adds or removes an attachment. Until then, save/send
-  // omit the `attachments` argument so the backend preserves every existing
-  // file; after a change we send the explicit desired set so a removal sticks.
-  const attachmentsDirtyRef = useRef(false);
-  const [previewData, setPreviewData] = useState<PreviewData | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const previewBlobRef = useRef<string | null>(null);
-
-  useEffect(() => () => {
-    if (previewBlobRef.current) URL.revokeObjectURL(previewBlobRef.current);
-  }, []);
+  const {
+    attachments,
+    existingAttachments,
+    attachmentsDirtyRef,
+    fileInputRef,
+    previewData,
+    previewLoading,
+    handleFileSelect,
+    removeAttachment,
+    closePreview,
+    previewNewAttachment,
+    previewExistingAttachment,
+  } = useComposerAttachments(draft, mcpApp);
 
   const localDirtyRef = useRef(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Set once a send/discard is committed. Clearing the debounce timer is not
+  // enough: an autosave whose request is already on the wire cannot be recalled,
+  // and its late reply would overwrite the terminal "sent" state and drop the
+  // user back into an editable composer for a draft Gmail has already sent.
+  const closingRef = useRef(false);
   const draftRef = useRef(draft);
   useEffect(() => { draftRef.current = draft; }, [draft]);
 
@@ -148,84 +145,8 @@ export function InlineComposer({
     return () => { cancelled = true; };
   }, [draft.draft_id]);
 
-  // Sync existing attachments when draft updates (e.g. from refresh or agent)
-  useEffect(() => {
-    if (!draft.attachments?.length) return;
-    setExistingAttachments(
-      draft.attachments
-        .filter((a): a is DraftAttachment & { filename: string } => !!a.filename)
-        .map((a) => ({ filename: a.filename, mime_type: a.mime_type, size: a.size, attachment_id: a.attachment_id, message_id: a.message_id })),
-    );
-  }, [draft.attachments]);
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files) return;
-    Array.from(files).forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = reader.result as string;
-        const base64 = result.split(",")[1] || "";
-        attachmentsDirtyRef.current = true;
-        setAttachments((prev) => [
-          ...prev,
-          { filename: file.name, mime_type: file.type || "application/octet-stream", data_base64: base64, size: file.size },
-        ]);
-      };
-      reader.readAsDataURL(file);
-    });
-    e.target.value = "";
-  };
-
-  const removeAttachment = (index: number) => {
-    attachmentsDirtyRef.current = true;
-    setAttachments((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const previewSeqRef = useRef(0);
-
-  const closePreview = () => {
-    previewSeqRef.current++;
-    if (previewBlobRef.current) {
-      URL.revokeObjectURL(previewBlobRef.current);
-      previewBlobRef.current = null;
-    }
-    setPreviewData(null);
-    setPreviewLoading(false);
-  };
-
-  const showPreview = (b64: string, mime: string, filename: string) => {
-    previewSeqRef.current++;
-    if (previewBlobRef.current) URL.revokeObjectURL(previewBlobRef.current);
-    const url = base64ToBlobUrl(b64, mime);
-    previewBlobRef.current = url;
-    setPreviewData({ url, filename, mime_type: mime });
-  };
-
-  const previewNewAttachment = (att: FileAttachment) => {
-    showPreview(att.data_base64, att.mime_type, att.filename);
-  };
-
-  const previewExistingAttachment = async (att: ExistingAttachment) => {
-    if (!att.attachment_id || !att.message_id) return;
-    const seq = ++previewSeqRef.current;
-    setPreviewLoading(true);
-    try {
-      const raw = await mcpApp.callServerTool({
-        name: "gmail_composer.get_attachment",
-        arguments: { message_id: att.message_id, attachment_id: att.attachment_id },
-      });
-      if (seq !== previewSeqRef.current) return;
-      const parsed = extractStructuredContent<{ data_base64?: string }>(raw);
-      const b64 = parsed?.data_base64;
-      if (b64) {
-        showPreview(b64, att.mime_type || "application/octet-stream", att.filename);
-      }
-    } catch { /* preview is best-effort */ }
-    if (seq === previewSeqRef.current) setPreviewLoading(false);
-  };
-
   const persistDraft = async (d: ComposerDraft) => {
+    if (closingRef.current) return;
     setSaveStatus({ kind: "saving" });
     const snapshot = d;
     try {
@@ -248,10 +169,14 @@ export function InlineComposer({
       // clear-all list) must be sent, so test against undefined, not truthiness.
       if (attachmentsArg !== undefined) args.attachments = attachmentsArg;
       await mcpApp.callServerTool({ name: "gmail_composer.save_draft", arguments: args });
+      // Re-check after the await, not just on entry: a send committed while this
+      // request was in flight makes the reply stale, whichever way it resolved.
+      if (closingRef.current) return;
       setSaveStatus({ kind: "saved", at: new Date() });
       const latest = draftRef.current;
       if (latest && draftFieldsEqual(latest, snapshot)) localDirtyRef.current = false;
     } catch (err) {
+      if (closingRef.current) return;
       setSaveStatus({ kind: "error", message: errMsg(err) });
     }
   };
@@ -269,6 +194,9 @@ export function InlineComposer({
   };
 
   const onSend = async () => {
+    // Single-flight: a repeat click while a send is in flight is a no-op.
+    if (closingRef.current) return;
+    closingRef.current = true;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     setSaveStatus({ kind: "sending" });
     try {
@@ -290,16 +218,25 @@ export function InlineComposer({
       // clear-all list) must be sent, so test against undefined, not truthiness.
       if (attachmentsArg !== undefined) args.attachments = attachmentsArg;
       const raw = await mcpApp.callServerTool({ name: "gmail_composer.send", arguments: args });
+      // callServerTool resolves on a tool-level failure (isError) too, so only a
+      // server-confirmed message_id counts as sent. Since "sent" is terminal, a
+      // false positive here would be unrecoverable.
       const inner = extractStructuredContent<{ message_id?: string }>(raw);
       const msgId = inner?.message_id ?? "";
+      if (!msgId) throw new Error("the server did not confirm the send");
       setSaveStatus({ kind: "sent", message_id: msgId });
       setTimeout(onSent, 1500);
     } catch (err) {
+      // The send did not land, so the composer stays editable: reopen it to
+      // autosaves and let the user retry.
+      closingRef.current = false;
       setSaveStatus({ kind: "error", message: errMsg(err) });
     }
   };
 
   const onDiscardNow = async () => {
+    if (closingRef.current) return;
+    closingRef.current = true;
     if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null; }
     onDiscard();
     try {
