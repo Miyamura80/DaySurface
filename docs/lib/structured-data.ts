@@ -10,17 +10,14 @@
  *   generic prose, and carries the headline/description/canonical.
  * - `BreadcrumbList` - drives the breadcrumb trail Google renders in place of
  *   the raw URL in results. This is the node with live rich-result support.
- * - `FAQPage` - emitted only for pages with entries in `lib/faq.ts`. Google
- *   restricted FAQ *rich results* to health and government sites in 2023, so
- *   treat this as machine-readable Q&A for answer engines and LLM crawlers,
- *   not as a route to SERP accordions.
  *
- * Answers come from `lib/faq.ts`, the same source the visible `<Faq />` block
- * renders, because a `FAQPage` answer that is not present in the page body is a
- * structured-data violation.
+ * Deliberately no `FAQPage` here. The Q&A for the Gmail-webhooks cluster lives
+ * on the marketing site's `/gmail-webhooks` page, which owns that search intent;
+ * emitting the same questions from a docs URL on the same origin would put two
+ * pages on one query. If a docs page ever needs its own FAQ, it needs its own
+ * questions too.
  */
 import { SITE_NAME, absoluteUrl } from "@/lib/site";
-import { getFaq } from "@/lib/faq";
 
 interface BuildArgs {
   url: string;
@@ -78,19 +75,6 @@ export function buildDocsJsonLd({
       })),
     },
   ];
-
-  const faq = getFaq(url);
-  if (faq && faq.length > 0) {
-    graph.push({
-      "@type": "FAQPage",
-      "@id": `${canonical}#faq`,
-      mainEntity: faq.map((entry) => ({
-        "@type": "Question",
-        name: entry.question,
-        acceptedAnswer: { "@type": "Answer", text: entry.answer },
-      })),
-    });
-  }
 
   return { "@context": "https://schema.org", "@graph": graph };
 }

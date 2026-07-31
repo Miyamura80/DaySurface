@@ -1,87 +1,17 @@
 ---
-title: Gmail Webhooks
-description: Gmail has no native webhooks. How to get signed HTTP callbacks on new email via Pub/Sub push - watch renewal, history IDs, HMAC verification, and retries.
+title: Gmail Webhook Setup
+description: Configure the DaySurface webhook pipeline - Pub/Sub push, GCP setup, subscriptions, signature verification, retries, and the delivery runner.
 ---
 
-**Gmail has no native webhooks.** There is no field in the Gmail API where you
-paste an HTTPS URL and start receiving `POST`s when mail arrives. What Google
-offers instead is [push notification over Cloud
-Pub/Sub](https://developers.google.com/workspace/gmail/api/guides/push), and
-the distance between that and a usable webhook is most of the work.
-
-This page covers both halves: what Gmail actually hands you and what it leaves
-you to build, then the pipeline DaySurface ships to close the gap - signed,
-deduplicated, retried `POST`s to endpoints your users register themselves.
-
-## What Gmail gives you, and what it doesn't
-
-Google's push notifications are real and they are fast, but they are a
-*notification that something changed*, not a delivery of the thing that
-changed. Five gaps sit between `users.watch()` and a webhook you would want to
-depend on.
-
-### 1. The notification carries no mail
-
-The Pub/Sub message body is a base64url-encoded blob that decodes to exactly
-two fields:
-
-```json
-{ "emailAddress": "user@example.com", "historyId": "9876543210" }
-```
-
-No sender, no subject, no snippet, no message ID. To learn what actually
-arrived you call `users.history.list` with the previous history ID and diff the
-result. Every notification costs you a second round trip before it means
-anything.
-
-### 2. History IDs expire
-
-`users.history.list` returns `404` once the history ID you stored has aged out
-of Gmail's retention window - which happens on any quiet mailbox, not just
-broken ones. Correct handling is to fall back to `users.messages.list`, resync,
-and adopt a fresh history ID. Implementations that treat `404` as a transient
-error silently stop delivering.
-
-### 3. The watch dies every 7 days, silently
-
-`users.watch()` expires in roughly a week. There is no warning, no final
-notification, and no error - notifications simply stop. Renewal is the single
-most common reason a hand-rolled Gmail webhook works in testing and dies in
-production two weeks later.
-
-### 4. Pub/Sub delivers at least once
-
-The same `messageId` can and will arrive more than once. Without a dedup table
-keyed on it, every duplicate notification becomes a duplicate downstream
-webhook.
-
-### 5. One subscription, one endpoint, no signatures
-
-A Pub/Sub push subscription posts to a single URL that you own and configure in
-the Google Cloud console. If you want *your users* to register their own
-endpoints, you have to build the fan-out, the signing, the retry schedule, and
-the delivery bookkeeping yourself. Pub/Sub gives you none of it.
-
-## Polling vs. push vs. this server
-
-| | Poll the API | Pub/Sub push, direct | DaySurface webhooks |
-| --- | --- | --- | --- |
-| Latency | Your poll interval | Seconds | Seconds |
-| Google Cloud setup | None | Topic + subscription + IAM | Topic + subscription + IAM |
-| Watch renewal | N/A | You build it | Automatic |
-| History `404` resync | You build it | You build it | Automatic |
-| Duplicate suppression | You build it | You build it | On Pub/Sub `messageId` |
-| Signed payloads | You build it | You build it | HMAC-SHA256 |
-| Retries on subscriber failure | You build it | You build it | Bounded exponential backoff |
-| Per-user endpoints | You build it | Not supported | Self-service |
-
-Polling stays a legitimate answer if you can tolerate the latency and want zero
-Google Cloud surface. Everything below is for when you can't.
-
-## How DaySurface closes the gap
+Operator reference for the outbound webhook pipeline. For what Gmail's push
+notifications actually give you and why this layer exists at all, start with
+[Gmail webhooks](https://daysurface.com/gmail-webhooks) - this page assumes you
+have read it and want to configure the thing.
 
 The whole pipeline is **optional and off by default** - it stays dormant until
 you configure a Pub/Sub topic.
+
+## Architecture
 
 ```
       HOP 1 (inbound, optional)                     HOP 2 (outbound, durable)
@@ -299,7 +229,3 @@ event, rather than on `X-Webhook-Delivery-Id`, which is not.
 
 Delivery claiming is dialect-aware: on PostgreSQL rows are claimed with
 `FOR UPDATE SKIP LOCKED`, so multiple runners never double-send.
-
-## Frequently asked questions
-
-<Faq page="/docs/gmail-webhooks" />

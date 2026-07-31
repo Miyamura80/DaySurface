@@ -32,15 +32,18 @@ export const GET: APIRoute = ({ site: astroSite }) => {
       { loc: `${origin}/vs/${c.id}`, type: "WebPage" },
       { loc: `${origin}/vs/${c.id}`, type: "BreadcrumbList" },
     ]),
+    // /gmail-webhooks embeds TechArticle + FAQPage + BreadcrumbList.
+    { loc: `${origin}/gmail-webhooks`, type: "TechArticle" },
+    { loc: `${origin}/gmail-webhooks`, type: "FAQPage" },
+    { loc: `${origin}/gmail-webhooks`, type: "BreadcrumbList" },
     // The docs are a separate service reverse-proxied under /docs on this same
     // origin (see landing-page/server.ts), so their structured data belongs in
-    // this feed - one origin, one schemamap. Every docs page emits TechArticle
-    // + BreadcrumbList; only pages with entries in the docs' `lib/faq.ts` also
-    // emit FAQPage. Listing the whole tree here would mean hardcoding routes
-    // this service cannot see, so only the FAQ-bearing pages are enumerated -
-    // they are the ones worth pointing an answer engine at.
+    // this feed too - one origin, one schemamap. Every docs page emits
+    // TechArticle + BreadcrumbList. Listing the whole tree would mean hardcoding
+    // routes this service cannot see, so only the webhook reference is named:
+    // it is the docs page this feed's readers are most likely to want.
     { loc: `${origin}/docs/gmail-webhooks`, type: "TechArticle" },
-    { loc: `${origin}/docs/gmail-webhooks`, type: "FAQPage" },
+    { loc: `${origin}/docs/gmail-webhooks`, type: "BreadcrumbList" },
   ];
 
   const entries = feeds
