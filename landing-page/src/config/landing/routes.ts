@@ -36,3 +36,23 @@ export const connectAliases = [
 
 /** The canonical connect route, plus every alias that resolves to it. */
 export const connectRoutes = ["connect", ...connectAliases] as const;
+
+/**
+ * Paths answered with a 301 to somewhere else on this origin.
+ *
+ * `/developers` is the URL a human or an agent guesses for developer
+ * documentation. It has no page here, so it used to 404; the documentation it
+ * is asking for is the docs app, proxied onto this origin at `/docs` (see
+ * `docs-proxy.ts`).
+ *
+ * A redirect rather than the connect-alias treatment - serving the content at a
+ * 200 - because the target lives in another service. There is no body to
+ * inline, and 301 is what moves any link equity `/developers` accumulates onto
+ * the canonical `/docs` URL instead of splitting it.
+ *
+ * Keys must be normalised: no trailing slash, no query string. Both are
+ * stripped before lookup, and the query is carried through to the target.
+ */
+export const permanentRedirects: Readonly<Record<string, string>> = {
+  "/developers": "/docs",
+};

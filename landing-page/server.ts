@@ -15,7 +15,7 @@ import sirv from "sirv";
 import { isDocsPath, proxyDocs } from "./docs-proxy.ts";
 
 import { buildAgentsMd, build404Md } from "./src/agent/content.ts";
-import { connectAliases, site } from "./src/config/landing";
+import { connectAliases, permanentRedirects, site } from "./src/config/landing";
 
 const PORT = Number(process.env.PORT ?? 8080);
 
@@ -152,6 +152,24 @@ function normalize(pathname: string): string {
 }
 
 /**
+ * Send a 301 to a path on this origin.
+ *
+ * The body is empty and `Location` is relative, so this costs one small
+ * response whatever the client asked for - a redirect has nothing to negotiate.
+ * `Cache-Control` is explicit because a bare 301 is cached by browsers with no
+ * expiry: a mistyped target would otherwise be unrecallable from every visitor
+ * who hit it once.
+ */
+function redirect(res: ServerResponse, location: string): void {
+  res.statusCode = 301;
+  res.setHeader("Location", location);
+  res.setHeader("Content-Length", "0");
+  res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.end();
+}
+
+/**
  * Public origin for the absolute links inside generated markdown bodies.
  *
  * Fixed per process, NOT read from `Host`/`X-Forwarded-Host` per request. Those
@@ -224,8 +242,14 @@ export function handleRequest(req: IncomingMessage, res: ServerResponse): void {
   // affect it, nor crash the handler). On failure leave pathname empty so a
   // malformed target is non-canonical and falls through to static serving.
   let pathname = "";
+  // Taken off the parsed URL rather than sliced out of `req.url`: the only
+  // consumer is the `Location` header of a redirect, and WHATWG parsing has
+  // already percent-encoded anything that could break out of a header value.
+  let query = "";
   try {
-    pathname = new URL(req.url ?? "/", "http://localhost").pathname;
+    const parsed = new URL(req.url ?? "/", "http://localhost");
+    pathname = parsed.pathname;
+    query = parsed.search;
   } catch {
     pathname = "";
   }
@@ -241,6 +265,16 @@ export function handleRequest(req: IncomingMessage, res: ServerResponse): void {
 
   const readable = method === "GET" || method === "HEAD";
   const normalized = normalize(pathname);
+
+  // Before anything looks in `dist`, so a redirected path can never also be a
+  // static file. Method-agnostic on purpose: a HEAD or a POST to /developers
+  // should be told where the page moved, not 404'd.
+  const redirectTo = permanentRedirects[normalized];
+  if (redirectTo) {
+    redirect(res, `${redirectTo}${query}`);
+    return;
+  }
+
   // Keyed on the path the client asked for, not the file we end up serving: the
   // twin rewrite below repoints /signup at /connect.md, which IS indexable.
   if (NOINDEX_PATHS.has(normalized)) res.setHeader("X-Robots-Tag", "noindex, follow");
