@@ -65,32 +65,50 @@ export function getPageImage(page: ReturnType<typeof source.getPage> & {}) {
 // preserve `##`/`###` sections, fenced code blocks, and inline links, while
 // converting the handful of fumadocs UI components we use into plain Markdown.
 function mdxBodyToMarkdown(raw: string): string {
-  const body = raw
+  const withoutFrontmatter = raw
     // Strip the leading YAML frontmatter (title/description are re-added below).
-    .replace(/^---\n[\s\S]*?\n---\n?/, "")
-    // Drop MDX `import`/`export` statements.
-    .replace(/^\s*(?:import|export)\s.+$/gm, "")
-    // Drop JSX expression-container props (e.g. `icon={<Rocket />}`). The `>`
-    // inside a nested component would otherwise terminate the `[^>]*` tag scans
-    // below early, leaving raw JSX in the output. We only emit title/href, so
-    // these props are noise for the LLM text anyway.
-    .replace(/\s+[A-Za-z_][\w-]*=\{[^}]*\}/g, "")
-    // <Card title="X" href="Y" /> -> a Markdown link to the related resource.
-    .replace(/<Card\b[^>]*\/?>/g, (tag) => {
-      const title = tag.match(/title=["']([^"']*)["']/)?.[1];
-      const href = tag.match(/href=["']([^"']*)["']/)?.[1];
-      if (title && href) return `- [${title}](${href})`;
-      if (title) return `- ${title}`;
-      return "";
-    })
-    // <Tab value="X"> -> a bold label so per-tab content stays attributed.
-    .replace(/<Tab\b[^>]*\bvalue=["']([^"']*)["'][^>]*>/g, "\n**$1**\n")
-    // Strip the remaining structural component tags, keeping their children.
-    .replace(/<\/?(?:Cards|Steps|Step|Tabs|Tab|Callout)\b[^>]*>/g, "")
+    .replace(/^---\n[\s\S]*?\n---\n?/, "");
+
+  // Split on fenced code blocks and convert only the prose between them. Every
+  // rule below rewrites MDX syntax, and none of it means anything inside a
+  // fence: the `import`/`export` rule alone was deleting `import hashlib` from
+  // the webhook verification snippet and `export FOO=...` from shell examples,
+  // handing agents code that cannot run. `split` with a capturing group puts
+  // the fences at the odd indices.
+  const body = withoutFrontmatter
+    .split(/(^```[\s\S]*?^```)/gm)
+    .map((part, i) => (i % 2 === 1 ? part : stripMdxSyntax(part)))
+    .join("")
     // Collapse the blank lines left behind by the removals.
     .replace(/\n{3,}/g, "\n\n");
 
   return body.trim();
+}
+
+/** The MDX-to-Markdown rewrites, applied to prose only - never to code. */
+function stripMdxSyntax(prose: string): string {
+  return (
+    prose
+      // Drop MDX `import`/`export` statements.
+      .replace(/^\s*(?:import|export)\s.+$/gm, "")
+      // Drop JSX expression-container props (e.g. `icon={<Rocket />}`). The `>`
+      // inside a nested component would otherwise terminate the `[^>]*` tag scans
+      // below early, leaving raw JSX in the output. We only emit title/href, so
+      // these props are noise for the LLM text anyway.
+      .replace(/\s+[A-Za-z_][\w-]*=\{[^}]*\}/g, "")
+      // <Card title="X" href="Y" /> -> a Markdown link to the related resource.
+      .replace(/<Card\b[^>]*\/?>/g, (tag) => {
+        const title = tag.match(/title=["']([^"']*)["']/)?.[1];
+        const href = tag.match(/href=["']([^"']*)["']/)?.[1];
+        if (title && href) return `- [${title}](${href})`;
+        if (title) return `- ${title}`;
+        return "";
+      })
+      // <Tab value="X"> -> a bold label so per-tab content stays attributed.
+      .replace(/<Tab\b[^>]*\bvalue=["']([^"']*)["'][^>]*>/g, "\n**$1**\n")
+      // Strip the remaining structural component tags, keeping their children.
+      .replace(/<\/?(?:Cards|Steps|Step|Tabs|Tab|Callout)\b[^>]*>/g, "")
+  );
 }
 
 export async function getLLMText(
