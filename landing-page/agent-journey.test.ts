@@ -71,6 +71,21 @@ describe("unknown paths 404", () => {
   });
 });
 
+// /developers is the docs URL people type; it 404'd, while /docs is right here
+// on this origin. Trailing slash and query string included - both broke the
+// lookup or got dropped in earlier drafts.
+describe("/developers redirects to the docs", () => {
+  test.each([
+    ["/developers", "/docs"],
+    ["/developers/", "/docs"],
+    ["/developers?utm_source=x", "/docs?utm_source=x"],
+  ])("%s -> %s", async (from, to) => {
+    const res = await fetch(`${BASE}${from}`, { redirect: "manual" });
+    expect(res.status).toBe(301);
+    expect(res.headers.get("location")).toBe(to);
+  });
+});
+
 describe("intent aliases answer the signup question", () => {
   // Every alias, not a sample. This is also the guard against an alias that
   // collides with a real page (`api`, `compare`, `pricing`): Astro would let the

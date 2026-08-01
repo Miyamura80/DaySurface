@@ -152,6 +152,13 @@ function normalize(pathname: string): string {
 }
 
 /**
+ * Paths that 301 elsewhere on this origin. `/developers` is the URL people type
+ * for developer docs; it has no page here, and `/docs` - the docs service,
+ * proxied above - is what they were after.
+ */
+const REDIRECTS: Readonly<Record<string, string>> = { "/developers": "/docs" };
+
+/**
  * Public origin for the absolute links inside generated markdown bodies.
  *
  * Fixed per process, NOT read from `Host`/`X-Forwarded-Host` per request. Those
@@ -224,8 +231,11 @@ export function handleRequest(req: IncomingMessage, res: ServerResponse): void {
   // affect it, nor crash the handler). On failure leave pathname empty so a
   // malformed target is non-canonical and falls through to static serving.
   let pathname = "";
+  // `query` is only ever a redirect's `Location`; WHATWG parsing has already
+  // encoded anything that could break out of that header.
+  let query = "";
   try {
-    pathname = new URL(req.url ?? "/", "http://localhost").pathname;
+    ({ pathname, search: query } = new URL(req.url ?? "/", "http://localhost"));
   } catch {
     pathname = "";
   }
@@ -241,6 +251,19 @@ export function handleRequest(req: IncomingMessage, res: ServerResponse): void {
 
   const readable = method === "GET" || method === "HEAD";
   const normalized = normalize(pathname);
+
+  // Ahead of `dist`, so a redirect can't also resolve to a file. Explicit
+  // `Cache-Control`: a bare 301 is cached by browsers with no expiry.
+  const to = REDIRECTS[normalized];
+  if (to) {
+    res.writeHead(301, {
+      Location: `${to}${query}`,
+      "Cache-Control": "public, max-age=0, must-revalidate",
+    });
+    res.end();
+    return;
+  }
+
   // Keyed on the path the client asked for, not the file we end up serving: the
   // twin rewrite below repoints /signup at /connect.md, which IS indexable.
   if (NOINDEX_PATHS.has(normalized)) res.setHeader("X-Robots-Tag", "noindex, follow");
