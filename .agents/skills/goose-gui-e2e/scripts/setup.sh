@@ -23,28 +23,34 @@ GOOSE_REPO_URL="${GOOSE_REPO_URL:-https://github.com/block/goose.git}"
 # Electron binaries are pulled from the OFFICIAL GitHub release assets (see step 2).
 # github.com 302-redirects to release-assets.githubusercontent.com (Azure-backed); both
 # hosts must be on the environment's Custom network allowlist.
-ELECTRON_RELEASE_BASE="https://github.com/electron/electron/releases/download"
+ELECTRON_RELEASES="https://github.com/electron/electron/releases"
+ELECTRON_RELEASE_BASE="$ELECTRON_RELEASES/download"
 
 log "E2E_HOME=$E2E_HOME  GOOSE_SRC=$GOOSE_SRC"
 
-# ---- preflight: both download hosts reachable? (the one thing a human must enable) ----
-# A non-allowlisted host fails to connect (curl code 000); a reachable one answers with a
-# real status (even 400/404 for the bare host root), so 000 is the only signal we treat
-# as "missing". BOTH hosts are probed: the Electron download starts at github.com and
-# 302s to the Azure-backed asset CDN. Don't be tempted to let step 1's `git clone` stand
-# in for the github.com check - it is skipped whenever the shared Goose build already
-# exists, which is the common case on a re-run, and the download would then fail with a
-# bare curl error instead of the allowlist guidance below.
-PF_MISSING=""
-for pf_host in github.com release-assets.githubusercontent.com; do
-  pf_code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "https://$pf_host/" 2>/dev/null || true)"
-  if [ -z "$pf_code" ] || [ "$pf_code" = "000" ]; then
-    PF_MISSING="$PF_MISSING $pf_host"
-  fi
-done
-if [ -n "$PF_MISSING" ]; then
-  echo "FATAL: host(s) not reachable:$PF_MISSING"
-  echo "  Add$PF_MISSING to the environment's Custom network allowlist."
+# ---- preflight: can we actually fetch a release asset? (the one thing a human must enable) ----
+# Fetch a REAL asset rather than probing the bare host roots. Two traps a root probe falls into:
+#   - status can't separate "reachable" from "denied": github.com/ answers 400 and the asset
+#     CDN root answers 404 (both fine), while an allowlist proxy denies with 403 - and some
+#     blocked hosts fail to connect (000) while others are answered with that 403. Treating
+#     only 000 as missing lets a 403-denied host sail through preflight.
+#   - a root probe never exercises the redirect, so it proves nothing about the actual download.
+# `curl -f` fails on ANY HTTP error including the proxy's 403, and following the chain
+# exercises both hosts end-to-end. Don't let step 1's `git clone` stand in for the github.com
+# leg either - it is skipped whenever the shared Goose build already exists, the common case
+# on a re-run. `/releases/latest/download/` keeps this version-agnostic so it can run here,
+# failing in seconds, rather than after the ~5-minute cargo build below.
+PF_URL="$ELECTRON_RELEASES/latest/download/SHASUMS256.txt"
+if ! curl -fsSL -o /dev/null --max-time 30 "$PF_URL"; then
+  # Blame precisely: if github.com still issues its redirect, that leg is fine and the
+  # Azure-backed asset CDN is the host being denied.
+  pf_first="$(curl -sS -o /dev/null --max-redirs 0 -w '%{http_code}' --max-time 15 "$PF_URL" 2>/dev/null || true)"
+  case "$pf_first" in
+    301|302|303|307|308) pf_blame="release-assets.githubusercontent.com" ;;
+    *)                   pf_blame="github.com + release-assets.githubusercontent.com" ;;
+  esac
+  echo "FATAL: cannot fetch Electron release assets ($PF_URL)."
+  echo "  Add $pf_blame to the environment's Custom network allowlist."
   exit 1
 fi
 

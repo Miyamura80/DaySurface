@@ -218,7 +218,7 @@ Baked into the scripts; listed so you recognize them if something drifts:
 
 | Symptom | Cause → handled by |
 |---|---|
-| Electron binary 403 | a download host not allowlisted → `setup.sh` preflights **both** hosts and names the missing one; official download + checksum |
+| Electron binary 403 | a download host not allowlisted → `setup.sh` preflights by **fetching a real release asset** (a bare-root probe can't tell a proxy's 403 denial from a healthy root) and names the blamed host; official download + checksum |
 | `@electron/node-gyp` 403 on `pnpm install` | git tarball on codeload blocked → registry override (`setup.sh`) |
 | Electron SIGSEGV "Missing X server" | needs a display → `xvfb-run` owns Xvfb per test |
 | Electron crash under Xvfb | `--no-sandbox --disable-gpu` (NOT `--in-process-gpu`) |
