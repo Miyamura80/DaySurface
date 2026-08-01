@@ -69,20 +69,74 @@ function mdxBodyToMarkdown(raw: string): string {
     // Strip the leading YAML frontmatter (title/description are re-added below).
     .replace(/^---\n[\s\S]*?\n---\n?/, "");
 
-  // Split on fenced code blocks and convert only the prose between them. Every
-  // rule below rewrites MDX syntax, and none of it means anything inside a
-  // fence: the `import`/`export` rule alone was deleting `import hashlib` from
-  // the webhook verification snippet and `export FOO=...` from shell examples,
-  // handing agents code that cannot run. `split` with a capturing group puts
-  // the fences at the odd indices.
-  const body = withoutFrontmatter
-    .split(/(^```[\s\S]*?^```)/gm)
-    .map((part, i) => (i % 2 === 1 ? part : stripMdxSyntax(part)))
-    .join("")
-    // Collapse the blank lines left behind by the removals.
-    .replace(/\n{3,}/g, "\n\n");
+  // Rewrite prose only. None of the rules in `stripMdxSyntax` mean anything
+  // inside a fence, and applying them there produced code that cannot run: the
+  // `import`/`export` rule was deleting `import hashlib` from the webhook
+  // verification snippet and `export FOO=...` from shell examples.
+  const body = splitFences(withoutFrontmatter)
+    .map((segment) => (segment.code ? segment.text : stripMdxSyntax(segment.text)))
+    .join("\n");
 
   return body.trim();
+}
+
+/** A run of consecutive lines, tagged by whether they sit inside a code fence. */
+type Segment = { code: boolean; text: string };
+
+/** Opens a fence: >=3 backticks or tildes, indented at most 3 spaces. */
+const FENCE_OPEN = /^ {0,3}(`{3,}|~{3,})/;
+/** Closes one: the same run, at least as long, alone on its line. */
+const FENCE_CLOSE = /^ {0,3}(`{3,}|~{3,})[ \t]*$/;
+
+/**
+ * Partition `body` into alternating prose and code segments.
+ *
+ * Scans line by line rather than pairing delimiters positionally. Splitting on
+ * a `/(^```[\s\S]*?^```)/` regex and trusting the odd indices to be code
+ * assumes every delimiter in the document alternates open/close, which one
+ * stray ``` inside a code block - a page documenting fences - inverts for the
+ * whole remainder of the file, silently swapping which half gets rewritten.
+ * Tracking the open delimiter also gets the cases that shape cannot see:
+ * indented fences (`docs/content/docs/cli/index.mdx` has one inside a bullet),
+ * `~~~` fences, and fences longer than three characters.
+ *
+ * Reassembly is exact - the segments partition the lines in order, so joining
+ * them with the newline that separated them reproduces the input.
+ */
+function splitFences(body: string): Segment[] {
+  const segments: Segment[] = [];
+  let buffer: string[] = [];
+  /** The delimiter that opened the current fence, or null when in prose. */
+  let openedBy: string | null = null;
+
+  const flush = (code: boolean) => {
+    if (buffer.length > 0) segments.push({ code, text: buffer.join("\n") });
+    buffer = [];
+  };
+
+  for (const line of body.split("\n")) {
+    if (openedBy === null) {
+      const opening = line.match(FENCE_OPEN)?.[1];
+      if (opening) {
+        flush(false);
+        openedBy = opening;
+      }
+      buffer.push(line);
+      continue;
+    }
+
+    buffer.push(line);
+    const closing = line.match(FENCE_CLOSE)?.[1];
+    if (closing && closing[0] === openedBy[0] && closing.length >= openedBy.length) {
+      flush(true);
+      openedBy = null;
+    }
+  }
+
+  // An unterminated fence still holds code. Treating the tail as prose would
+  // strip exactly the lines the fence was protecting.
+  flush(openedBy !== null);
+  return segments;
 }
 
 /** The MDX-to-Markdown rewrites, applied to prose only - never to code. */
@@ -108,6 +162,11 @@ function stripMdxSyntax(prose: string): string {
       .replace(/<Tab\b[^>]*\bvalue=["']([^"']*)["'][^>]*>/g, "\n**$1**\n")
       // Strip the remaining structural component tags, keeping their children.
       .replace(/<\/?(?:Cards|Steps|Step|Tabs|Tab|Callout)\b[^>]*>/g, "")
+      // Collapse the blank lines left behind by the removals. Prose-only, like
+      // the rest: run over the whole document it also reflows code, and the
+      // blank line PEP 8 wants before a top-level `def` is exactly the run it
+      // eats.
+      .replace(/\n{3,}/g, "\n\n")
   );
 }
 
