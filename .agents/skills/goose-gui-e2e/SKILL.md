@@ -48,6 +48,36 @@ bash down.sh                 # stop test services  (down.sh --reset also drops t
 screenshot of the real Goose GUI (with the Settings app rendered) to
 `$E2E_HOME/shot_<scenario>.png`.
 
+## Reporting a run (required)
+
+The whole point of this tier is that a human can *see* the app rendered in a real
+host. `run_all.sh`'s `7 passed, 0 failed` does not show that - it shows that a
+script agreed with itself. So a run is only reported when the work is laid out in
+this shape:
+
+1. **State the run's provenance first**, in one line: mock or real LLM, whether
+   `setup.sh` rebuilt or reused the Goose/Electron build, and the pinned Electron
+   version. A verdict with no provenance can't be reproduced or trusted.
+2. **A scenario table**, one row per scenario, in run order, with these columns:
+   *Scenario* · *What the GUI is driven to do* · *What proves it* (iframe DOM,
+   round-trip log, or both) · *Verdict*. Naming the proof is what separates this
+   from a bare PASS - it says which of the two unfakeable records was consulted.
+3. **Every screenshot surfaced inline, each with its own label.** Do not print a
+   list of file paths and call it a preview - a path the reader has to go open is
+   not a preview. Attach or embed the actual images (`$E2E_HOME/shot_<scenario>.png`,
+   one per scenario) using whatever mechanism the running agent has for showing
+   image files to the user. Each label names the scenario **and the state
+   captured**, not just the filename - e.g. `settings_subscribe - after clicking
+   "Add endpoint": signing secret rendered`, not `shot_settings_subscribe.png`.
+   For scenarios with an `interact` block the label must say the post-interaction
+   state, since that is the leg the screenshot is evidence for.
+4. **Failures keep more evidence, not less.** A FAIL still gets its screenshot and
+   label, plus `mcp_probe.py`'s reason line and the relevant `pw_scenario.mjs` /
+   `toolcalls.jsonl` excerpt. Never summarize a failure as a count.
+5. **Report what was skipped.** If a scenario didn't run - stack down, seed
+   missing, deliberately excluded - say so explicitly next to the ones that did.
+   A table that silently omits a scenario reads as full coverage when it wasn't.
+
 ## Where this runs in the suite
 
 Heavy tier - **not** in `make ci` (which stays Node/Rust/Electron-free):
@@ -102,6 +132,9 @@ A scenario is JSON in `scripts/scenarios/<name>.json`:
   stack sets `GMAIL_FAKE_BACKEND=1`** (see below).
 - `expect` - checked by `mcp_probe.py`: `tool_called` + `round_trip` (from the
   tool-call log) and `app_rendered` + `dom_contains` (from the rendered iframe).
+- `seed` (optional) - a script in `scripts/` that `run_test.sh` runs before
+  driving, for scenarios needing a fixture row the shared seed doesn't create
+  (the `pdf_sign_*` scenarios use `seed_pdf_doc.py` for the `e2e-nda-doc` PDF).
 
 ### Rendering the Gmail apps offline (`GMAIL_FAKE_BACKEND`)
 
@@ -211,6 +244,10 @@ Baked into the scripts; listed so you recognize them if something drifts:
 | `scenarios/settings_subscribe.json` | scenario 2: click "Add endpoint" → `settings.subscribe` → assert the re-render |
 | `scenarios/gmail_thread_render.json` | scenario 3: LLM opens a thread via `gmail_get_thread`; assert the gmail_inbox reader iframe renders (needs `GMAIL_FAKE_BACKEND`) |
 | `scenarios/gmail_remote_images.json` | scenario 4: remote-image pipeline - assert the blocked-by-default "Show images" banner renders, click it, and assert the `gmail_inbox.fetch_image` round-trip re-renders as "Retry" (fixture URL is `.invalid`, so the SSRF guard rejects it deterministically offline and in CI) |
+| `scenarios/pdf_sign_render.json` | scenario 5: `pdf_request_signature` → assert the `pdf_signer` app renders the awaiting-signature state |
+| `scenarios/pdf_sign_ceremony.json` | scenario 6: type the legal name, tick consent, click "Sign document" → assert "Signed by …" plus both rendered page images |
+| `scenarios/pdf_sign_cancel.json` | scenario 7: same render, click "Cancel" → assert the ceremony aborts with "Signing cancelled" |
+| `seed_pdf_doc.py` | per-scenario seed for the pdf scenarios (the `seed` key below); inserts the `e2e-nda-doc` fixture |
 
 Also outside the skill: `tests/test_apps_e2e.py` (guarded pytest entry) and
 `.github/workflows/apps_e2e.yaml` (opt-in CI).
