@@ -15,7 +15,7 @@ import sirv from "sirv";
 import { isDocsPath, proxyDocs } from "./docs-proxy.ts";
 
 import { buildAgentsMd, build404Md } from "./src/agent/content.ts";
-import { connectAliases, permanentRedirects, site } from "./src/config/landing";
+import { connectAliases, site } from "./src/config/landing";
 
 const PORT = Number(process.env.PORT ?? 8080);
 
@@ -152,22 +152,11 @@ function normalize(pathname: string): string {
 }
 
 /**
- * Send a 301 to a path on this origin.
- *
- * The body is empty and `Location` is relative, so this costs one small
- * response whatever the client asked for - a redirect has nothing to negotiate.
- * `Cache-Control` is explicit because a bare 301 is cached by browsers with no
- * expiry: a mistyped target would otherwise be unrecallable from every visitor
- * who hit it once.
+ * Paths that 301 elsewhere on this origin. `/developers` is the URL people type
+ * for developer docs; it has no page here, and `/docs` - the docs service,
+ * proxied above - is what they were after.
  */
-function redirect(res: ServerResponse, location: string): void {
-  res.statusCode = 301;
-  res.setHeader("Location", location);
-  res.setHeader("Content-Length", "0");
-  res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.end();
-}
+const REDIRECTS: Readonly<Record<string, string>> = { "/developers": "/docs" };
 
 /**
  * Public origin for the absolute links inside generated markdown bodies.
@@ -242,14 +231,11 @@ export function handleRequest(req: IncomingMessage, res: ServerResponse): void {
   // affect it, nor crash the handler). On failure leave pathname empty so a
   // malformed target is non-canonical and falls through to static serving.
   let pathname = "";
-  // Taken off the parsed URL rather than sliced out of `req.url`: the only
-  // consumer is the `Location` header of a redirect, and WHATWG parsing has
-  // already percent-encoded anything that could break out of a header value.
+  // `query` is only ever a redirect's `Location`; WHATWG parsing has already
+  // encoded anything that could break out of that header.
   let query = "";
   try {
-    const parsed = new URL(req.url ?? "/", "http://localhost");
-    pathname = parsed.pathname;
-    query = parsed.search;
+    ({ pathname, search: query } = new URL(req.url ?? "/", "http://localhost"));
   } catch {
     pathname = "";
   }
@@ -266,12 +252,15 @@ export function handleRequest(req: IncomingMessage, res: ServerResponse): void {
   const readable = method === "GET" || method === "HEAD";
   const normalized = normalize(pathname);
 
-  // Before anything looks in `dist`, so a redirected path can never also be a
-  // static file. Method-agnostic on purpose: a HEAD or a POST to /developers
-  // should be told where the page moved, not 404'd.
-  const redirectTo = permanentRedirects[normalized];
-  if (redirectTo) {
-    redirect(res, `${redirectTo}${query}`);
+  // Ahead of `dist`, so a redirect can't also resolve to a file. Explicit
+  // `Cache-Control`: a bare 301 is cached by browsers with no expiry.
+  const to = REDIRECTS[normalized];
+  if (to) {
+    res.writeHead(301, {
+      Location: `${to}${query}`,
+      "Cache-Control": "public, max-age=0, must-revalidate",
+    });
+    res.end();
     return;
   }
 

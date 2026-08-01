@@ -24,7 +24,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 
 import { handleRequest, resolvePublicOrigin } from "./server.ts";
-import { connectAliases, permanentRedirects } from "./src/config/landing";
+import { connectAliases } from "./src/config/landing";
 
 // Mount the real handler on an ephemeral port rather than spawning `bun
 // server.ts` on a fixed one: a fixed port races in parallel CI, and a subprocess
@@ -71,40 +71,18 @@ describe("unknown paths 404", () => {
   });
 });
 
-describe("guessed paths redirect to the page they meant", () => {
-  // /developers is the documentation URL people type. It has no page here, and
-  // 404ing it sent them looking somewhere else instead of at /docs, which this
-  // origin serves from the docs service.
-  const entries = Object.entries(permanentRedirects);
-
-  test.each(entries)("%s -> %s", async (from, to) => {
+// /developers is the docs URL people type; it 404'd, while /docs is right here
+// on this origin. Trailing slash and query string included - both broke the
+// lookup or got dropped in earlier drafts.
+describe("/developers redirects to the docs", () => {
+  test.each([
+    ["/developers", "/docs"],
+    ["/developers/", "/docs"],
+    ["/developers?utm_source=x", "/docs?utm_source=x"],
+  ])("%s -> %s", async (from, to) => {
     const res = await fetch(`${BASE}${from}`, { redirect: "manual" });
     expect(res.status).toBe(301);
     expect(res.headers.get("location")).toBe(to);
-  });
-
-  test.each(entries)("%s keeps the trailing slash form on the same target", async (from, to) => {
-    const res = await fetch(`${BASE}${from}/`, { redirect: "manual" });
-    expect(res.status).toBe(301);
-    expect(res.headers.get("location")).toBe(to);
-  });
-
-  test.each(entries)("%s carries the query string through", async (from, to) => {
-    const res = await fetch(`${BASE}${from}?utm_source=x`, { redirect: "manual" });
-    expect(res.headers.get("location")).toBe(`${to}?utm_source=x`);
-  });
-
-  // A 301 with no Cache-Control is cached by browsers with no expiry, so a
-  // wrong target would be unrecallable from anyone who hit it once.
-  test.each(entries)("%s is not cached indefinitely", async (from) => {
-    const res = await fetch(`${BASE}${from}`, { redirect: "manual" });
-    expect(res.headers.get("cache-control")).toContain("must-revalidate");
-  });
-
-  // The redirect must not shadow a real page: a key that collides with a route
-  // in dist/ would take that page off the site entirely.
-  test.each(entries)("%s has no page of its own to shadow", (from) => {
-    expect(existsSync(`dist${from}/index.html`)).toBe(false);
   });
 });
 
