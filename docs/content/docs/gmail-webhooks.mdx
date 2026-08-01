@@ -1,10 +1,13 @@
 ---
-title: Gmail Webhooks
-description: Turn new Gmail messages into signed outbound webhooks via Pub/Sub push
+title: Gmail Webhook Setup
+description: Configure the DaySurface webhook pipeline - Pub/Sub push, GCP setup, subscriptions, signature verification, retries, and the delivery runner.
 ---
 
-The server can watch a connected Gmail inbox and, when new mail arrives,
-re-emit a **signed outbound webhook** to any endpoints your users subscribe.
+Operator reference for the outbound webhook pipeline. For what Gmail's push
+notifications actually give you and why this layer exists at all, start with
+[Gmail webhooks](https://daysurface.com/gmail-webhooks) - this page assumes you
+have read it and want to configure the thing.
+
 The whole pipeline is **optional and off by default** - it stays dormant until
 you configure a Pub/Sub topic.
 
@@ -37,20 +40,6 @@ you configure a Pub/Sub topic.
 The inbound and outbound halves are decoupled by the `webhook_deliveries`
 outbox, so a slow or failing subscriber never blocks Gmail processing.
 
-## Configuration
-
-All keys are optional; leaving `GMAIL_PUBSUB_TOPIC` unset disables the feature.
-
-| Key | Purpose |
-| --- | --- |
-| `GMAIL_PUBSUB_TOPIC` | Fully-qualified Pub/Sub topic, `projects/<p>/topics/<t>` |
-| `GMAIL_PUSH_AUDIENCE` | OIDC `aud` claim required on the push JWT |
-| `GMAIL_PUSH_SA_EMAIL` | Push subscription's service-account email (checked against the token's `email`) |
-| `WEBHOOK_RUNNER_MODE` | `off` (default), `loop` (in-process), or `endpoint` (external cron) |
-| `WEBHOOK_RUNNER_INTERVAL_S` | Seconds between in-process runner ticks (default 30) |
-| `WEBHOOK_RUNNER_TOKEN` | Shared bearer for the internal `/renew` endpoint |
-| `WEBHOOK_MAX_ATTEMPTS` | Delivery attempts before a row is marked `failed` (default 6) |
-
 ## GCP setup
 
 These steps happen once in the Google Cloud console and cannot be codified:
@@ -69,6 +58,20 @@ The Gmail `gmail.modify` scope already granted during OAuth covers
 `users.watch` and `users.history.list` - no re-consent is needed. When push is
 configured, a watch is auto-started (fire-and-forget) as soon as a user
 connects Gmail, and renewed automatically before its ~7-day expiry.
+
+## Configuration
+
+All keys are optional; leaving `GMAIL_PUBSUB_TOPIC` unset disables the feature.
+
+| Key | Purpose |
+| --- | --- |
+| `GMAIL_PUBSUB_TOPIC` | Fully-qualified Pub/Sub topic, `projects/<p>/topics/<t>` |
+| `GMAIL_PUSH_AUDIENCE` | OIDC `aud` claim required on the push JWT |
+| `GMAIL_PUSH_SA_EMAIL` | Push subscription's service-account email (checked against the token's `email`) |
+| `WEBHOOK_RUNNER_MODE` | `off` (default), `loop` (in-process), or `endpoint` (external cron) |
+| `WEBHOOK_RUNNER_INTERVAL_S` | Seconds between in-process runner ticks (default 30) |
+| `WEBHOOK_RUNNER_TOKEN` | Shared bearer for the internal `/renew` endpoint |
+| `WEBHOOK_MAX_ATTEMPTS` | Delivery attempts before a row is marked `failed` (default 6) |
 
 ## Self-service: the Settings app
 
@@ -107,18 +110,9 @@ Subscriber URLs are validated: private, loopback, link-local, and reserved
 addresses are rejected to prevent SSRF, and plaintext `http://` is refused for
 public hosts.
 
-## Verifying deliveries
+## The event payload
 
-Each POST carries these headers:
-
-| Header | Meaning |
-| --- | --- |
-| `X-Webhook-Signature` | `sha256=<hex>` HMAC over `{timestamp}.{body}` |
-| `X-Webhook-Timestamp` | Unix seconds; reject if too old to stop replays |
-| `X-Webhook-Event-Id` / `X-Webhook-Event-Type` / `X-Webhook-Delivery-Id` | Event/delivery identifiers |
-
-Recompute the HMAC with your stored secret over the raw request body prefixed
-by `"{timestamp}."` and compare in constant time. The JSON body is the event
+Today there is one event type, `gmail.message.new`. The JSON body is the event
 envelope:
 
 ```json
@@ -139,7 +133,89 @@ envelope:
 ```
 
 The payload is intentionally **metadata + snippet only** - never the full
-message body.
+message body. Fetch the message with `gmail_get_thread` if you need more, so
+that mail content is pulled deliberately by an authenticated caller rather than
+pushed to every registered endpoint.
+
+## Verifying deliveries
+
+Each POST carries these headers:
+
+| Header | Meaning |
+| --- | --- |
+| `X-Webhook-Signature` | `sha256=<hex>` HMAC over `{timestamp}.{body}` |
+| `X-Webhook-Timestamp` | Unix seconds; reject if too old to stop replays |
+| `X-Webhook-Event-Id` / `X-Webhook-Event-Type` / `X-Webhook-Delivery-Id` | Event/delivery identifiers |
+
+The scheme mirrors Stripe's: HMAC-SHA256 with your subscription's secret (they
+are prefixed `whsec_`) over the timestamp, a literal `.`, and the **raw** request
+body. Verify against raw bytes, not a re-serialized object - re-encoding JSON
+changes key order and whitespace and will not match.
+
+<Tabs items={['Python', 'Node.js']}>
+<Tab value="Python">
+
+```python
+import hashlib
+import hmac
+import time
+
+
+def verify(secret: str, body: bytes, signature: str, timestamp: str) -> bool:
+    """Validate one delivery. `body` must be the raw request bytes."""
+    # Reject replays of a signature captured earlier.
+    if abs(time.time() - int(timestamp)) > 300:
+        return False
+    digest = hmac.new(
+        secret.encode("utf-8"),
+        f"{timestamp}.".encode() + body,
+        hashlib.sha256,
+    ).hexdigest()
+    return hmac.compare_digest(f"sha256={digest}", signature)
+```
+
+With FastAPI, read the body with `await request.body()` so you get the exact
+bytes that were signed.
+
+</Tab>
+<Tab value="Node.js">
+
+```js
+import { createHmac, timingSafeEqual } from "node:crypto";
+
+/** Validate one delivery. `body` must be the raw request Buffer. */
+export function verify(secret, body, signature, timestamp) {
+  // Reject replays of a signature captured earlier.
+  if (Math.abs(Date.now() / 1000 - Number(timestamp)) > 300) return false;
+  const digest = createHmac("sha256", secret)
+    .update(`${timestamp}.`)
+    .update(body)
+    .digest("hex");
+  const expected = Buffer.from(`sha256=${digest}`);
+  const actual = Buffer.from(signature);
+  return (
+    expected.length === actual.length && timingSafeEqual(expected, actual)
+  );
+}
+```
+
+With Express, mount `express.raw({ type: "application/json" })` on the webhook
+route so `req.body` is the unparsed Buffer.
+
+</Tab>
+</Tabs>
+
+Return a `2xx` quickly and do your real work asynchronously. Any non-`2xx`
+marks the delivery failed and schedules a retry.
+
+## Retries
+
+A failed delivery is retried with exponential backoff - 30s, then doubling per
+attempt, capped at one hour - until `WEBHOOK_MAX_ATTEMPTS` (default 6) is
+reached, at which point the row is marked `failed` and left in the table for
+inspection. Because retries are real, your handler must be **idempotent**: key
+on `X-Webhook-Event-Id`, which is stable across every attempt of the same
+event, rather than on `X-Webhook-Delivery-Id`, which is not.
 
 ## Driving the runner
 

@@ -14,6 +14,10 @@ const routes = [
   // every page. Listing the index here gives crawlers a path in from the apex.
   { path: "/docs", priority: "0.9", changefreq: "weekly" },
   { path: "/compare", priority: "0.8", changefreq: "monthly" },
+  // The standalone Gmail-webhooks resource. Ranked above /compare because it is
+  // the page targeting an existing organic query cluster rather than one that
+  // only converts traffic already on the site.
+  { path: "/gmail-webhooks", priority: "0.8", changefreq: "monthly" },
   ...(pricing.enabled
     ? [{ path: "/pricing", priority: "0.9", changefreq: "monthly" }]
     : []),
