@@ -7,27 +7,34 @@
 # Encodes the sandbox-specific fixes so a future session hits ZERO of the errors
 # we hit discovering them:
 #   - goose is BUILT from source (release-asset download is egress-blocked; `git clone` is not)
-#   - Electron binary comes from the npmmirror MIRROR (GitHub release assets 403), checksum-verified
+#   - Electron binary comes from the OFFICIAL GitHub release assets, checksum-verified
 #   - pnpm install overrides @electron/node-gyp to a registry build (its git tarball 403s on codeload)
 #   - the verified Electron binary is placed into node_modules so electron-forge/Playwright use it
 #   - the dev main-process bundle is produced so Playwright can launch the app
 #
 # PRECONDITION (do this in the environment settings, once): Network access = Custom with
-#   registry.npmmirror.com
-#   cdn.npmmirror.com
-# added (keep the default package-manager list checked). Without it, the Electron download 403s.
+#   github.com                             (issues the release 302; also used by git clone)
+#   release-assets.githubusercontent.com   (Azure-backed asset CDN the 302 points to)
+# added (keep the default package-manager list checked). Without it, the Electron download fails.
 set -euo pipefail
 source "$(dirname "$0")/lib.sh"
 
 GOOSE_REPO_URL="${GOOSE_REPO_URL:-https://github.com/block/goose.git}"
-export ELECTRON_MIRROR="https://registry.npmmirror.com/-/binary/electron/"
+# Electron binaries are pulled from the OFFICIAL GitHub release assets (see step 2).
+# github.com 302-redirects to release-assets.githubusercontent.com (Azure-backed); both
+# hosts must be on the environment's Custom network allowlist.
+ELECTRON_RELEASE_BASE="https://github.com/electron/electron/releases/download"
 
 log "E2E_HOME=$E2E_HOME  GOOSE_SRC=$GOOSE_SRC"
 
-# ---- preflight: mirror reachable? (the one thing a human must enable) ----
-if ! curl -sf --max-time 10 -o /dev/null "https://registry.npmmirror.com/-/binary/electron/"; then
-  echo "FATAL: registry.npmmirror.com not reachable."
-  echo "  Add registry.npmmirror.com + cdn.npmmirror.com to the environment's Custom network allowlist."
+# ---- preflight: official release-asset host reachable? (the one thing a human must enable) ----
+# A non-allowlisted host fails to connect (curl code 000); a reachable one answers with a
+# real status (even 404 for the bare host root). github.com is already reachable if the
+# `git clone` below works - the Azure-backed asset CDN is the host most likely still missing.
+PF_CODE="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "https://release-assets.githubusercontent.com/" 2>/dev/null || true)"
+if [ -z "$PF_CODE" ] || [ "$PF_CODE" = "000" ]; then
+  echo "FATAL: release-assets.githubusercontent.com not reachable."
+  echo "  Add github.com + release-assets.githubusercontent.com to the environment's Custom network allowlist."
   exit 1
 fi
 
@@ -41,14 +48,14 @@ else
   log "goose CLI present: $($GOOSE_BINARY --version)"
 fi
 
-# ---- 2. Electron binary from the mirror, checksum-verified ----
+# ---- 2. Electron binary from the official GitHub release assets, checksum-verified ----
 EV="$(grep -m1 '"electron":' "$DESK/package.json" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
 log "pinned Electron version: $EV"
 if [ ! -x "$ELECTRON_BIN" ]; then
   DL="$E2E_HOME/electron-dl"; mkdir -p "$DL"
-  BASE="https://registry.npmmirror.com/-/binary/electron/v${EV}"
+  BASE="${ELECTRON_RELEASE_BASE}/v${EV}"
   ZIP="electron-v${EV}-linux-x64.zip"
-  log "downloading $ZIP from mirror"
+  log "downloading $ZIP from official GitHub release assets"
   curl -fsSL -o "$DL/$ZIP" "$BASE/$ZIP"
   curl -fsSL -o "$DL/SHASUMS256.txt" "$BASE/SHASUMS256.txt"
   # SHASUMS256.txt lists each file as `<hash> *<name>` (sha256sum binary-mode marker),

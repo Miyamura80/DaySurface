@@ -58,18 +58,19 @@ Heavy tier - **not** in `make ci` (which stays Node/Rust/Electron-free):
   tests/test_apps_e2e.py --no-cov`). It shells out to `up.sh` + `run_all.sh`.
   (`--no-cov` keeps a single-file run from tripping `pytest.ini`'s coverage gate.)
 - **CI:** `.github/workflows/apps_e2e.yaml` - `workflow_dispatch` + weekly cron. It
-  builds Goose via `setup.sh` (open egress, so the npmmirror preconditions below
+  builds Goose via `setup.sh` (open egress, so the allowlist preconditions below
   don't apply on GitHub runners) and runs the guarded pytest entry.
 
 ## Preconditions (verify before setup)
 
-- **npmmirror on the network allowlist.** Electron's binary is fetched from a
-  mirror because GitHub release assets are egress-blocked in the sandbox. In the
-  environment's **Network access → Custom**, add `registry.npmmirror.com` and
-  `cdn.npmmirror.com` (keep the default package-manager list checked). `setup.sh`
-  preflights this and fails loudly if it's missing.
+- **GitHub release-asset host on the network allowlist.** Electron's binary is the
+  official GitHub release asset. `github.com` 302-redirects to
+  `release-assets.githubusercontent.com` (Azure-backed) for the actual bytes, so in
+  the environment's **Network access → Custom**, add both `github.com` and
+  `release-assets.githubusercontent.com` (keep the default package-manager list
+  checked). `setup.sh` preflights this and fails loudly if it's missing.
 - Sandbox provides: `cargo`, `pnpm`/`node`, `bun`, `uv`, `xvfb-run`. `setup.sh`
-  uses `git clone` (allowed) + the mirror - none of the GitHub-blocked paths.
+  needs no egress-blocked paths - it uses `git clone` + the official release assets.
 
 ## How a scenario works
 
@@ -184,7 +185,7 @@ Baked into the scripts; listed so you recognize them if something drifts:
 
 | Symptom | Cause → handled by |
 |---|---|
-| Electron binary 403 | GitHub release assets blocked → mirror + checksum (`setup.sh`) |
+| Electron binary 403 | asset host not allowlisted → add `release-assets.githubusercontent.com`; official download + checksum (`setup.sh`) |
 | `@electron/node-gyp` 403 on `pnpm install` | git tarball on codeload blocked → registry override (`setup.sh`) |
 | Electron SIGSEGV "Missing X server" | needs a display → `xvfb-run` owns Xvfb per test |
 | Electron crash under Xvfb | `--no-sandbox --disable-gpu` (NOT `--in-process-gpu`) |
@@ -198,7 +199,7 @@ Baked into the scripts; listed so you recognize them if something drifts:
 | File | Role |
 |---|---|
 | `lib.sh` | paths/ports + bounded-wait/`setsid` helpers |
-| `setup.sh` | one-time provisioning: build goose, Electron via mirror, pnpm install, dev bundle |
+| `setup.sh` | one-time provisioning: build goose, Electron from official release assets, pnpm install, dev bundle |
 | `seed.py` | create the e2e SQLite schema + one API key; prints the raw key |
 | `up.sh` / `down.sh` | idempotent stack bring-up / teardown |
 | `configure_goose.sh` | write Goose config for `mock`/`real`, wiring the `daysurface` extension at `/mcp` |
