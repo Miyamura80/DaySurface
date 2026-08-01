@@ -27,14 +27,24 @@ ELECTRON_RELEASE_BASE="https://github.com/electron/electron/releases/download"
 
 log "E2E_HOME=$E2E_HOME  GOOSE_SRC=$GOOSE_SRC"
 
-# ---- preflight: official release-asset host reachable? (the one thing a human must enable) ----
+# ---- preflight: both download hosts reachable? (the one thing a human must enable) ----
 # A non-allowlisted host fails to connect (curl code 000); a reachable one answers with a
-# real status (even 404 for the bare host root). github.com is already reachable if the
-# `git clone` below works - the Azure-backed asset CDN is the host most likely still missing.
-PF_CODE="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "https://release-assets.githubusercontent.com/" 2>/dev/null || true)"
-if [ -z "$PF_CODE" ] || [ "$PF_CODE" = "000" ]; then
-  echo "FATAL: release-assets.githubusercontent.com not reachable."
-  echo "  Add github.com + release-assets.githubusercontent.com to the environment's Custom network allowlist."
+# real status (even 400/404 for the bare host root), so 000 is the only signal we treat
+# as "missing". BOTH hosts are probed: the Electron download starts at github.com and
+# 302s to the Azure-backed asset CDN. Don't be tempted to let step 1's `git clone` stand
+# in for the github.com check - it is skipped whenever the shared Goose build already
+# exists, which is the common case on a re-run, and the download would then fail with a
+# bare curl error instead of the allowlist guidance below.
+PF_MISSING=""
+for pf_host in github.com release-assets.githubusercontent.com; do
+  pf_code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "https://$pf_host/" 2>/dev/null || true)"
+  if [ -z "$pf_code" ] || [ "$pf_code" = "000" ]; then
+    PF_MISSING="$PF_MISSING $pf_host"
+  fi
+done
+if [ -n "$PF_MISSING" ]; then
+  echo "FATAL: host(s) not reachable:$PF_MISSING"
+  echo "  Add$PF_MISSING to the environment's Custom network allowlist."
   exit 1
 fi
 
