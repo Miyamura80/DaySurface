@@ -70,13 +70,9 @@ mcp_server/
     gmail_composer.py    # App-only tools (visibility: ["app"]) for the composer iframe
     gmail_inbox.py       # App-only tools for the inbox reader iframe
   apps/
-    gmail_composer/
-      src/Composer.tsx    # React thin rendering layer (draft editor)
-      vite.config.ts
-      package.json
-      dist/mcp-app.html   # Built artifact (committed)
     gmail_inbox/
       src/Inbox.tsx       # React thin rendering layer (thread list + reader)
+      src/InlineComposer.tsx  # Draft editor, rendered inside the inbox app
       vite.config.ts
       package.json
       dist/mcp-app.html

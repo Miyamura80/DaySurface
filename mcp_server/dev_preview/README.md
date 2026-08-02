@@ -26,7 +26,7 @@ upstream double-iframe sandbox relay.
 ```bash
 # Build a standalone preview file (needs the app already built; see below)
 make preview_app APP=gmail_inbox     # → dist/gmail_inbox-preview.html
-make preview_app APP=gmail_composer
+make preview_app APP=settings
 
 # Open dist/<app>-preview.html in any browser, OR assert it renders headless:
 make preview_smoke APP=gmail_inbox   # Playwright, needs a Chromium

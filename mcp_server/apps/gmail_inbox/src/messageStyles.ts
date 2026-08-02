@@ -137,6 +137,15 @@ export const attachmentChipStyle: React.CSSProperties = {
   color: "#3c4043",
 };
 
+// Same chip geometry as attachmentChipStyle, in Gmail's error red: a refused
+// file reads as a chip that failed, not as a second kind of object.
+export const attachmentRejectedChipStyle: React.CSSProperties = {
+  ...attachmentChipStyle,
+  background: "#fce8e6",
+  border: "1px solid #f5c2bd",
+  color: "#c5221f",
+};
+
 export const previewOverlayStyle: React.CSSProperties = {
   position: "fixed",
   top: 0,

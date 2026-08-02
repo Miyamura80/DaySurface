@@ -32,6 +32,8 @@ has no way to activate itself.
 from __future__ import annotations
 
 import base64
+import email
+import itertools
 from typing import Any
 
 _DEMO_EMAIL = "you@startup.com"
@@ -106,6 +108,122 @@ _THREADS: dict[str, dict[str, Any]] = {
 }
 
 
+# Module-level so drafts survive across the per-call client instances.
+_DRAFTS: dict[str, dict[str, Any]] = {}
+
+# Bytes for every attachment the fake has minted an id for. Gmail stores
+# attachment bodies out-of-line and hands back only an ``attachmentId``; a draft
+# update re-downloads them by id to carry existing files across the whole-message
+# replace, so the fake must be able to serve them back or any draft carrying an
+# attachment becomes unsaveable.
+_ATTACHMENT_BYTES: dict[str, bytes] = {}
+
+# Monotonic id source. Deliberately NOT derived from len(_DRAFTS): sending or
+# discarding shrinks the store, so a length-based counter would hand a live
+# draft's id to the next create and overwrite it.
+_ID_SEQ = itertools.count(1)
+
+
+def _next_id(prefix: str) -> str:
+    return f"{prefix}-{next(_ID_SEQ)}"
+
+
+def _release_attachments(payload: dict[str, Any] | None) -> None:
+    """Drop the bytes a payload's attachment ids point at.
+
+    A draft update is a whole-message replace, so it re-parses the MIME and
+    mints fresh ids for the same files; without this the superseded copies
+    would be retained for the life of the process, and editing a draft with a
+    large attachment would grow memory once per keystroke pause. Nothing can
+    reference the old ids afterwards - a sent or discarded draft is gone from
+    the store and the fake serves no sent-message bodies - so releasing them is
+    safe as well as necessary.
+    """
+    if not payload:
+        return
+    parts = payload.get("parts") or [payload]
+    for part in parts:
+        attachment_id = (part.get("body") or {}).get("attachmentId")
+        if attachment_id:
+            _ATTACHMENT_BYTES.pop(attachment_id, None)
+
+
+_DRAFT_HEADERS = (
+    "From",
+    "To",
+    "Cc",
+    "Bcc",
+    "Subject",
+    "Date",
+    "In-Reply-To",
+    "References",
+)
+
+
+def _mime_to_payload(raw_b64url: str) -> dict[str, Any]:
+    """Turn a base64url RFC 5322 message into a ``format=full`` Gmail payload.
+
+    The inverse of what the real service just did, so a draft round-trips
+    through the same shape Gmail would return: headers the parser reads, text
+    parts carrying base64url bodies, and attachments reduced to an
+    ``attachmentId`` + size the way Gmail stores them out-of-line.
+    """
+    if not raw_b64url:
+        return {"mimeType": "text/plain", "headers": [], "body": {"size": 0}}
+    # The real builder pads correctly; be liberal anyway so a padding-stripped
+    # value cannot fail the whole draft path with a bare binascii error.
+    padded = raw_b64url + "=" * (-len(raw_b64url) % 4)
+    msg = email.message_from_bytes(base64.urlsafe_b64decode(padded))
+
+    headers = _headers({h: msg[h] for h in _DRAFT_HEADERS if msg[h]})
+    parts: list[dict[str, Any]] = []
+    for part in msg.walk():
+        if part.get_content_maintype() == "multipart":
+            continue
+        filename = part.get_filename()
+        # get_payload(decode=True) is typed as possibly returning a Message for
+        # a nested part; walk() already skipped multiparts, so anything else is
+        # an empty body rather than something to decode.
+        decoded = part.get_payload(decode=True)
+        payload = decoded if isinstance(decoded, bytes) else b""
+        content_id = part.get("Content-ID")
+        # Only an unnamed text/* leaf is the message body. Anything else - a
+        # named file, or an unnamed inline image referenced by cid: - is stored
+        # out-of-line the way Gmail does, keeping its Content-ID so the reader
+        # can still resolve cid: references after a reopen.
+        is_body = (
+            part.get_content_maintype() == "text" and not filename and not content_id
+        )
+        if is_body:
+            text = payload.decode("utf-8", errors="replace")
+            parts.append(
+                {
+                    "mimeType": part.get_content_type(),
+                    "body": {"data": _b64url(text), "size": len(text)},
+                }
+            )
+            continue
+        attachment_id = _next_id("fatt")
+        _ATTACHMENT_BYTES[attachment_id] = payload
+        entry: dict[str, Any] = {
+            "mimeType": part.get_content_type(),
+            "body": {"attachmentId": attachment_id, "size": len(payload)},
+        }
+        if filename:
+            entry["filename"] = filename
+        if content_id:
+            entry["headers"] = _headers({"Content-ID": content_id})
+        parts.append(entry)
+    if len(parts) == 1 and not parts[0].get("filename"):
+        # Single-part message: Gmail inlines the body rather than wrapping it.
+        return {
+            "mimeType": parts[0]["mimeType"],
+            "headers": headers,
+            "body": parts[0]["body"],
+        }
+    return {"mimeType": msg.get_content_type(), "headers": headers, "parts": parts}
+
+
 # Fake Resource chain. Methods take ``**kwargs`` because they mirror
 # googleapiclient's camelCase Gmail API (userId, maxResults, metadataHeaders, ...)
 # and only a couple of values matter to the fixtures - keeping the surface liberal
@@ -142,11 +260,103 @@ class _Threads:
 
 
 class _Drafts:
-    def list(self, **kwargs: Any) -> _Executable:
-        return _Executable({"drafts": []})
+    """In-memory draft store backing the compose/reply/send e2e paths.
+
+    Gmail takes a whole RFC 5322 message on ``create``/``update`` (base64url in
+    ``message.raw``) and hands back a Gmail-shaped resource on ``get``. The fake
+    does the same round trip - parse the MIME the real service built, re-emit it
+    in ``format=full`` shape - so the real MIME builder and the real response
+    parser both run for real. Faking only the persistence keeps the composer's
+    save -> reopen -> send loop honest end to end.
+
+    State lives on the instance the resource hands out, so it survives for the
+    life of the server process and resets when it restarts, which is what a
+    scenario wants.
+    """
+
+    def __init__(self, store: dict[str, dict[str, Any]]) -> None:
+        self._store = store
+
+    def create(self, **kwargs: Any) -> _Executable:
+        message = (kwargs.get("body") or {}).get("message") or {}
+        draft_id = _next_id("draft")
+        payload = _mime_to_payload(message.get("raw") or "")
+        thread_id = message.get("threadId")
+        self._store[draft_id] = {
+            "id": draft_id,
+            "message": {
+                "id": _next_id("dmsg"),
+                "threadId": thread_id,
+                "labelIds": ["DRAFT"],
+                "payload": payload,
+            },
+        }
+        # Real Gmail's create response carries only the minimal message; the
+        # service re-reads at format=full, so returning more here would let a
+        # missing re-read pass unnoticed.
+        return _Executable(
+            {
+                "id": draft_id,
+                "message": {
+                    "id": self._store[draft_id]["message"]["id"],
+                    "threadId": thread_id,
+                },
+            }
+        )
+
+    def update(self, **kwargs: Any) -> _Executable:
+        draft_id = kwargs.get("id") or ""
+        existing = self._store.get(draft_id)
+        if existing is None:
+            raise LookupError(f"fake Gmail backend has no draft {draft_id!r}")
+        message = (kwargs.get("body") or {}).get("message") or {}
+        # Whole-message replace, exactly as Gmail does. Parse BEFORE releasing:
+        # if the new MIME is malformed this raises, and the draft keeps a payload
+        # whose attachment ids must still resolve. Releasing first would leave a
+        # live draft pointing at bytes that are already gone.
+        new_payload = _mime_to_payload(message.get("raw") or "")
+        _release_attachments(existing["message"].get("payload"))
+        existing["message"]["payload"] = new_payload
+        return _Executable(
+            {"id": draft_id, "message": {"id": existing["message"]["id"]}}
+        )
 
     def get(self, **kwargs: Any) -> _Executable:
-        return _Executable({})
+        draft_id = kwargs.get("id") or ""
+        draft = self._store.get(draft_id)
+        if draft is None:
+            raise LookupError(
+                f"fake Gmail backend has no draft {draft_id!r}; it was never created, "
+                "or was already sent or discarded"
+            )
+        return _Executable(draft)
+
+    def send(self, **kwargs: Any) -> _Executable:
+        draft_id = (kwargs.get("body") or {}).get("id") or ""
+        draft = self._store.pop(draft_id, None)
+        if draft is None:
+            raise LookupError(f"fake Gmail backend has no draft {draft_id!r} to send")
+        msg = draft["message"]
+        _release_attachments(msg.get("payload"))
+        return _Executable(
+            {"id": msg["id"], "threadId": msg.get("threadId"), "labelIds": ["SENT"]}
+        )
+
+    def delete(self, **kwargs: Any) -> _Executable:
+        removed = self._store.pop(kwargs.get("id") or "", None)
+        if removed:
+            _release_attachments(removed["message"].get("payload"))
+        return _Executable(None)
+
+    def list(self, **kwargs: Any) -> _Executable:
+        return _Executable(
+            {
+                "drafts": [
+                    {"id": d["id"], "message": d["message"]}
+                    for d in self._store.values()
+                ]
+            }
+        )
 
 
 class _Labels:
@@ -156,6 +366,18 @@ class _Labels:
 
 class _Attachments:
     def get(self, **kwargs: Any) -> _Executable:
+        # Bytes the fake minted an id for while parsing a draft's MIME. A draft
+        # update re-downloads existing files by id to carry them across the
+        # whole-message replace, so these must round-trip or any draft with an
+        # attachment becomes unsaveable.
+        stored = _ATTACHMENT_BYTES.get(kwargs.get("id") or "")
+        if stored is not None:
+            return _Executable(
+                {
+                    "data": base64.urlsafe_b64encode(stored).decode("ascii"),
+                    "size": len(stored),
+                }
+            )
         # No fixture path fetches attachment bytes: the sample thread's PDF is
         # never downloaded, and it has no inline cid: images to resolve. Returning
         # empty bytes would mask a real fetch failure, so fail loudly if a new
@@ -172,11 +394,14 @@ class _Messages:
 
 
 class _Users:
+    def __init__(self, drafts_store: dict[str, dict[str, Any]]) -> None:
+        self._drafts_store = drafts_store
+
     def threads(self) -> _Threads:
         return _Threads()
 
     def drafts(self) -> _Drafts:
-        return _Drafts()
+        return _Drafts(self._drafts_store)
 
     def labels(self) -> _Labels:
         return _Labels()
@@ -221,8 +446,15 @@ class _FakeGmailResource:
     untested path can't silently pass in a faked run.
     """
 
+    def __init__(self) -> None:
+        # One store per client instance. _maybe_fake_gmail_client builds a client
+        # per call, so keep the drafts module-level: a draft created by
+        # gmail_reply_to_thread must still be there when the app's save/send
+        # tools arrive on later requests.
+        self._drafts_store = _DRAFTS
+
     def users(self) -> _Users:
-        return _Users()
+        return _Users(self._drafts_store)
 
     def new_batch_http_request(self) -> _FakeBatch:
         return _FakeBatch()
