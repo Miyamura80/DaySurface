@@ -152,6 +152,24 @@ describe("InlineComposer send/autosave race", () => {
     expect(screen.getByText("Message sent")).toBeTruthy();
   });
 
+  it("keeps a failed send's error visible when a pre-send autosave lands after it", async () => {
+    const { app, settle, fail } = makeMcpApp();
+    renderComposer(app);
+
+    await editAndFireAutosave();
+    fireEvent.click(screen.getByText("Send"));
+
+    // Send fails, so the composer reopens for a retry - which releases the
+    // closing latch. The autosave started before the send must still stay quiet.
+    await fail("gmail_composer.send", "smtp exploded");
+    expect(screen.getByLabelText("Body")).toBeTruthy();
+
+    await settle("gmail_composer.save_draft", { structuredContent: { draft_id: "d1" } });
+
+    expect(screen.queryByText(/Saved/)).toBeNull();
+    expect(screen.getByText(/smtp exploded/)).toBeTruthy();
+  });
+
   it("calls onSent 1.5s after a confirmed send", async () => {
     const { app, settle } = makeMcpApp();
     const onSent = renderComposer(app);

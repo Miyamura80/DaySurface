@@ -67,9 +67,12 @@ export function useComposerAttachments(draft: ComposerDraft, mcpApp: McpAppLike)
     if (previewBlobRef.current) URL.revokeObjectURL(previewBlobRef.current);
   }, []);
 
-  // Sync existing attachments when draft updates (e.g. from refresh or agent)
+  // Sync existing attachments when draft updates (e.g. from refresh or agent).
+  // An absent key means "the update did not carry attachments", so keep what we
+  // have; an empty array means "this draft has none", which must clear the list.
+  // Skipping both left removed files on screen and counted against the cap.
   useEffect(() => {
-    if (!draft.attachments?.length) return;
+    if (!draft.attachments) return;
     setExistingAttachments(toExisting(draft.attachments));
   }, [draft.attachments]);
 
@@ -104,8 +107,17 @@ export function useComposerAttachments(draft: ComposerDraft, mcpApp: McpAppLike)
     // unknown existing size: ExistingAttachment.size is optional, and coalescing
     // a missing one to 0 would undercount and let an over-limit batch through,
     // so treat unknown as "cannot fit" rather than guessing low.
+    // A file the user just picked stays in `attachments` (nothing promotes it to
+    // a reference), and once a save echoes it back inside `draft.attachments` it
+    // also lands in `existingAttachments` - so a naive sum counts it twice and
+    // wrongly rejects a later drop that genuinely fits. Match on filename+size
+    // and count each file once. The real fix is to retire an upload once the
+    // server confirms it, tracked in the write-chain rework (issue #32).
+    const newKeys = new Set(attachments.map((a) => `${a.filename}:${a.size}`));
     const committedBytes =
-      existingAttachments.reduce((s, a) => s + (a.size ?? MAX_ATTACHMENT_BYTES), 0) +
+      existingAttachments
+        .filter((a) => !newKeys.has(`${a.filename}:${a.size ?? -1}`))
+        .reduce((s, a) => s + (a.size ?? MAX_ATTACHMENT_BYTES), 0) +
       attachments.reduce((s, a) => s + a.size, 0) +
       pendingBytesRef.current;
     const incomingBytes = accepted.reduce((s, f) => s + f.size, 0);

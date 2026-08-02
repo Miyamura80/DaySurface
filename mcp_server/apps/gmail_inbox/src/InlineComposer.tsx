@@ -89,6 +89,12 @@ export function InlineComposer({
   // and its late reply would overwrite the terminal "sent" state and drop the
   // user back into an editable composer for a draft Gmail has already sent.
   const closingRef = useRef(false);
+  // Bumped whenever a terminal action commits. `closingRef` alone is not enough:
+  // a failed send releases it so the composer stays editable, and a pre-send
+  // autosave resolving just after that would find the latch open and write
+  // "saved" over the send error. A save only reports if its generation is still
+  // current, so anything started before a terminal action stays silent forever.
+  const writeGenRef = useRef(0);
   const draftRef = useRef(draft);
   useEffect(() => { draftRef.current = draft; }, [draft]);
 
@@ -149,6 +155,8 @@ export function InlineComposer({
 
   const persistDraft = async (d: ComposerDraft) => {
     if (closingRef.current) return;
+    const gen = writeGenRef.current;
+    const stale = () => closingRef.current || gen !== writeGenRef.current;
     setSaveStatus({ kind: "saving" });
     const snapshot = d;
     try {
@@ -173,12 +181,12 @@ export function InlineComposer({
       await mcpApp.callServerTool({ name: "gmail_composer.save_draft", arguments: args });
       // Re-check after the await, not just on entry: a send committed while this
       // request was in flight makes the reply stale, whichever way it resolved.
-      if (closingRef.current) return;
+      if (stale()) return;
       setSaveStatus({ kind: "saved", at: new Date() });
       const latest = draftRef.current;
       if (latest && draftFieldsEqual(latest, snapshot)) localDirtyRef.current = false;
     } catch (err) {
-      if (closingRef.current) return;
+      if (stale()) return;
       setSaveStatus({ kind: "error", message: errMsg(err) });
     }
   };
@@ -199,6 +207,7 @@ export function InlineComposer({
     // Single-flight: a repeat click while a send is in flight is a no-op.
     if (closingRef.current) return;
     closingRef.current = true;
+    writeGenRef.current++;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     setSaveStatus({ kind: "sending" });
     try {
@@ -239,6 +248,7 @@ export function InlineComposer({
   const onDiscardNow = async () => {
     if (closingRef.current) return;
     closingRef.current = true;
+    writeGenRef.current++;
     if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null; }
     onDiscard();
     try {

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { InlineComposer } from "./InlineComposer";
 import { MAX_ATTACHMENT_BYTES } from "./useComposerAttachments";
 import type { ComposerDraft, DraftAttachment, McpAppLike } from "./types";
@@ -22,15 +22,15 @@ function makeMcpApp() {
 }
 
 function renderComposer(app: McpAppLike, attachments?: DraftAttachment[]) {
-  const draft: ComposerDraft = {
+  const mk = (atts?: DraftAttachment[]): ComposerDraft => ({
     draft_id: "d1",
     to: "margaret@example.com",
     subject: "Re: NDA",
     body: "Hi Margaret,",
     thread_id: "t1",
-    attachments,
-  };
-  render(
+    attachments: atts,
+  });
+  const view = (draft: ComposerDraft) => (
     <InlineComposer
       draft={draft}
       thread={null}
@@ -39,8 +39,11 @@ function renderComposer(app: McpAppLike, attachments?: DraftAttachment[]) {
       onBack={vi.fn()}
       onDiscard={vi.fn()}
       onSent={vi.fn()}
-    />,
+    />
   );
+  const r = render(view(mk(attachments)));
+  // Re-render with a new server-confirmed attachment set, as a save echo would.
+  return { rerender: (atts: DraftAttachment[]) => r.rerender(view(mk(atts))) };
 }
 
 /** The hidden <input type=file> the paperclip button proxies to. */
@@ -135,6 +138,24 @@ describe("composer attachment preflight", () => {
     // bytes - otherwise the cumulative check fails open.
     drop([fileOfSize("second.pdf", big)]);
     expect(screen.getByText(/would exceed/)).toBeTruthy();
+  });
+
+  it("counts a file once when it appears in both the new and existing sets", async () => {
+    const { app } = makeMcpApp();
+    const big = Math.floor(MAX_ATTACHMENT_BYTES * 0.6);
+    const { rerender } = renderComposer(app);
+
+    // Pick a file and let its read finish, so it lands in `attachments`.
+    drop([fileOfSize("dup.pdf", big)]);
+    await waitFor(() => expect(screen.getByText("dup.pdf")).toBeTruthy());
+
+    // A save echoes it back onto the draft, so it is now in BOTH sets. Counting
+    // it twice would put the draft over the cap on paper and reject the next
+    // drop, even though only one copy of the file exists.
+    rerender([{ filename: "dup.pdf", mime_type: "application/pdf", size: big }]);
+
+    drop([fileOfSize("small.pdf", 1_000)]);
+    expect(screen.queryByText(/would exceed/)).toBeNull();
   });
 
   it("lets the user dismiss a rejection", () => {
