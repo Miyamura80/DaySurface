@@ -306,13 +306,25 @@ try {
             await btn.click({ timeout: 6000, force: true })
               .catch((e) => log("forced click failed:", e.message.split("\n")[0]));
           }
-          // Trust a NEGATIVE acknowledgement only while the frame that carries
-          // it is still alive: a click that made the host swap the iframe takes
-          // `__ackClick` with it, and reporting that as "no click dispatched"
-          // would be a false accusation. Unknown stays null.
-          result.click_landed = frame.isDetached() || !ackKey
-            ? null
-            : await frame.evaluate(() => window.__ackClick === true).catch(() => null);
+          // Two ways to end up without an acknowledgement, and they are NOT the
+          // same verdict. An unresolvable target is a definite non-delivery -
+          // there was nothing to click - so it must read `false` and fail the
+          // leg; folding it into "undetermined" would let a scenario with a
+          // stale click selector pass whenever its expected text happened to be
+          // on screen already. A detached frame is genuinely unknowable: the
+          // click may well have landed and taken `__ackClick` with it when the
+          // host swapped the iframe, so calling that a non-delivery would be a
+          // false accusation.
+          if (!ackKey) {
+            result.click_landed = false;
+            log("click target never resolved - there was nothing to click");
+          } else if (frame.isDetached()) {
+            result.click_landed = null;
+            log("frame swapped during the click; delivery undetermined");
+          } else {
+            result.click_landed = await frame
+              .evaluate(() => window.__ackClick === true).catch(() => null);
+          }
           if (result.click_landed === false)
             log("NO CLICK REACHED THE TARGET - the app was never asked to do anything");
         }

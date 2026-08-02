@@ -234,7 +234,7 @@ text that was already on screen would grade as a round-trip.
 | set | set | `false` / `false` | the control is gated on something else (a `busy` flag, a phase) |
 | set | set | `true` / `false` | the control was fine but the click never arrived - overlay, or a stale hit target |
 | set | set | `true` / `true` | input and click were fine - the round-trip or the re-render is the real failure |
-| set | set | `true` / `null` | delivery undetermined: the click swapped the iframe, taking the acknowledgement with it |
+| set | set | `true` / `null` | delivery undetermined: the click swapped the iframe, taking the acknowledgement with it. The **only** state that doesn't fail the leg - an unresolvable click target reads `false`, not `null` |
 | any | any | `null` / `null` | the click step was never reached; check the `interaction ERROR` line |
 
 **A repaired PASS is not a clean PASS.** `via: "native-setter"` or
