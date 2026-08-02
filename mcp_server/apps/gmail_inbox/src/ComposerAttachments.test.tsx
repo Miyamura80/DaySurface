@@ -158,6 +158,24 @@ describe("composer attachment preflight", () => {
     expect(screen.queryByText(/would exceed/)).toBeNull();
   });
 
+  it("cancels only one duplicate per upload when several files share a name and size", async () => {
+    const { app } = makeMcpApp();
+    const each = 8_000_000;
+    const { rerender } = renderComposer(app);
+
+    drop([fileOfSize("dup.pdf", each)]);
+    await waitFor(() => expect(screen.getByText("dup.pdf")).toBeTruthy());
+
+    // Three genuinely distinct files that happen to share a name and size, one
+    // of which is the upload above. Cancelling all three would undercount by
+    // 16 MB and let the next drop through.
+    const dup = { filename: "dup.pdf", mime_type: "application/pdf", size: each };
+    rerender([dup, dup, dup]);
+
+    drop([fileOfSize("next.pdf", 2_000_000)]);
+    expect(screen.getByText(/would exceed/)).toBeTruthy();
+  });
+
   it("lets the user dismiss a rejection", () => {
     const { app } = makeMcpApp();
     renderComposer(app);

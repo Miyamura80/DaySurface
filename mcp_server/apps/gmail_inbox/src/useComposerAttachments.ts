@@ -113,13 +113,26 @@ export function useComposerAttachments(draft: ComposerDraft, mcpApp: McpAppLike)
     // wrongly rejects a later drop that genuinely fits. Match on filename+size
     // and count each file once. The real fix is to retire an upload once the
     // server confirms it, tracked in the write-chain rework (issue #32).
-    const newKeys = new Set(attachments.map((a) => `${a.filename}:${a.size}`));
-    const committedBytes =
-      existingAttachments
-        .filter((a) => !newKeys.has(`${a.filename}:${a.size ?? -1}`))
-        .reduce((s, a) => s + (a.size ?? MAX_ATTACHMENT_BYTES), 0) +
-      attachments.reduce((s, a) => s + a.size, 0) +
-      pendingBytesRef.current;
+    // Cancel at most ONE existing entry per new upload. filename+size is not an
+    // identity - a draft can legitimately carry several files sharing both - so
+    // set-style matching would drop every copy and undercount badly. A budget
+    // keeps the correction to the actual overlap and errs toward over-counting,
+    // which only over-rejects rather than letting an over-cap batch through.
+    const dupBudget = new Map<string, number>();
+    for (const a of attachments) {
+      const k = `${a.filename}:${a.size}`;
+      dupBudget.set(k, (dupBudget.get(k) ?? 0) + 1);
+    }
+    let committedBytes =
+      attachments.reduce((s, a) => s + a.size, 0) + pendingBytesRef.current;
+    for (const a of existingAttachments) {
+      const budget = dupBudget.get(`${a.filename}:${a.size ?? -1}`) ?? 0;
+      if (budget > 0) {
+        dupBudget.set(`${a.filename}:${a.size ?? -1}`, budget - 1);
+        continue; // already counted via `attachments`
+      }
+      committedBytes += a.size ?? MAX_ATTACHMENT_BYTES;
+    }
     const incomingBytes = accepted.reduce((s, f) => s + f.size, 0);
     const fits = committedBytes + incomingBytes <= MAX_ATTACHMENT_BYTES;
     if (!fits) {
