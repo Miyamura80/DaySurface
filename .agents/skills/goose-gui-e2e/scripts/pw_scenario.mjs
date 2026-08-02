@@ -297,27 +297,35 @@ try {
           // WHY it gave up - hence the isEnabled() reading on the failure path.
           // The forced retry exists because the host auto-resizes the iframe, so
           // a first click can land on stale coordinates.
-          if (await btn.click({ timeout: 6000 }).then(() => true).catch(() => false)) {
+          let clicked = await btn.click({ timeout: 6000 }).then(() => true).catch(() => false);
+          if (clicked) {
             result.click_enabled = true;
           } else {
             result.click_enabled = await btn.isEnabled().catch(() => false);
             if (!result.click_enabled)
               log("click target DISABLED after its actionability wait - a forced click cannot fire on it");
-            await btn.click({ timeout: 6000, force: true })
-              .catch((e) => log("forced click failed:", e.message.split("\n")[0]));
+            clicked = await btn.click({ timeout: 6000, force: true }).then(() => true)
+              .catch((e) => { log("forced click failed:", e.message.split("\n")[0]); return false; });
           }
-          // Two ways to end up without an acknowledgement, and they are NOT the
-          // same verdict. An unresolvable target is a definite non-delivery -
-          // there was nothing to click - so it must read `false` and fail the
-          // leg; folding it into "undetermined" would let a scenario with a
-          // stale click selector pass whenever its expected text happened to be
-          // on screen already. A detached frame is genuinely unknowable: the
-          // click may well have landed and taken `__ackClick` with it when the
-          // host swapped the iframe, so calling that a non-delivery would be a
-          // false accusation.
+          // Three ways to end up without an acknowledgement, and they are NOT
+          // the same verdict.
+          //   - No listener armed AND no click ever succeeded: there was nothing
+          //     to click. A definite non-delivery, so `false`, so the leg fails.
+          //     Folding this into "undetermined" would let a scenario with a
+          //     stale click selector pass whenever its expected text happened to
+          //     be on screen already.
+          //   - No listener armed but a click DID succeed: arming resolves the
+          //     locator before the click, so a target that only mounts in
+          //     between leaves us un-armed on a click that really landed.
+          //     Unknowable, not a non-delivery - `false` here would be a
+          //     spurious red on a good run.
+          //   - Detached frame: the click may well have landed and taken
+          //     `__ackClick` with it when the host swapped the iframe.
           if (!ackKey) {
-            result.click_landed = false;
-            log("click target never resolved - there was nothing to click");
+            result.click_landed = clicked ? null : false;
+            log(clicked
+              ? "target unresolvable when arming but a click succeeded; delivery undetermined"
+              : "click target never resolved and no click succeeded - there was nothing to click");
           } else if (frame.isDetached()) {
             result.click_landed = null;
             log("frame swapped during the click; delivery undetermined");
