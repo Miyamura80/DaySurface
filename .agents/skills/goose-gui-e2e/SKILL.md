@@ -170,10 +170,15 @@ iframe after it renders, exercising a **user-initiated** server round-trip (the
 "expect": { "...": "...", "interaction_rendered": true },
 "interact": {
   "fill":  { "selector": "input[type=url]", "value": "https://webhook.example.com/e2e" },
+  "check": { "selector": "input[type=checkbox]" },
   "click": { "text": "Add endpoint" },
   "expect_dom_contains": ["Signing secret", "webhook.example.com"]
 }
 ```
+
+`fill` and `check` are both optional and are applied together before the click
+(`pdf_sign_ceremony` uses both - a typed name plus a consent box). `click` takes
+either a `"selector"` or a `"text"` substring.
 
 The iframe's `callServerTool` goes **app → Goose → `/mcp` directly, bypassing the
 mock LLM**, so this round-trip never appears in the tool-call log - the re-rendered
@@ -187,6 +192,67 @@ makes `mcp_probe.py` require it, and `pw_scenario.mjs` fails the drive if the
 post-click DOM never matches. This needs the "Add endpoint" control, which renders
 only when `push_available` is true - `up.sh` sets `GMAIL_PUBSUB_TOPIC` to ungate it
 (no Pub/Sub is ever contacted).
+
+#### Why the inputs are verified rather than trusted
+
+Playwright's `fill` types through CDP into the *focused* element and never reads
+the value back. Inside a sandboxed cross-origin iframe that can silently miss, so
+a React-controlled input keeps its empty `value` - and these apps gate their
+submit control on that state: `Settings.tsx` on `busy || !url.trim()`,
+`Signer.tsx` on the typed name **and** the consent box **and** the phase. A gated
+button absorbs both click paths without raising: the plain click fails its
+enabled-actionability check, and a *forced* click dispatches nothing, because
+browsers don't fire `click` on a disabled element. The leg fails as "interaction
+did not re-render" and reads like a server problem (issue #28).
+
+So `applyInputs` sets `fill` and `check` **together** and proves each landed,
+falling back to the native value setter plus a bubbling `input` event - what
+React's synthetic `onChange` listens for, and what its instance-level value shim
+can't suppress. It runs again immediately before the click if a re-read shows the
+state was lost (a host-triggered remount resets it), repairing every input rather
+than just the text one - re-applying the name alone would leave `pdf_signer`'s
+consent box unticked and the button still shut.
+
+`inputs`, `click_enabled` and `click_landed` land in `pw_result_<name>.json` and
+on `mcp_probe.py`'s always-printed summary line. `before_click` records what was
+**observed**, before any repair, which is what makes these failure modes
+distinguishable at all. `click_enabled` and `click_landed` are deliberately
+separate, and the implication runs one way only: **enabled does not imply
+landed.** An enabled control can still be missed - a detached node, unstable
+coordinates, an overlay swallowing the hit - and `force` skips the hit-target
+check, so Playwright reports a forced click as *sent* regardless. So
+`click_landed` isn't inferred from the driver at all: a capture-phase listener
+inside the iframe reports whether the event actually reached the target. Only
+that means the app was asked to do something, and `mcp_probe.py` **fails** a
+scenario whose expected DOM matched while `click_landed` is `false` - otherwise
+text that was already on screen would grade as a round-trip.
+
+| `inputs.after` | `inputs.before_click` | `click_enabled` / `click_landed` | Read it as |
+| --- | --- | --- | --- |
+| throws `inputs did not take` | - | `null` / `null` | the value never reached the app - driver-side plumbing |
+| set | not satisfied (`reapplied: true`) | - | the app remounted between apply and click and reset its state |
+| set | set | `false` / `false` | the control is gated on something else (a `busy` flag, a phase) |
+| set | set | `true` / `false` | the control was fine but the click never arrived - overlay, or a stale hit target |
+| set | set | `true` / `true` | input and click were fine - the round-trip or the re-render is the real failure |
+| set | set | `true` / `null` | delivery undetermined: the click swapped the iframe, taking the acknowledgement with it. The **only** state that doesn't fail the leg - an unresolvable click target reads `false`, not `null` |
+| any | any | `null` / `null` | the click step was never reached; check the `interaction ERROR` line |
+
+**A repaired PASS is not a clean PASS.** `via: "native-setter"` or
+`reapplied: true` means the harness drove the app harder than a user could - if
+the control is genuinely undriveable, or the app really does drop typed input on
+remount, that is a bug a real user hits. `mcp_probe.py` prints a `DEGRADED:` line
+next to the PASS for exactly this reason; carry it into the run report rather than
+reporting a bare pass.
+
+The frame handle is re-resolved before each step (`liveFrame`), because the host
+recreates the app iframe on message-list re-renders and auto-resizes. It matches
+on the iframe **URL** captured at discovery, not on `expect.dom_contains`:
+`findAppFrame`'s text heuristic is only valid for the initial discovery, since an
+`interact` leg exists precisely to change that text (a signed document no longer
+says "Awaiting your signature"), so a text-based re-resolve would fail exactly
+when it is needed. It throws rather than returning a detached handle - every DOM
+read is `.catch()`-guarded, so a dead handle would degrade into a silent "did not
+re-render" and get blamed on the server.
 
 ## Why the mock cannot fake a PASS
 
