@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import base64
 import email
+import itertools
 from typing import Any
 
 _DEMO_EMAIL = "you@startup.com"
@@ -110,6 +111,22 @@ _THREADS: dict[str, dict[str, Any]] = {
 # Module-level so drafts survive across the per-call client instances.
 _DRAFTS: dict[str, dict[str, Any]] = {}
 
+# Bytes for every attachment the fake has minted an id for. Gmail stores
+# attachment bodies out-of-line and hands back only an ``attachmentId``; a draft
+# update re-downloads them by id to carry existing files across the whole-message
+# replace, so the fake must be able to serve them back or any draft carrying an
+# attachment becomes unsaveable.
+_ATTACHMENT_BYTES: dict[str, bytes] = {}
+
+# Monotonic id source. Deliberately NOT derived from len(_DRAFTS): sending or
+# discarding shrinks the store, so a length-based counter would hand a live
+# draft's id to the next create and overwrite it.
+_ID_SEQ = itertools.count(1)
+
+
+def _next_id(prefix: str) -> str:
+    return f"{prefix}-{next(_ID_SEQ)}"
+
 
 _DRAFT_HEADERS = (
     "From",
@@ -140,7 +157,6 @@ def _mime_to_payload(raw_b64url: str) -> dict[str, Any]:
 
     headers = _headers({h: msg[h] for h in _DRAFT_HEADERS if msg[h]})
     parts: list[dict[str, Any]] = []
-    att_seq = 0
     for part in msg.walk():
         if part.get_content_maintype() == "multipart":
             continue
@@ -150,16 +166,15 @@ def _mime_to_payload(raw_b64url: str) -> dict[str, Any]:
         # an empty body rather than something to decode.
         decoded = part.get_payload(decode=True)
         payload = decoded if isinstance(decoded, bytes) else b""
-        if filename:
-            att_seq += 1
-            parts.append(
-                {
-                    "mimeType": part.get_content_type(),
-                    "filename": filename,
-                    "body": {"attachmentId": f"fatt-{att_seq}", "size": len(payload)},
-                }
-            )
-        else:
+        content_id = part.get("Content-ID")
+        # Only an unnamed text/* leaf is the message body. Anything else - a
+        # named file, or an unnamed inline image referenced by cid: - is stored
+        # out-of-line the way Gmail does, keeping its Content-ID so the reader
+        # can still resolve cid: references after a reopen.
+        is_body = (
+            part.get_content_maintype() == "text" and not filename and not content_id
+        )
+        if is_body:
             text = payload.decode("utf-8", errors="replace")
             parts.append(
                 {
@@ -167,6 +182,18 @@ def _mime_to_payload(raw_b64url: str) -> dict[str, Any]:
                     "body": {"data": _b64url(text), "size": len(text)},
                 }
             )
+            continue
+        attachment_id = _next_id("fatt")
+        _ATTACHMENT_BYTES[attachment_id] = payload
+        entry: dict[str, Any] = {
+            "mimeType": part.get_content_type(),
+            "body": {"attachmentId": attachment_id, "size": len(payload)},
+        }
+        if filename:
+            entry["filename"] = filename
+        if content_id:
+            entry["headers"] = _headers({"Content-ID": content_id})
+        parts.append(entry)
     if len(parts) == 1 and not parts[0].get("filename"):
         # Single-part message: Gmail inlines the body rather than wrapping it.
         return {
@@ -230,18 +257,15 @@ class _Drafts:
     def __init__(self, store: dict[str, dict[str, Any]]) -> None:
         self._store = store
 
-    def _next_id(self, prefix: str) -> str:
-        return f"{prefix}-{len(self._store) + 1}"
-
     def create(self, **kwargs: Any) -> _Executable:
         message = (kwargs.get("body") or {}).get("message") or {}
-        draft_id = self._next_id("draft")
+        draft_id = _next_id("draft")
         payload = _mime_to_payload(message.get("raw") or "")
         thread_id = message.get("threadId")
         self._store[draft_id] = {
             "id": draft_id,
             "message": {
-                "id": self._next_id("dmsg"),
+                "id": _next_id("dmsg"),
                 "threadId": thread_id,
                 "labelIds": ["DRAFT"],
                 "payload": payload,
@@ -314,6 +338,18 @@ class _Labels:
 
 class _Attachments:
     def get(self, **kwargs: Any) -> _Executable:
+        # Bytes the fake minted an id for while parsing a draft's MIME. A draft
+        # update re-downloads existing files by id to carry them across the
+        # whole-message replace, so these must round-trip or any draft with an
+        # attachment becomes unsaveable.
+        stored = _ATTACHMENT_BYTES.get(kwargs.get("id") or "")
+        if stored is not None:
+            return _Executable(
+                {
+                    "data": base64.urlsafe_b64encode(stored).decode("ascii"),
+                    "size": len(stored),
+                }
+            )
         # No fixture path fetches attachment bytes: the sample thread's PDF is
         # never downloaded, and it has no inline cid: images to resolve. Returning
         # empty bytes would mask a real fetch failure, so fail loudly if a new
