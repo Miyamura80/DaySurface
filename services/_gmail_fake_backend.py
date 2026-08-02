@@ -128,6 +128,26 @@ def _next_id(prefix: str) -> str:
     return f"{prefix}-{next(_ID_SEQ)}"
 
 
+def _release_attachments(payload: dict[str, Any] | None) -> None:
+    """Drop the bytes a payload's attachment ids point at.
+
+    A draft update is a whole-message replace, so it re-parses the MIME and
+    mints fresh ids for the same files; without this the superseded copies
+    would be retained for the life of the process, and editing a draft with a
+    large attachment would grow memory once per keystroke pause. Nothing can
+    reference the old ids afterwards - a sent or discarded draft is gone from
+    the store and the fake serves no sent-message bodies - so releasing them is
+    safe as well as necessary.
+    """
+    if not payload:
+        return
+    parts = payload.get("parts") or [payload]
+    for part in parts:
+        attachment_id = (part.get("body") or {}).get("attachmentId")
+        if attachment_id:
+            _ATTACHMENT_BYTES.pop(attachment_id, None)
+
+
 _DRAFT_HEADERS = (
     "From",
     "To",
@@ -290,7 +310,9 @@ class _Drafts:
         if existing is None:
             raise LookupError(f"fake Gmail backend has no draft {draft_id!r}")
         message = (kwargs.get("body") or {}).get("message") or {}
-        # Whole-message replace, exactly as Gmail does.
+        # Whole-message replace, exactly as Gmail does. The superseded payload's
+        # attachment bytes are unreachable once its ids are gone.
+        _release_attachments(existing["message"].get("payload"))
         existing["message"]["payload"] = _mime_to_payload(message.get("raw") or "")
         return _Executable(
             {"id": draft_id, "message": {"id": existing["message"]["id"]}}
@@ -312,12 +334,15 @@ class _Drafts:
         if draft is None:
             raise LookupError(f"fake Gmail backend has no draft {draft_id!r} to send")
         msg = draft["message"]
+        _release_attachments(msg.get("payload"))
         return _Executable(
             {"id": msg["id"], "threadId": msg.get("threadId"), "labelIds": ["SENT"]}
         )
 
     def delete(self, **kwargs: Any) -> _Executable:
-        self._store.pop(kwargs.get("id") or "", None)
+        removed = self._store.pop(kwargs.get("id") or "", None)
+        if removed:
+            _release_attachments(removed["message"].get("payload"))
         return _Executable(None)
 
     def list(self, **kwargs: Any) -> _Executable:
