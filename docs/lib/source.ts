@@ -65,32 +65,134 @@ export function getPageImage(page: ReturnType<typeof source.getPage> & {}) {
 // preserve `##`/`###` sections, fenced code blocks, and inline links, while
 // converting the handful of fumadocs UI components we use into plain Markdown.
 function mdxBodyToMarkdown(raw: string): string {
-  const body = raw
+  const withoutFrontmatter = raw
     // Strip the leading YAML frontmatter (title/description are re-added below).
-    .replace(/^---\n[\s\S]*?\n---\n?/, "")
-    // Drop MDX `import`/`export` statements.
-    .replace(/^\s*(?:import|export)\s.+$/gm, "")
-    // Drop JSX expression-container props (e.g. `icon={<Rocket />}`). The `>`
-    // inside a nested component would otherwise terminate the `[^>]*` tag scans
-    // below early, leaving raw JSX in the output. We only emit title/href, so
-    // these props are noise for the LLM text anyway.
-    .replace(/\s+[A-Za-z_][\w-]*=\{[^}]*\}/g, "")
-    // <Card title="X" href="Y" /> -> a Markdown link to the related resource.
-    .replace(/<Card\b[^>]*\/?>/g, (tag) => {
-      const title = tag.match(/title=["']([^"']*)["']/)?.[1];
-      const href = tag.match(/href=["']([^"']*)["']/)?.[1];
-      if (title && href) return `- [${title}](${href})`;
-      if (title) return `- ${title}`;
-      return "";
-    })
-    // <Tab value="X"> -> a bold label so per-tab content stays attributed.
-    .replace(/<Tab\b[^>]*\bvalue=["']([^"']*)["'][^>]*>/g, "\n**$1**\n")
-    // Strip the remaining structural component tags, keeping their children.
-    .replace(/<\/?(?:Cards|Steps|Step|Tabs|Tab|Callout)\b[^>]*>/g, "")
-    // Collapse the blank lines left behind by the removals.
-    .replace(/\n{3,}/g, "\n\n");
+    .replace(/^---\n[\s\S]*?\n---\n?/, "");
 
-  return body.trim();
+  // Rewrite prose only. None of the rules in `stripMdxSyntax` mean anything
+  // inside a fence, and applying them there produced code that cannot run: the
+  // `import`/`export` rule was deleting `import hashlib` from the webhook
+  // verification snippet and `export FOO=...` from shell examples.
+  const rewritten = splitFences(withoutFrontmatter).map((segment) =>
+    segment.code ? segment : { code: false, text: stripMdxSyntax(segment.text) },
+  );
+
+  return joinSegments(rewritten).trim();
+}
+
+/**
+ * Reassemble the segments, collapsing blank runs that straddle a seam.
+ *
+ * The per-segment collapse in `stripMdxSyntax` cannot see these. A prose block
+ * ending in two blank lines is only `\n\n` on its own; it becomes `\n\n\n`
+ * against the fence below it once the joining newline goes back, so the run
+ * never matches `\n{3,}` while the segment is held separately. Trimming the
+ * prose edge to one newline puts the seam at a single blank line, which is what
+ * the old whole-document collapse produced, without ever touching the code.
+ */
+function joinSegments(segments: Segment[]): string {
+  return segments
+    .map((segment, i) => {
+      if (segment.code) return segment.text;
+      let text = segment.text;
+      if (i > 0) text = text.replace(/^\n+/, "\n");
+      if (i < segments.length - 1) text = text.replace(/\n+$/, "\n");
+      // A prose run that is nothing but blank lines between two fences would
+      // still emit two, since each edge keeps one. Drop it entirely.
+      if (i > 0 && i < segments.length - 1 && text.trim() === "") text = "";
+      return text;
+    })
+    .join("\n");
+}
+
+/** A run of consecutive lines, tagged by whether they sit inside a code fence. */
+type Segment = { code: boolean; text: string };
+
+/** Opens a fence: >=3 backticks or tildes, indented at most 3 spaces. */
+const FENCE_OPEN = /^ {0,3}(`{3,}|~{3,})/;
+/** Closes one: the same run, at least as long, alone on its line. */
+const FENCE_CLOSE = /^ {0,3}(`{3,}|~{3,})[ \t]*$/;
+
+/**
+ * Partition `body` into alternating prose and code segments.
+ *
+ * Scans line by line rather than pairing delimiters positionally. Splitting on
+ * a `/(^```[\s\S]*?^```)/` regex and trusting the odd indices to be code
+ * assumes every delimiter in the document alternates open/close, which one
+ * stray ``` inside a code block - a page documenting fences - inverts for the
+ * whole remainder of the file, silently swapping which half gets rewritten.
+ * Tracking the open delimiter also gets the cases that shape cannot see:
+ * indented fences (`docs/content/docs/cli/index.mdx` has one inside a bullet),
+ * `~~~` fences, and fences longer than three characters.
+ *
+ * Reassembly is exact - the segments partition the lines in order, so joining
+ * them with the newline that separated them reproduces the input.
+ */
+function splitFences(body: string): Segment[] {
+  const segments: Segment[] = [];
+  let buffer: string[] = [];
+  /** The delimiter that opened the current fence, or null when in prose. */
+  let openedBy: string | null = null;
+
+  const flush = (code: boolean) => {
+    if (buffer.length > 0) segments.push({ code, text: buffer.join("\n") });
+    buffer = [];
+  };
+
+  for (const line of body.split("\n")) {
+    if (openedBy === null) {
+      const opening = line.match(FENCE_OPEN)?.[1];
+      if (opening) {
+        flush(false);
+        openedBy = opening;
+      }
+      buffer.push(line);
+      continue;
+    }
+
+    buffer.push(line);
+    const closing = line.match(FENCE_CLOSE)?.[1];
+    if (closing && closing[0] === openedBy[0] && closing.length >= openedBy.length) {
+      flush(true);
+      openedBy = null;
+    }
+  }
+
+  // An unterminated fence still holds code. Treating the tail as prose would
+  // strip exactly the lines the fence was protecting.
+  flush(openedBy !== null);
+  return segments;
+}
+
+/** The MDX-to-Markdown rewrites, applied to prose only - never to code. */
+function stripMdxSyntax(prose: string): string {
+  return (
+    prose
+      // Drop MDX `import`/`export` statements.
+      .replace(/^\s*(?:import|export)\s.+$/gm, "")
+      // Drop JSX expression-container props (e.g. `icon={<Rocket />}`). The `>`
+      // inside a nested component would otherwise terminate the `[^>]*` tag scans
+      // below early, leaving raw JSX in the output. We only emit title/href, so
+      // these props are noise for the LLM text anyway.
+      .replace(/\s+[A-Za-z_][\w-]*=\{[^}]*\}/g, "")
+      // <Card title="X" href="Y" /> -> a Markdown link to the related resource.
+      .replace(/<Card\b[^>]*\/?>/g, (tag) => {
+        const title = tag.match(/title=["']([^"']*)["']/)?.[1];
+        const href = tag.match(/href=["']([^"']*)["']/)?.[1];
+        if (title && href) return `- [${title}](${href})`;
+        if (title) return `- ${title}`;
+        return "";
+      })
+      // <Tab value="X"> -> a bold label so per-tab content stays attributed.
+      .replace(/<Tab\b[^>]*\bvalue=["']([^"']*)["'][^>]*>/g, "\n**$1**\n")
+      // Strip the remaining structural component tags, keeping their children.
+      .replace(/<\/?(?:Cards|Steps|Step|Tabs|Tab|Callout)\b[^>]*>/g, "")
+      // Collapse the blank lines left behind by the removals. Prose-only, like
+      // the rest: run over the whole document it also reflows code, and the
+      // blank line PEP 8 wants before a top-level `def` is exactly the run it
+      // eats.
+      .replace(/\n{3,}/g, "\n\n")
+  );
 }
 
 export async function getLLMText(

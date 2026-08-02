@@ -3,6 +3,7 @@
   "pages": [
     "index",
     "tools",
+    "examples",
     "ask",
     "authentication",
     "billing",
