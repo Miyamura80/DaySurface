@@ -80,22 +80,31 @@ def assert_scenario(scenario_path: str, before: int = 0) -> int:
     # show up in the tool-call log; the re-rendered DOM is the only proof, and only
     # the server's real response can produce it.
     if exp.get("interaction_rendered") and not pw.get("interacted"):
-        # Carry the input-plumbing diagnostics into the verdict. Without them a
-        # gated submit control (fill never reached the app's state, or the app
-        # remounted and reset it) is indistinguishable from a server that never
-        # answered - both just read as "did not re-render". See issue #28.
         fails.append(
             f"expected in-iframe interaction to re-render; pw interacted={pw.get('interacted')} "
-            f"matched={pw.get('interact_matched')} missing={pw.get('interact_missing')} "
-            f"fill={pw.get('fill_diag')} click_enabled={pw.get('click_enabled')}"
+            f"matched={pw.get('interact_matched')} missing={pw.get('interact_missing')}"
         )
 
+    # The input-plumbing diagnostics go on the ALWAYS-printed line, not only into
+    # a failure. A leg that needed the native-setter fallback or a mid-flight
+    # re-apply still passes, and silently: the harness drove the app harder than
+    # a user could, which is worth knowing when the run is written up. Printing
+    # them only on failure hides exactly the runs worth looking at. See issue #28.
+    inputs = pw.get("inputs") or {}
+    degraded = inputs.get("via") == "native-setter" or inputs.get("reapplied")
     print(
         f"scenario {name}: tool_calls={[c.get('tool') for c in calls]} result_returned={got_result} "
         f"app_rendered={pw.get('rendered')} matched={pw.get('matched')} "
         f"interacted={pw.get('interacted')} interact_matched={pw.get('interact_matched')} "
+        f"inputs={pw.get('inputs')} click_enabled={pw.get('click_enabled')} "
         f"app={pw.get('app_uri')}"
     )
+    if degraded and not fails:
+        print(
+            "  DEGRADED: the inputs needed harness repair "
+            f"(via={inputs.get('via')} reapplied={inputs.get('reapplied')}) - a real user "
+            "may not be able to drive this control; report this alongside the PASS"
+        )
     if fails:
         for f in fails:
             print("  FAIL:", f)
