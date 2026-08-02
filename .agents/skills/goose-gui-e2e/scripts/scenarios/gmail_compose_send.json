@@ -1,0 +1,32 @@
+{
+  "prompt": "Draft a reply to the term sheet thread saying the terms look good.",
+  "plan": [
+    {
+      "match": "gmail_reply_to_thread",
+      "args": {
+        "thread_id": "t-1001",
+        "body": "Thanks Dana - 1x non-participating works for us. Happy to sign this week."
+      }
+    }
+  ],
+  "final": "Drafted your reply.",
+  "app_uri": "ui://daysurface/gmail_inbox",
+  "expect": {
+    "tool_called": "gmail_reply_to_thread",
+    "round_trip": true,
+    "app_rendered": true,
+    "dom_contains": [
+      "dana@northwind.vc",
+      "1x non-participating"
+    ],
+    "interaction_rendered": true
+  },
+  "interact": {
+    "click": {
+      "text": "Send"
+    },
+    "expect_dom_contains": [
+      "Message sent"
+    ]
+  }
+}

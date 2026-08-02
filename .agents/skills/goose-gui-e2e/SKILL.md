@@ -160,6 +160,15 @@ when it loses. The fake serves both paths from the same fixture thread, and
 deterministic instead of ~30% flaky. `gmail_get_thread`'s round-trip is still
 proven independently via the tool-call log regardless of which view renders.
 
+**Drafts are real, only persistence is faked.** `_Drafts` keeps an in-memory
+store keyed by draft id: `create`/`update` parse the base64url RFC 5322 message
+the *real* MIME builder produced and re-emit it in `format=full` shape, so the
+*real* response parser maps it back. That makes the composer's
+create -> save -> reopen -> send loop honest end to end (`gmail_compose_send`),
+with only the network boundary faked. The store is module-level, since
+`_maybe_fake_gmail_client` builds a client per call and a draft must outlive the
+request that created it; it resets when the server restarts.
+
 ### Optional: a click → `callServerTool` → re-render step
 
 A scenario may add an `interact` block to drive a real control **inside** the app
@@ -243,6 +252,7 @@ Baked into the scripts; listed so you recognize them if something drifts:
 | `scenarios/settings_render.json` | scenario 1: LLM opens the Settings app; assert it renders |
 | `scenarios/settings_subscribe.json` | scenario 2: click "Add endpoint" → `settings.subscribe` → assert the re-render |
 | `scenarios/gmail_thread_render.json` | scenario 3: LLM opens a thread via `gmail_get_thread`; assert the gmail_inbox reader iframe renders (needs `GMAIL_FAKE_BACKEND`) |
+| `scenarios/gmail_compose_send.json` | scenario 8: `gmail_reply_to_thread` opens the InlineComposer on the draft, then clicks Send in the iframe and asserts the terminal "Message sent" panel. Covers the composer's save/send loop against the fake backend's in-memory draft store |
 | `scenarios/gmail_remote_images.json` | scenario 4: remote-image pipeline - assert the blocked-by-default "Show images" banner renders, click it, and assert the `gmail_inbox.fetch_image` round-trip re-renders as "Retry" (fixture URL is `.invalid`, so the SSRF guard rejects it deterministically offline and in CI) |
 | `scenarios/pdf_sign_render.json` | scenario 5: `pdf_request_signature` → assert the `pdf_signer` app renders the awaiting-signature state |
 | `scenarios/pdf_sign_ceremony.json` | scenario 6: type the legal name, tick consent, click "Sign document" → assert "Signed by …" plus both rendered page images |
