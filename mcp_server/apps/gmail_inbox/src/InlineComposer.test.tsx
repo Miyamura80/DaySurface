@@ -45,7 +45,8 @@ function makeMcpApp() {
     await act(async () => { d.reject(new Error(message)); await d.promise.catch(() => {}); });
   };
   const countOf = (name: string) => calls.filter((c) => c.name === name).length;
-  return { app: { callServerTool } as unknown as McpAppLike, calls, settle, fail, countOf };
+  const app: McpAppLike = { callServerTool, openLink: vi.fn(async () => ({})) };
+  return { app, calls, settle, fail, countOf };
 }
 
 const draft: ComposerDraft = {

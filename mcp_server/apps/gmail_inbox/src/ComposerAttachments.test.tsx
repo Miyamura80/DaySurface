@@ -17,7 +17,8 @@ function makeMcpApp() {
     calls.push(args);
     return null;
   });
-  return { app: { callServerTool } as unknown as McpAppLike, calls };
+  const app: McpAppLike = { callServerTool, openLink: vi.fn(async () => ({})) };
+  return { app, calls };
 }
 
 function renderComposer(app: McpAppLike, attachments?: DraftAttachment[]) {
@@ -117,6 +118,22 @@ describe("composer attachment preflight", () => {
 
     drop([fileOfSize("small.pdf", 1_000)]);
 
+    expect(screen.getByText(/would exceed/)).toBeTruthy();
+  });
+
+  it("counts a still-reading batch toward the cap of the next pick", () => {
+    const { app } = makeMcpApp();
+    renderComposer(app);
+
+    // First batch is accepted and its FileReader is left unresolved (jsdom
+    // reads are async), so these bytes are not yet in `attachments`.
+    const big = Math.floor(MAX_ATTACHMENT_BYTES * 0.7);
+    drop([fileOfSize("first.pdf", big)]);
+    expect(screen.queryByText(/would exceed/)).toBeNull();
+
+    // Second pick, made during that read window, must still see the claimed
+    // bytes - otherwise the cumulative check fails open.
+    drop([fileOfSize("second.pdf", big)]);
     expect(screen.getByText(/would exceed/)).toBeTruthy();
   });
 

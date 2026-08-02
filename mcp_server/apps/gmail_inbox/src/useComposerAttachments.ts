@@ -53,6 +53,11 @@ export function useComposerAttachments(draft: ComposerDraft, mcpApp: McpAppLike)
   // omit the `attachments` argument so the backend preserves every existing
   // file; after a change we send the explicit desired set so a removal sticks.
   const attachmentsDirtyRef = useRef(false);
+  // Bytes accepted by a preflight whose FileReader has not resolved yet. They
+  // are not in `attachments` until onload runs, so a second pick made during
+  // that window would not see them and the cumulative check would undercount -
+  // exactly the fail-open the check exists to prevent.
+  const pendingBytesRef = useRef(0);
   const [previewData, setPreviewData] = useState<PreviewData | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const previewBlobRef = useRef<string | null>(null);
@@ -101,7 +106,8 @@ export function useComposerAttachments(draft: ComposerDraft, mcpApp: McpAppLike)
     // so treat unknown as "cannot fit" rather than guessing low.
     const committedBytes =
       existingAttachments.reduce((s, a) => s + (a.size ?? MAX_ATTACHMENT_BYTES), 0) +
-      attachments.reduce((s, a) => s + a.size, 0);
+      attachments.reduce((s, a) => s + a.size, 0) +
+      pendingBytesRef.current;
     const incomingBytes = accepted.reduce((s, f) => s + f.size, 0);
     const fits = committedBytes + incomingBytes <= MAX_ATTACHMENT_BYTES;
     if (!fits) {
@@ -115,9 +121,15 @@ export function useComposerAttachments(draft: ComposerDraft, mcpApp: McpAppLike)
     if (rejects.length) setRejected((prev) => [...prev, ...rejects]);
     if (!fits || accepted.length === 0) return;
 
+    // Claim the bytes synchronously, before any read starts, so a pick made
+    // while these are still reading sees them in the cumulative check above.
+    pendingBytesRef.current += incomingBytes;
+
     accepted.forEach((file) => {
       const reader = new FileReader();
+      const release = () => { pendingBytesRef.current -= file.size; };
       reader.onload = () => {
+        release();
         const result = reader.result as string;
         const base64 = result.split(",")[1] || "";
         attachmentsDirtyRef.current = true;
@@ -125,6 +137,12 @@ export function useComposerAttachments(draft: ComposerDraft, mcpApp: McpAppLike)
           ...prev,
           { filename: file.name, mime_type: file.type || "application/octet-stream", data_base64: base64, size: file.size },
         ]);
+      };
+      // Release on failure too, or an unreadable file would hold its bytes
+      // against the cap for the rest of the session.
+      reader.onerror = () => {
+        release();
+        setRejected((prev) => [...prev, { filename: file.name, reason: "Could not read file" }]);
       };
       reader.readAsDataURL(file);
     });
