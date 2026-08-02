@@ -73,11 +73,36 @@ function mdxBodyToMarkdown(raw: string): string {
   // inside a fence, and applying them there produced code that cannot run: the
   // `import`/`export` rule was deleting `import hashlib` from the webhook
   // verification snippet and `export FOO=...` from shell examples.
-  const body = splitFences(withoutFrontmatter)
-    .map((segment) => (segment.code ? segment.text : stripMdxSyntax(segment.text)))
-    .join("\n");
+  const rewritten = splitFences(withoutFrontmatter).map((segment) =>
+    segment.code ? segment : { code: false, text: stripMdxSyntax(segment.text) },
+  );
 
-  return body.trim();
+  return joinSegments(rewritten).trim();
+}
+
+/**
+ * Reassemble the segments, collapsing blank runs that straddle a seam.
+ *
+ * The per-segment collapse in `stripMdxSyntax` cannot see these. A prose block
+ * ending in two blank lines is only `\n\n` on its own; it becomes `\n\n\n`
+ * against the fence below it once the joining newline goes back, so the run
+ * never matches `\n{3,}` while the segment is held separately. Trimming the
+ * prose edge to one newline puts the seam at a single blank line, which is what
+ * the old whole-document collapse produced, without ever touching the code.
+ */
+function joinSegments(segments: Segment[]): string {
+  return segments
+    .map((segment, i) => {
+      if (segment.code) return segment.text;
+      let text = segment.text;
+      if (i > 0) text = text.replace(/^\n+/, "\n");
+      if (i < segments.length - 1) text = text.replace(/\n+$/, "\n");
+      // A prose run that is nothing but blank lines between two fences would
+      // still emit two, since each edge keeps one. Drop it entirely.
+      if (i > 0 && i < segments.length - 1 && text.trim() === "") text = "";
+      return text;
+    })
+    .join("\n");
 }
 
 /** A run of consecutive lines, tagged by whether they sit inside a code fence. */
