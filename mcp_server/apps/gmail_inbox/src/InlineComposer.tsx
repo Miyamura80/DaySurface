@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { CheckCircle, PaperclipHorizontal, Trash } from "@phosphor-icons/react";
+import { CheckCircle, PaperclipHorizontal, Trash, Warning } from "@phosphor-icons/react";
 import type {
   ComposerDraft,
   ComposerSaveStatus,
@@ -18,7 +18,7 @@ import {
 import { useComposerAttachments } from "./useComposerAttachments";
 import { ComposerThreadPanel, renderComposerStatus } from "./ComposerThread";
 import { PreviewModal } from "./AttachmentPreview";
-import { attachmentChipStyle } from "./messageStyles";
+import { attachmentChipStyle, attachmentRejectedChipStyle } from "./messageStyles";
 import {
   attachmentRemoveBtn,
   composerAgentApplyBtn,
@@ -71,10 +71,12 @@ export function InlineComposer({
     existingAttachments,
     attachmentsDirtyRef,
     fileInputRef,
+    rejected,
     previewData,
     previewLoading,
     handleFileSelect,
     removeAttachment,
+    dismissRejected,
     closePreview,
     previewNewAttachment,
     previewExistingAttachment,
@@ -371,6 +373,22 @@ export function InlineComposer({
                   {formatFileSize(att.size)}
                 </span>
                 <button onClick={(e) => { e.stopPropagation(); removeAttachment(i); }} style={attachmentRemoveBtn} title="Remove">×</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Files refused before they left the browser (too large / empty). */}
+        {rejected.length > 0 && (
+          <div style={{ padding: "0 16px 8px", display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {rejected.map((r, i) => (
+              <div key={`rejected-${i}`} style={attachmentRejectedChipStyle} title={`${r.filename}: ${r.reason}`}>
+                <Warning size={12} weight="fill" style={{ marginRight: 4, flexShrink: 0 }} />
+                <span style={{ fontSize: 12, maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {r.filename}
+                </span>
+                <span style={{ fontSize: 11, marginLeft: 4 }}>{r.reason}</span>
+                <button onClick={() => dismissRejected(i)} style={attachmentRemoveBtn} title="Dismiss">×</button>
               </div>
             ))}
           </div>
