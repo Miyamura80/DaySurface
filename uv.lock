@@ -674,7 +674,7 @@ requires-dist = [
     { name = "typer" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.51.0" },
     { name = "vulture", specifier = ">=2.14" },
-    { name = "x402", extras = ["fastapi", "httpx"], specifier = ">=2.12.0" },
+    { name = "x402", extras = ["fastapi", "httpx"], specifier = ">=2.16.0" },
 ]
 
 [package.metadata.requires-dev]
@@ -4294,16 +4294,16 @@ wheels = [
 
 [[package]]
 name = "x402"
-version = "2.12.0"
+version = "2.16.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "nest-asyncio" },
     { name = "pydantic" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/87/ea/ba85c326ba958aeb43ac707d7782c61416476a9040288ef4da5572ad3290/x402-2.12.0.tar.gz", hash = "sha256:e3fd11744fa29e0d53626ac1b3e6766a757addec318bc87ebb341852941f1b94", size = 2072628, upload-time = "2026-05-29T17:40:39.105Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/4a/b1/05481caa039b5ccbcece8ea9836ba6859e289c0b34c79bf3aef5aa838599/x402-2.16.0.tar.gz", hash = "sha256:5656f8b3620105816bee4d2af73600b690b11fb77f0927d80694605d14ff483b", size = 2093990, upload-time = "2026-07-17T20:58:40.148Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/14/ee/869e72ec38c2010f32aa537a808bd443d31d925accd5594044597f7cc0e6/x402-2.12.0-py3-none-any.whl", hash = "sha256:78b819d251a624fcd5b3e804bea5328c081bb92056ab14e46c31259834f1c531", size = 2199183, upload-time = "2026-05-29T17:40:37.139Z" },
+    { url = "https://files.pythonhosted.org/packages/92/40/c8fe06cbb7ae616c37c4fdaee581b043dbf0ed594477190cbf8bb1697fe8/x402-2.16.0-py3-none-any.whl", hash = "sha256:8d536571782111dd8781cd4cf36f3b88e4f0b5d17c39251a17b8e655313a89fb", size = 2226699, upload-time = "2026-07-17T20:58:38.595Z" },
 ]
 
 [package.optional-dependencies]
