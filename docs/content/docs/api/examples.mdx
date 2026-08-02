@@ -219,9 +219,11 @@ returning secrets.
 
 ## Retrying without sending twice
 
-Two failure modes to separate. A `429` or `5xx` means the request may not have
+Three failure modes to separate. A `429` or `5xx` means the request may not have
 run - retry it. A `4xx` other than `429` means it ran and was rejected -
-retrying unchanged will fail identically.
+retrying unchanged will fail identically. A `402` is the one that looks
+retryable and is not: it carries a `Retry-After`, but that value points at the
+next daily quota reset, which can be hours out.
 
 ```python
 import time
@@ -233,7 +235,12 @@ def call(client: httpx.Client, tool: str, payload: dict, key: str | None = None)
     headers = {"Idempotency-Key": key} if key else {}
     for attempt in range(5):
         resp = client.post(f"/api/v1/services/{tool}", json=payload, headers=headers)
-        if resp.status_code in (429, 402):
+        # Daily quota. Sleeping on this Retry-After parks the loop until the
+        # next reset, so treat it as a stop condition rather than a retry.
+        if resp.status_code == 402:
+            reset = resp.json()["error"]["details"].get("quota_reset_at")
+            raise RuntimeError(f"{tool}: daily quota exhausted, resets at {reset}")
+        if resp.status_code == 429:
             time.sleep(float(resp.headers.get("Retry-After", "1")))
             continue
         if resp.status_code >= 500:
@@ -248,8 +255,10 @@ Hold the `Idempotency-Key` constant across the retries of one operation. The
 first attempt that reaches the server executes; every later attempt with that
 key replays the stored response instead of sending a second email. Reusing the
 key with a *different* payload is a `422` - that is the guard working, not a
-bug. See [Idempotency](/docs/api/idempotency) and
-[Rate Limits](/docs/api/rate-limits).
+bug. See [Idempotency](/docs/api/idempotency),
+[Rate Limits](/docs/api/rate-limits), and the
+[reference retry loop](/docs/api/errors#reference-retry-loop-python), which adds
+jitter and covers every retryable code.
 
 Errors all share one envelope with a stable `error.code` and a `request_id`;
 branch on the code, quote the request ID in support threads, and never match on
