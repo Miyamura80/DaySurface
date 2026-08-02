@@ -80,9 +80,14 @@ def assert_scenario(scenario_path: str, before: int = 0) -> int:
     # show up in the tool-call log; the re-rendered DOM is the only proof, and only
     # the server's real response can produce it.
     if exp.get("interaction_rendered") and not pw.get("interacted"):
+        # Carry the input-plumbing diagnostics into the verdict. Without them a
+        # gated submit control (fill never reached the app's state, or the app
+        # remounted and reset it) is indistinguishable from a server that never
+        # answered - both just read as "did not re-render". See issue #28.
         fails.append(
             f"expected in-iframe interaction to re-render; pw interacted={pw.get('interacted')} "
-            f"matched={pw.get('interact_matched')} missing={pw.get('interact_missing')}"
+            f"matched={pw.get('interact_matched')} missing={pw.get('interact_missing')} "
+            f"fill={pw.get('fill_diag')} click_enabled={pw.get('click_enabled')}"
         )
 
     print(

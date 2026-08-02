@@ -62,6 +62,15 @@ const result = {
   // (bypassing the mock LLM) and the returned data re-rendered into the DOM.
   interacted: interact ? false : null, interact_matched: [], interact_missing: wantI,
   interact_sel_matched: [], interact_sel_missing: wantSel,
+  // Input-plumbing diagnostics for the interact leg (issue #28). A fill that
+  // doesn't reach the framework's state leaves the submit control gated, and the
+  // click then no-ops *without raising* - so the leg fails looking like a server
+  // problem. These three fields separate the two failure modes at a glance:
+  // filled_after=""            -> the fill never landed (driver-side);
+  // filled_after=v, before=""  -> the app remounted and reset its state;
+  // both set but enabled=false -> the control is gated on something else.
+  fill_diag: interact && interact.fill ? { via: null, after: null, before_click: null } : null,
+  click_enabled: null,
 };
 const writeResult = () => writeFileSync(resultPath, JSON.stringify(result, null, 2));
 
@@ -82,6 +91,38 @@ async function findAppFrame(app) {
     }
   }
   return null;
+}
+
+// The host recreates the app iframe on its own schedule (message-list re-render,
+// auto-resize), which detaches the Frame handle we captured. Re-resolve instead
+// of letting a detached-frame error abort the interact leg.
+async function liveFrame(app, frame) {
+  if (frame && !frame.isDetached()) return frame;
+  log("app frame detached; re-resolving");
+  return (await findAppFrame(app)) || frame;
+}
+
+// Set a control's value and PROVE it reached the app's state, not just the DOM
+// node. Playwright's `fill` on a text input types through CDP into the focused
+// element; inside a sandboxed cross-origin iframe that can silently miss, and
+// `fill` does not read the value back - so a React-controlled input keeps its
+// empty `value`, its submit button stays `disabled`, and the later click no-ops
+// without raising (DaySurface issue #28). On a miss, drive the value through the
+// native setter and dispatch a bubbling `input` event, which is exactly what
+// React's synthetic `onChange` listens for.
+async function setValue(frame, selector, value) {
+  const el = frame.locator(selector).first();
+  await el.waitFor({ state: "visible", timeout: 6000 });
+  await el.fill(value, { timeout: 6000 }).catch((e) => log("fill threw:", e.message.split("\n")[0]));
+  if ((await el.inputValue().catch(() => "")) === value) return { via: "fill", value };
+  await el.evaluate((node, v) => {
+    const proto =
+      node instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    Object.getOwnPropertyDescriptor(proto, "value").set.call(node, v);
+    node.dispatchEvent(new Event("input", { bubbles: true }));
+    node.dispatchEvent(new Event("change", { bubbles: true }));
+  }, value);
+  return { via: "native-setter", value: await el.inputValue().catch(() => "") };
 }
 
 const app = await electron.launch({
@@ -138,23 +179,55 @@ try {
     // re-render is proof of a genuine user-initiated round-trip - unfakeable here.
     if (result.rendered && interact) {
       try {
-        if (interact.fill)
-          await frame.locator(interact.fill.selector).first().fill(interact.fill.value, { timeout: 6000 });
+        if (interact.fill) {
+          frame = await liveFrame(app, frame);
+          const f = await setValue(frame, interact.fill.selector, interact.fill.value);
+          result.fill_diag.via = f.via;
+          result.fill_diag.after = f.value;
+          log(`fill via ${f.via}: value=${JSON.stringify(f.value)}`);
+        }
         // Optional checkbox tick (e.g. the pdf_signer consent box). The host
         // auto-resizes the iframe while pages render, so a coordinate-based
         // click can land stale; fall back to a DOM-dispatched click (fires
         // the same change event React listens to) when Playwright's check
         // can't get a stable hit.
         if (interact.check) {
+          frame = await liveFrame(app, frame);
           const box = frame.locator(interact.check.selector).first();
           await box.check({ timeout: 6000, force: true }).catch(() =>
             box.evaluate((el) => el.click())
           );
         }
         if (interact.click) {
+          frame = await liveFrame(app, frame);
+          // Re-read the filled control immediately before the click. If a remount
+          // (or a late re-render) cleared it, the submit button is gated again -
+          // re-apply so the click has something to submit, and keep the reading
+          // either way as the discriminator between "never landed" and "reset".
+          if (interact.fill) {
+            const el = frame.locator(interact.fill.selector).first();
+            let before = await el.inputValue().catch(() => "");
+            if (before !== interact.fill.value) {
+              log(`value lost before click (${JSON.stringify(before)}); re-applying`);
+              before = (await setValue(frame, interact.fill.selector, interact.fill.value)).value;
+            }
+            result.fill_diag.before_click = before;
+          }
           const btn = interact.click.selector
             ? frame.locator(interact.click.selector).first()
             : frame.getByText(interact.click.text, { exact: false }).first();
+          // A control the app has gated (`disabled`) absorbs BOTH click paths in
+          // silence: the plain click fails its enabled-actionability check, and
+          // the forced one dispatches nothing, because browsers don't fire click
+          // on a disabled element. That is a no-op with no exception, so record
+          // whether the button was ever enabled - otherwise a gated control is
+          // indistinguishable from a server that never answered.
+          await btn.waitFor({ state: "visible", timeout: 6000 }).catch(() => {});
+          for (let i = 0; i < 20 && !result.click_enabled; i++) {
+            result.click_enabled = await btn.isEnabled().catch(() => false);
+            if (!result.click_enabled) await win.waitForTimeout(300);
+          }
+          if (!result.click_enabled) log("click target still DISABLED after 6s - click will be a no-op");
           // Host auto-resizes the iframe while pages render; a first click
           // can land on stale coordinates. Same fallback as the check step.
           await btn.click({ timeout: 6000 }).catch(() =>
@@ -163,6 +236,7 @@ try {
         }
         let ibody = "";
         for (let i = 0; i < 30 && (result.interact_missing.length || result.interact_sel_missing.length); i++) {
+          frame = await liveFrame(app, frame);
           ibody = await frame.locator("body").innerText({ timeout: 2000 }).catch(() => "");
           result.interact_matched = wantI.filter((t) => ibody.includes(t));
           result.interact_missing = wantI.filter((t) => !ibody.includes(t));
@@ -179,7 +253,9 @@ try {
           result.interact_missing.length === 0 &&
           result.interact_sel_missing.length === 0;
         log(`interaction: matched [${result.interact_matched}] missing [${result.interact_missing}]` +
-          (wantSel.length ? ` selectors matched [${result.interact_sel_matched}] missing [${result.interact_sel_missing}]` : ""));
+          (wantSel.length ? ` selectors matched [${result.interact_sel_matched}] missing [${result.interact_sel_missing}]` : "") +
+          (result.fill_diag ? ` fill=${JSON.stringify(result.fill_diag)}` : "") +
+          (interact.click ? ` click_enabled=${result.click_enabled}` : ""));
         if (shot) { await ownWin.screenshot({ path: shot }); } // reshoot the post-interaction DOM
       } catch (e) {
         log("interaction ERROR", e.message.split("\n")[0]);

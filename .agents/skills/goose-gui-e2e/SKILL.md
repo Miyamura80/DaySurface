@@ -188,6 +188,36 @@ post-click DOM never matches. This needs the "Add endpoint" control, which rende
 only when `push_available` is true - `up.sh` sets `GMAIL_PUBSUB_TOPIC` to ungate it
 (no Pub/Sub is ever contacted).
 
+#### Why `fill` is verified rather than trusted
+
+Playwright's `fill` types through CDP into the *focused* element and never reads
+the value back. Inside a sandboxed cross-origin iframe that can silently miss, so
+a React-controlled input keeps its empty `value` - and every app here gates its
+submit button on that state (`disabled={!url.trim()}`). A gated button then
+absorbs both click paths without raising: the plain click fails its
+enabled-actionability check, and a *forced* click dispatches nothing, because
+browsers don't fire `click` on a disabled element. The leg fails as "interaction
+did not re-render" and reads like a server problem (issue #28).
+
+So `pw_scenario.mjs` reads the value back after filling and, on a miss, re-drives
+it through the native value setter plus a bubbling `input` event - what React's
+synthetic `onChange` actually listens for. It re-reads once more immediately
+before the click (a host-triggered remount resets app state) and re-applies if the
+value is gone, then waits for the click target to report `enabled`. Three fields
+land in `pw_result_<name>.json` and in `mcp_probe.py`'s failure line, and they
+separate the failure modes that all used to look identical:
+
+| `fill.after` | `fill.before_click` | `click_enabled` | Read it as |
+| --- | --- | --- | --- |
+| `""` | `""` | `false` | the value never reached the app - driver-side plumbing |
+| set | `""` | - | the app remounted between fill and click and reset its state |
+| set | set | `false` | the control is gated on something else (a `busy` flag, an unticked consent box) |
+| set | set | `true` | input was fine - the round-trip or the re-render is the real failure |
+
+The frame handle is also re-resolved before each step (`liveFrame`): the host
+recreates the app iframe on message-list re-renders and auto-resizes, which
+detaches the captured `Frame` and would otherwise abort the leg.
+
 ## Why the mock cannot fake a PASS
 
 The mock only follows the plan and returns canned narration; it never inspects
