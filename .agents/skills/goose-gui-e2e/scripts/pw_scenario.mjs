@@ -68,9 +68,15 @@ const result = {
   // says whether that repair ran. SKILL.md has the table for reading them.
   inputs: interact && (interact.fill || interact.check)
     ? { via: null, after: null, before_click: null, reapplied: false } : null,
-  // null = the click step was never reached (no click in the scenario, or the
-  // leg threw before it); false = observed disabled; true = the click landed.
-  click_enabled: null,
+  // Two DIFFERENT facts, kept apart on purpose: `click_enabled` is whether the
+  // control was gated, `click_landed` is whether a click actually dispatched.
+  // Conflating them is how a click that never fired gets read as "input was
+  // fine, blame the round-trip". An enabled control can still fail to be
+  // clicked (detached node, unstable coordinates), and a forced click cannot
+  // fire on a disabled one - so neither value implies the other.
+  // null on both = the click step was never reached (no click in the scenario,
+  // or the leg threw before it).
+  click_enabled: null, click_landed: null,
 };
 const writeResult = () => writeFileSync(resultPath, JSON.stringify(result, null, 2));
 
@@ -247,7 +253,12 @@ try {
             result.inputs.reapplied = !satisfied(result.inputs.before_click, interact);
             if (result.inputs.reapplied) {
               log(`inputs lost before click (${JSON.stringify(result.inputs.before_click)}); re-applying`);
-              await applyInputs(frame, interact);
+              // Keep the repair's `via`: applyInputs is the only place that can
+              // detect the native-setter fallback, and a re-apply that needed it
+              // is exactly the run worth reporting. Never downgrade - "fill
+              // worked the first time" doesn't undo a harder second attempt.
+              const again = await applyInputs(frame, interact);
+              if (again.via === "native-setter") result.inputs.via = "native-setter";
             }
           }
           const btn = interact.click.selector
@@ -255,18 +266,23 @@ try {
             : frame.getByText(interact.click.text, { exact: false }).first();
           // The plain click already waits up to 6s for the control to be
           // enabled, so don't hand-roll that poll. What it does not do is say
-          // WHY it gave up - and the forced retry below (needed because the host
-          // auto-resizes the iframe, so a first click can land on stale
-          // coordinates) is silent on a gated control, since browsers don't fire
-          // click on a disabled element. Read the flag off the failure path.
+          // WHY it gave up - hence the isEnabled() reading on the failure path.
+          // The forced retry exists because the host auto-resizes the iframe, so
+          // a first click can land on stale coordinates; but `force` skips the
+          // actionability checks, so it "succeeds" against a disabled control
+          // while the browser dispatches nothing. Only count it as landed when
+          // the control was actually enabled.
           if (await btn.click({ timeout: 6000 }).then(() => true).catch(() => false)) {
             result.click_enabled = true;
+            result.click_landed = true;
           } else {
             result.click_enabled = await btn.isEnabled().catch(() => false);
             if (!result.click_enabled)
               log("click target DISABLED after its actionability wait - a forced click cannot fire on it");
-            await btn.click({ timeout: 6000, force: true })
-              .catch((e) => log("forced click failed:", e.message.split("\n")[0]));
+            const forced = await btn.click({ timeout: 6000, force: true }).then(() => true)
+              .catch((e) => { log("forced click failed:", e.message.split("\n")[0]); return false; });
+            result.click_landed = forced && result.click_enabled;
+            if (!result.click_landed) log("NO CLICK EVER DISPATCHED - the app was never asked to do anything");
           }
         }
         let ibody = "";
@@ -290,7 +306,7 @@ try {
         log(`interaction: matched [${result.interact_matched}] missing [${result.interact_missing}]` +
           (wantSel.length ? ` selectors matched [${result.interact_sel_matched}] missing [${result.interact_sel_missing}]` : "") +
           (result.inputs ? ` inputs=${JSON.stringify(result.inputs)}` : "") +
-          (interact.click ? ` click_enabled=${result.click_enabled}` : ""));
+          (interact.click ? ` click_enabled=${result.click_enabled} click_landed=${result.click_landed}` : ""));
         if (shot) { await ownWin().screenshot({ path: shot }); } // reshoot the post-interaction DOM
       } catch (e) {
         log("interaction ERROR", e.message.split("\n")[0]);

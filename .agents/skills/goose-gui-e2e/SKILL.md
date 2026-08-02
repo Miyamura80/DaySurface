@@ -213,18 +213,23 @@ state was lost (a host-triggered remount resets it), repairing every input rathe
 than just the text one - re-applying the name alone would leave `pdf_signer`'s
 consent box unticked and the button still shut.
 
-`inputs` and `click_enabled` land in `pw_result_<name>.json` and on
-`mcp_probe.py`'s always-printed summary line. `before_click` records what was
-**observed**, before any repair, which is what makes these two failure modes
-distinguishable at all:
+`inputs`, `click_enabled` and `click_landed` land in `pw_result_<name>.json` and
+on `mcp_probe.py`'s always-printed summary line. `before_click` records what was
+**observed**, before any repair, which is what makes these failure modes
+distinguishable at all. `click_enabled` and `click_landed` are deliberately
+separate: an enabled control can still fail to be clicked (detached node,
+unstable coordinates), and a forced click *cannot* fire on a disabled one even
+though Playwright reports it as sent - so neither value implies the other, and
+only `click_landed` means the app was actually asked to do something.
 
-| `inputs.after` | `inputs.before_click` | `click_enabled` | Read it as |
+| `inputs.after` | `inputs.before_click` | `click_enabled` / `click_landed` | Read it as |
 | --- | --- | --- | --- |
-| throws `inputs did not take` | - | `null` | the value never reached the app - driver-side plumbing |
+| throws `inputs did not take` | - | `null` / `null` | the value never reached the app - driver-side plumbing |
 | set | not satisfied (`reapplied: true`) | - | the app remounted between apply and click and reset its state |
-| set | set | `false` | the control is gated on something else (a `busy` flag, a phase) |
-| set | set | `true` | input was fine - the round-trip or the re-render is the real failure |
-| any | any | `null` | the click step was never reached; check the `interaction ERROR` line |
+| set | set | `false` / `false` | the control is gated on something else (a `busy` flag, a phase) |
+| set | set | `true` / `false` | the control was fine but no click dispatched - a driver-side click failure |
+| set | set | `true` / `true` | input and click were fine - the round-trip or the re-render is the real failure |
+| any | any | `null` / `null` | the click step was never reached; check the `interaction ERROR` line |
 
 **A repaired PASS is not a clean PASS.** `via: "native-setter"` or
 `reapplied: true` means the harness drove the app harder than a user could - if

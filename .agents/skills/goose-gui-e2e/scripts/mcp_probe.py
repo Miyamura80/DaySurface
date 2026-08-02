@@ -97,7 +97,7 @@ def assert_scenario(scenario_path: str, before: int = 0) -> int:
         f"app_rendered={pw.get('rendered')} matched={pw.get('matched')} "
         f"interacted={pw.get('interacted')} interact_matched={pw.get('interact_matched')} "
         f"inputs={pw.get('inputs')} click_enabled={pw.get('click_enabled')} "
-        f"app={pw.get('app_uri')}"
+        f"click_landed={pw.get('click_landed')} app={pw.get('app_uri')}"
     )
     if degraded and not fails:
         print(
