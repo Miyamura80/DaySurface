@@ -310,10 +310,13 @@ class _Drafts:
         if existing is None:
             raise LookupError(f"fake Gmail backend has no draft {draft_id!r}")
         message = (kwargs.get("body") or {}).get("message") or {}
-        # Whole-message replace, exactly as Gmail does. The superseded payload's
-        # attachment bytes are unreachable once its ids are gone.
+        # Whole-message replace, exactly as Gmail does. Parse BEFORE releasing:
+        # if the new MIME is malformed this raises, and the draft keeps a payload
+        # whose attachment ids must still resolve. Releasing first would leave a
+        # live draft pointing at bytes that are already gone.
+        new_payload = _mime_to_payload(message.get("raw") or "")
         _release_attachments(existing["message"].get("payload"))
-        existing["message"]["payload"] = _mime_to_payload(message.get("raw") or "")
+        existing["message"]["payload"] = new_payload
         return _Executable(
             {"id": draft_id, "message": {"id": existing["message"]["id"]}}
         )
