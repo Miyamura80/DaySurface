@@ -1,0 +1,274 @@
+---
+title: Examples
+description: End-to-end REST recipes - triage an inbox, draft and send a reply, pull an attachment, take events by webhook
+---
+
+[Tools](/docs/api/tools) documents each endpoint on its own. This page strings
+them together into the flows people actually build: rank what needs attention,
+answer one thread, pull a file off a message, and stop polling once volume
+justifies webhooks.
+
+Every example assumes these two variables:
+
+```bash
+export DAYSURFACE_API="https://api.daysurface.com"
+export DAYSURFACE_API_KEY="sk_live_..."
+```
+
+Running the server yourself? Point `DAYSURFACE_API` at `http://localhost:8000`.
+
+import { Step, Steps } from 'fumadocs-ui/components/steps';
+
+## Triage, read, reply
+
+Four calls: rank the inbox, read the thread that came out on top, draft an
+answer, send it.
+
+<Steps>
+<Step>
+
+### Rank what needs attention
+
+```bash
+curl -sS -X POST "$DAYSURFACE_API/api/v1/services/gmail_curate_inbox" \
+  -H "Authorization: Bearer $DAYSURFACE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"limit": 10}'
+```
+
+```json
+{
+  "threads": [
+    {
+      "thread_id": "18f0c1d2e3f4a5b6",
+      "subject": "Contract - can we meet this week?",
+      "from": "Sarah Chen <sarah@acme.com>",
+      "snippet": "Following up on the redlines - are you free Thursday?",
+      "last_message_at": "2025-01-15T09:12:00+00:00",
+      "importance_score": 0.91,
+      "reasons": ["Direct question to you", "Awaiting your reply for 2 days"],
+      "labels": [{ "name": "Unread", "bg_color": "#f1f3f4", "text_color": "#444444" }]
+    }
+  ]
+}
+```
+
+The score is deterministic - the same inbox state ranks the same way twice - so
+it is safe to branch on in a script. `reasons` is the human-readable version of
+why a thread scored where it did.
+
+</Step>
+<Step>
+
+### Read the thread
+
+```bash
+curl -sS -X POST "$DAYSURFACE_API/api/v1/services/gmail_get_thread" \
+  -H "Authorization: Bearer $DAYSURFACE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"thread_id": "18f0c1d2e3f4a5b6", "strip_quoted_replies": true}'
+```
+
+`strip_quoted_replies` drops the quoted history from each reply. On a long
+thread that is most of the payload, and none of it is new information.
+
+Attachments come back as metadata only - `filename`, `mime_type`, `size_bytes`,
+`attachment_id` - so a 12 MB PDF costs you a few hundred bytes here. Fetch the
+bytes when you need them; see [Pull one attachment](#pull-one-attachment).
+
+</Step>
+<Step>
+
+### Draft the reply
+
+`gmail_compose` is mutating, so it requires an `Idempotency-Key`. Generate one
+per logical draft and reuse it across retries of that same draft.
+
+```bash
+curl -sS -X POST "$DAYSURFACE_API/api/v1/services/gmail_compose" \
+  -H "Authorization: Bearer $DAYSURFACE_API_KEY" \
+  -H "Idempotency-Key: $(uuidgen)" \
+  -H "Content-Type: application/json" \
+  -d '{
+        "to": "sarah@acme.com",
+        "subject": "Re: Contract - can we meet this week?",
+        "body": "Thursday at 2pm works. I will send an agenda tomorrow.",
+        "in_reply_to_thread_id": "18f0c1d2e3f4a5b6"
+      }'
+```
+
+Passing `in_reply_to_thread_id` keeps the draft attached to the existing thread
+rather than starting a new one. The response carries the saved draft -
+`draft_id`, `thread_id`, recipients, subject, a body preview, and the
+attachment list.
+
+</Step>
+<Step>
+
+### Send it
+
+```bash
+curl -sS -X POST "$DAYSURFACE_API/api/v1/services/gmail_send" \
+  -H "Authorization: Bearer $DAYSURFACE_API_KEY" \
+  -H "Idempotency-Key: $(uuidgen)" \
+  -H "Content-Type: application/json" \
+  -d '{"draft_id": "r-4820193847562"}'
+```
+
+```json
+{
+  "message_id": "18f0c1d2e3f4a5c1",
+  "thread_id": "18f0c1d2e3f4a5b6",
+  "sent_at": "2025-01-15T09:41:22+00:00"
+}
+```
+
+There is no compose-and-send endpoint. Sending always references a draft that
+already exists, so the exact bytes going out were reviewable first - by a human,
+or by another step in your pipeline.
+
+</Step>
+</Steps>
+
+## A morning digest, in Python
+
+Ranks the inbox and prints the threads worth opening. Stops at the first thread
+below the cutoff, since the list is already ordered.
+
+```python
+import os
+
+import httpx
+
+API = os.environ["DAYSURFACE_API"]
+KEY = os.environ["DAYSURFACE_API_KEY"]
+CUTOFF = 0.6
+
+with httpx.Client(base_url=API, headers={"Authorization": f"Bearer {KEY}"}) as client:
+    resp = client.post(
+        "/api/v1/services/gmail_curate_inbox",
+        json={"query": "is:unread newer_than:1d", "limit": 25},
+        timeout=30.0,
+    )
+    resp.raise_for_status()
+
+    for thread in resp.json()["threads"]:
+        if thread["importance_score"] < CUTOFF:
+            break
+        print(f"{thread['importance_score']:.2f}  {thread['from']}")
+        print(f"      {thread['subject']}")
+        print(f"      {', '.join(thread['reasons'])}\n")
+```
+
+`query` takes Gmail's own search syntax, so the filtering you already do by hand
+in the Gmail search bar transfers over unchanged.
+
+## Pull one attachment
+
+`gmail_get_thread` gives you the `message_id` and `attachment_id`; this fetches
+the bytes for exactly one of them.
+
+```bash
+curl -sS -X POST "$DAYSURFACE_API/api/v1/services/gmail_get_attachment" \
+  -H "Authorization: Bearer $DAYSURFACE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"message_id": "18f0c1d2e3f4a5b6", "attachment_id": "ANGjdJ_x..."}' \
+  | jq -r '.data_base64' | base64 -d > contract.pdf
+```
+
+`data_base64` is standard padded base64, ready to decode or re-upload as-is.
+Attachments above the server's configured ceiling are refused rather than
+returned - a deliberate guard against a single file blowing out an agent's
+context window.
+
+<Callout type="info">
+Filling and signing PDFs does not need this endpoint. The `pdf_*` tools work
+from the attachment in place - see [PDF Forms](/docs/mcp/pdf-forms).
+</Callout>
+
+## Take events instead of polling
+
+Past a certain volume, re-ranking the inbox on a timer is the wrong shape. Give
+DaySurface an HTTPS endpoint and it will POST to you when mail arrives.
+
+```bash
+curl -sS -X POST "$DAYSURFACE_API/api/v1/services/webhook_subscribe" \
+  -H "Authorization: Bearer $DAYSURFACE_API_KEY" \
+  -H "Idempotency-Key: $(uuidgen)" \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://example.com/hooks/daysurface", "event_types": ["gmail.message.new"]}'
+```
+
+```json
+{
+  "id": "whsub_9f2a...",
+  "url": "https://example.com/hooks/daysurface",
+  "event_types": ["gmail.message.new"],
+  "active": true,
+  "secret": "whsec_..."
+}
+```
+
+`secret` is shown once and never again - store it on receipt. Every delivery is
+signed with it under `X-Webhook-Signature`, and an endpoint that does not verify
+the signature will accept anything anyone POSTs at it. Verification code, the
+event payload shape, and the retry schedule are in
+[Gmail Webhooks](/docs/gmail-webhooks). `webhook_rotate_secret` issues a
+replacement; `webhook_list` shows what you have subscribed without ever
+returning secrets.
+
+## Retrying without sending twice
+
+Three failure modes to separate. A `429` or `5xx` means the request may not have
+run - retry it. A `4xx` other than `429` means it ran and was rejected -
+retrying unchanged will fail identically. A `402` is the one that looks
+retryable and is not: it carries a `Retry-After`, but that value points at the
+next daily quota reset, which can be hours out.
+
+```python
+import time
+
+import httpx
+
+
+def call(client: httpx.Client, tool: str, payload: dict, key: str | None = None) -> dict:
+    headers = {"Idempotency-Key": key} if key else {}
+    for attempt in range(5):
+        resp = client.post(f"/api/v1/services/{tool}", json=payload, headers=headers)
+        # Daily quota. Sleeping on this Retry-After parks the loop until the
+        # next reset, so treat it as a stop condition rather than a retry.
+        if resp.status_code == 402:
+            reset = resp.json()["error"]["details"].get("quota_reset_at")
+            raise RuntimeError(f"{tool}: daily quota exhausted, resets at {reset}")
+        if resp.status_code == 429:
+            time.sleep(float(resp.headers.get("Retry-After", "1")))
+            continue
+        if resp.status_code >= 500:
+            time.sleep(2**attempt)
+            continue
+        resp.raise_for_status()
+        return resp.json()
+    raise RuntimeError(f"{tool} did not succeed after 5 attempts")
+```
+
+Hold the `Idempotency-Key` constant across the retries of one operation. The
+first attempt that reaches the server executes; every later attempt with that
+key replays the stored response instead of sending a second email. Reusing the
+key with a *different* payload is a `422` - that is the guard working, not a
+bug. See [Idempotency](/docs/api/idempotency),
+[Rate Limits](/docs/api/rate-limits), and the
+[reference retry loop](/docs/api/errors#reference-retry-loop-python), which adds
+jitter and covers every retryable code.
+
+Errors all share one envelope with a stable `error.code` and a `request_id`;
+branch on the code, quote the request ID in support threads, and never match on
+the message text. Full table in [Errors](/docs/api/errors).
+
+## Related
+
+<Cards>
+  <Card title="Tools" href="/docs/api/tools" description="Per-endpoint request and response reference." />
+  <Card title="Authentication" href="/docs/api/authentication" description="API keys, scopes, and rotation." />
+  <Card title="Idempotency" href="/docs/api/idempotency" description="Retry semantics for mutating calls." />
+  <Card title="Gmail Webhooks" href="/docs/gmail-webhooks" description="Payloads, signatures, and retries." />
+</Cards>
