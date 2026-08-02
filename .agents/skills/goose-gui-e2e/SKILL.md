@@ -217,18 +217,24 @@ consent box unticked and the button still shut.
 on `mcp_probe.py`'s always-printed summary line. `before_click` records what was
 **observed**, before any repair, which is what makes these failure modes
 distinguishable at all. `click_enabled` and `click_landed` are deliberately
-separate: an enabled control can still fail to be clicked (detached node,
-unstable coordinates), and a forced click *cannot* fire on a disabled one even
-though Playwright reports it as sent - so neither value implies the other, and
-only `click_landed` means the app was actually asked to do something.
+separate, and the implication runs one way only: **enabled does not imply
+landed.** An enabled control can still be missed - a detached node, unstable
+coordinates, an overlay swallowing the hit - and `force` skips the hit-target
+check, so Playwright reports a forced click as *sent* regardless. So
+`click_landed` isn't inferred from the driver at all: a capture-phase listener
+inside the iframe reports whether the event actually reached the target. Only
+that means the app was asked to do something, and `mcp_probe.py` **fails** a
+scenario whose expected DOM matched while `click_landed` is `false` - otherwise
+text that was already on screen would grade as a round-trip.
 
 | `inputs.after` | `inputs.before_click` | `click_enabled` / `click_landed` | Read it as |
 | --- | --- | --- | --- |
 | throws `inputs did not take` | - | `null` / `null` | the value never reached the app - driver-side plumbing |
 | set | not satisfied (`reapplied: true`) | - | the app remounted between apply and click and reset its state |
 | set | set | `false` / `false` | the control is gated on something else (a `busy` flag, a phase) |
-| set | set | `true` / `false` | the control was fine but no click dispatched - a driver-side click failure |
+| set | set | `true` / `false` | the control was fine but the click never arrived - overlay, or a stale hit target |
 | set | set | `true` / `true` | input and click were fine - the round-trip or the re-render is the real failure |
+| set | set | `true` / `null` | delivery undetermined: the click swapped the iframe, taking the acknowledgement with it |
 | any | any | `null` / `null` | the click step was never reached; check the `interaction ERROR` line |
 
 **A repaired PASS is not a clean PASS.** `via: "native-setter"` or

@@ -69,13 +69,13 @@ const result = {
   inputs: interact && (interact.fill || interact.check)
     ? { via: null, after: null, before_click: null, reapplied: false } : null,
   // Two DIFFERENT facts, kept apart on purpose: `click_enabled` is whether the
-  // control was gated, `click_landed` is whether a click actually dispatched.
-  // Conflating them is how a click that never fired gets read as "input was
-  // fine, blame the round-trip". An enabled control can still fail to be
-  // clicked (detached node, unstable coordinates), and a forced click cannot
-  // fire on a disabled one - so neither value implies the other.
-  // null on both = the click step was never reached (no click in the scenario,
-  // or the leg threw before it).
+  // control was gated, `click_landed` is whether the click actually reached it
+  // (observed in-page, not inferred from the driver). Enabled does NOT imply
+  // landed - an enabled control can still miss on a detached node, unstable
+  // coordinates, or an overlay - and conflating them is how a click that never
+  // fired gets read as "input was fine, blame the round-trip".
+  // click_enabled null = the click step was never reached; click_landed null =
+  // that, or delivery couldn't be determined (the frame was swapped by the click).
   click_enabled: null, click_landed: null,
 };
 const writeResult = () => writeFileSync(resultPath, JSON.stringify(result, null, 2));
@@ -264,26 +264,57 @@ try {
           const btn = interact.click.selector
             ? frame.locator(interact.click.selector).first()
             : frame.getByText(interact.click.text, { exact: false }).first();
+          // Ask the PAGE whether the click arrived, rather than inferring it
+          // from the driver. Nothing on this side can prove delivery: `force`
+          // skips the hit-target check, so Playwright reports a forced click as
+          // sent even when an overlay swallowed it, and isEnabled() only reads
+          // the disabled attribute. A capture-phase listener testing
+          // composedPath is the one signal that says the event reached the
+          // target - and "the app was asked to do something" is the whole
+          // premise the interact leg's verdict rests on.
+          // Key the listener on the target's SHAPE (tag + text), not on the node
+          // itself. These apps re-render while we work - pdf_signer swaps nodes
+          // as page images arrive - so a listener closing over the element sees
+          // a click on its replacement and reports a false negative, which the
+          // grading rule below would turn into a spurious red.
+          const ackKey = await btn
+            .evaluate((el) => ({ tag: el.tagName, text: (el.textContent || "").trim().slice(0, 80) }))
+            .catch(() => null);
+          if (ackKey)
+            await frame.evaluate((k) => {
+              window.__ackClick = false;
+              document.addEventListener("click", (e) => {
+                for (const n of e.composedPath())
+                  if (n instanceof Element && n.tagName === k.tag &&
+                      (n.textContent || "").trim().slice(0, 80) === k.text) {
+                    window.__ackClick = true;
+                    return;
+                  }
+              }, true);
+            }, ackKey).catch(() => {});
           // The plain click already waits up to 6s for the control to be
           // enabled, so don't hand-roll that poll. What it does not do is say
           // WHY it gave up - hence the isEnabled() reading on the failure path.
           // The forced retry exists because the host auto-resizes the iframe, so
-          // a first click can land on stale coordinates; but `force` skips the
-          // actionability checks, so it "succeeds" against a disabled control
-          // while the browser dispatches nothing. Only count it as landed when
-          // the control was actually enabled.
+          // a first click can land on stale coordinates.
           if (await btn.click({ timeout: 6000 }).then(() => true).catch(() => false)) {
             result.click_enabled = true;
-            result.click_landed = true;
           } else {
             result.click_enabled = await btn.isEnabled().catch(() => false);
             if (!result.click_enabled)
               log("click target DISABLED after its actionability wait - a forced click cannot fire on it");
-            const forced = await btn.click({ timeout: 6000, force: true }).then(() => true)
-              .catch((e) => { log("forced click failed:", e.message.split("\n")[0]); return false; });
-            result.click_landed = forced && result.click_enabled;
-            if (!result.click_landed) log("NO CLICK EVER DISPATCHED - the app was never asked to do anything");
+            await btn.click({ timeout: 6000, force: true })
+              .catch((e) => log("forced click failed:", e.message.split("\n")[0]));
           }
+          // Trust a NEGATIVE acknowledgement only while the frame that carries
+          // it is still alive: a click that made the host swap the iframe takes
+          // `__ackClick` with it, and reporting that as "no click dispatched"
+          // would be a false accusation. Unknown stays null.
+          result.click_landed = frame.isDetached() || !ackKey
+            ? null
+            : await frame.evaluate(() => window.__ackClick === true).catch(() => null);
+          if (result.click_landed === false)
+            log("NO CLICK REACHED THE TARGET - the app was never asked to do anything");
         }
         let ibody = "";
         for (let i = 0; i < 30 && (result.interact_missing.length || result.interact_sel_missing.length); i++) {
