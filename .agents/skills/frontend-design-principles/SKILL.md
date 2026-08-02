@@ -57,7 +57,7 @@ This repo has three separate frontends with no shared bundle between them, so
 **MCP Apps (React in a sandboxed iframe), `mcp_server/apps/<app>/`**
 
 - Each app is its own single-file Vite bundle, so styles are per-app by design:
-  `src/styles.ts` in `gmail_inbox`, `gmail_composer`, and `pdf_signer`. Copy the
+  `src/styles.ts` in `gmail_inbox`, `settings`, and `pdf_signer`. Copy the
   style module into a new app rather than importing across apps.
 - `dist/mcp-app.html` is committed. Rebuild with `make build_apps` after any
   visual change, or the shipped bundle silently keeps the old UI.

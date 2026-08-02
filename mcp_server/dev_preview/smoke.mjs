@@ -49,7 +49,6 @@ await page.waitForTimeout(1200);
 // rendered - guards against a "connected but blank / waiting" false pass.
 const MARKER = {
   gmail_inbox: "Curated inbox",
-  gmail_composer: "priya@peoplehq.io",
   pdf_signer: "Awaiting your signature",
 };
 const marker = MARKER[APP] ?? "";

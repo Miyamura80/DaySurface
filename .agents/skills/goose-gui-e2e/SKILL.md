@@ -138,7 +138,7 @@ A scenario is JSON in `scripts/scenarios/<name>.json`:
 
 ### Rendering the Gmail apps offline (`GMAIL_FAKE_BACKEND`)
 
-The `gmail_inbox` / `gmail_composer` apps normally need a linked Google account:
+The `gmail_inbox` app normally needs a linked Google account:
 `gmail_get_thread` → `_get_gmail_client()` raises `GmailNotConnectedError`
 (`ConnectRequiredError`) with no token row, so the tool errors **before**
 `send_app` and the iframe never mounts. To render them offline, `up.sh` starts

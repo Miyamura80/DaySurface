@@ -17,7 +17,7 @@ MCP App", "does the iframe render", or "preview it here in the cloud".
 
 ```bash
 make preview_app APP=gmail_inbox      # -> mcp_server/dev_preview/dist/gmail_inbox-preview.html
-make preview_app APP=gmail_composer
+make preview_app APP=settings
 ```
 
 `APP` is any directory under `mcp_server/apps/`. The output is one
