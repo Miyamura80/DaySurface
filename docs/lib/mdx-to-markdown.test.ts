@@ -248,6 +248,27 @@ describe("mdxBodyToMarkdown", () => {
     expect(mdxBodyToMarkdown(href)).toBe("- [Real](/real)");
   });
 
+  it("does not read an attribute out of a spread prop", () => {
+    // The `name={...}` rule drops named expression containers, but a spread has
+    // no name to anchor on, so it reaches the walk with its JS intact.
+    const card = `<Card {...parse('title="Fake"')} title="Real" href="/real" />`;
+    const callout = `<Callout {...parse('title="Fake"')} title="Real">\nBody.\n</Callout>`;
+
+    expect(mdxBodyToMarkdown(card)).toBe("- [Real](/real)");
+    expect(mdxBodyToMarkdown(callout)).toBe("**Real**\n\nBody.");
+  });
+
+  it("skips a spread whose braces nest, or whose quotes hold a brace", () => {
+    // `\{[^}]*\}` ends at the first `}` and hands the tail back to the walk, so
+    // the inner `title=` is read after all. Depth counting is what fixes it, and
+    // a `}` inside a quoted string must not decrement that depth.
+    const nested = `<Card {...{a: {b: 'title="Fake"'}}} title="Real" href="/real" />`;
+    const braceInQuotes = `<Card {...parse('}title="Fake"')} title="Real" href="/real" />`;
+
+    expect(mdxBodyToMarkdown(nested)).toBe("- [Real](/real)");
+    expect(mdxBodyToMarkdown(braceInQuotes)).toBe("- [Real](/real)");
+  });
+
   it("strips a block comment spanning several lines", () => {
     // The `[\s\S]` in the comment pattern exists for this; a single-line test
     // would still pass against a narrowed `[^\n]*`.

@@ -169,6 +169,47 @@ const STRUCTURAL_TAG = new RegExp(
 const ATTR_PAIR = /([A-Za-z_][\w:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
 
 /**
+ * Blank out `{...}` regions, leaving the plain attributes around them.
+ *
+ * The `name={...}` rule in `stripMdxSyntax` already drops *named* expression
+ * containers, but a spread has no name to anchor on, so `<Card
+ * {...parse('title="Fake"')} title="Real" />` arrives here intact and the
+ * literal `title=` inside it is the first one the walk meets. JS inside a prop
+ * is not attribute syntax at all, so the whole region is skipped rather than
+ * parsed.
+ *
+ * Depth-counted instead of `\{[^}]*\}` because these nest - `{...{a: {b: 1}}}`
+ * would end at the first `}` and hand the tail back to the walk. Quotes are
+ * tracked for the same reason in reverse: a `}` inside `'a}b'` closes nothing.
+ * An unbalanced `{` swallows the rest of the tag, which loses the label; that is
+ * the safe direction, since the alternative is publishing a value read out of
+ * someone's JavaScript.
+ */
+function withoutBraceExpressions(tag: string): string {
+  let out = "";
+  let depth = 0;
+  let quote: string | null = null;
+
+  for (const ch of tag) {
+    if (quote !== null) {
+      if (depth === 0) out += ch;
+      if (ch === quote) quote = null;
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+      if (depth === 0) out += ch;
+    } else if (ch === "{") {
+      depth++;
+    } else if (ch === "}") {
+      if (depth > 0) depth--;
+    } else if (depth === 0) {
+      out += ch;
+    }
+  }
+
+  return out;
+}
+
+/**
  * Read one attribute's value out of a matched tag.
  *
  * Walks the attributes in order rather than searching for the name, because
@@ -187,7 +228,9 @@ const ATTR_PAIR = /([A-Za-z_][\w:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
  *   name for equality settles it.
  */
 function attrValue(tag: string, name: string): string | undefined {
-  for (const [, key, doubleQuoted, singleQuoted] of tag.matchAll(ATTR_PAIR)) {
+  for (const [, key, doubleQuoted, singleQuoted] of withoutBraceExpressions(
+    tag,
+  ).matchAll(ATTR_PAIR)) {
     if (key === name) return doubleQuoted ?? singleQuoted;
   }
   return undefined;
