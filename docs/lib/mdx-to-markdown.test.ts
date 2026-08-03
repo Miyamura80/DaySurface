@@ -184,18 +184,33 @@ describe("mdxBodyToMarkdown", () => {
     expect(out).toContain("x\n\n\n\ny");
   });
 
-  it("strips MDX block comments so generated-region markers do not ship", () => {
-    // `mcp/tools.mdx` carries these. Leaking one publishes an internal
-    // instruction to edit a script into the LLM-facing twin.
+  it("strips MDX block comments so authoring notes do not ship", () => {
+    // Comments are never reader-facing, so leaking one publishes an internal
+    // note into the twin that LLM consumers read.
     const raw = [
-      "{/* BEGIN generated: tool reference - edit scripts/gen_tool_docs.py */}",
+      "{/* TODO: rewrite this section before launch */}",
       "",
       "Real content.",
       "",
-      "{/* END generated */}",
+      "{/* END */}",
     ].join("\n");
 
     expect(mdxBodyToMarkdown(raw)).toBe("Real content.");
+  });
+
+  it("keeps an apostrophe inside a double-quoted attribute", () => {
+    // `[^"']` ends the value at either quote character, truncating the title to
+    // "Don". Callout titles are prose headings, so apostrophes are ordinary.
+    const raw = `<Callout title="Don't do this">\nBody.\n</Callout>`;
+
+    expect(mdxBodyToMarkdown(raw)).toBe("**Don't do this**\n\nBody.");
+  });
+
+  it("does not read a hyphenated lookalike attribute", () => {
+    // `\b` is satisfied between `-` and `t`, so `\btitle=` matches `data-title=`.
+    const raw = `<Callout data-title="Decoy">\nBody.\n</Callout>`;
+
+    expect(mdxBodyToMarkdown(raw)).toBe("Body.");
   });
 
   it("strips a block comment spanning several lines", () => {
