@@ -165,25 +165,32 @@ const STRUCTURAL_TAG = new RegExp(
   "g",
 );
 
+/** One `name="value"` or `name='value'` pair. Each quote style closes its own. */
+const ATTR_PAIR = /([A-Za-z_][\w:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
+
 /**
  * Read one attribute's value out of a matched tag.
  *
- * Two things the obvious `/\bname=["']([^"']*)["']/` gets wrong, both silent:
+ * Walks the attributes in order rather than searching for the name, because
+ * searching gets three things wrong, all of them silent:
  *
- * - `[^"']` ends the value at the first quote of *either* kind, so a
- *   double-quoted title containing an apostrophe is truncated - `title="Don't
- *   do this"` yields `Don`. Callout titles are prose headings, so apostrophes
- *   are ordinary; matching each quote style against its own closer fixes it and
- *   also stops `title="X'` from matching at all.
- * - `\b` looks like it anchors the attribute name, but `-` is a non-word
- *   character, so the boundary is satisfied mid-token and `data-title="Decoy"`
- *   matches `title=`. Requiring whitespace or the tag's start actually anchors it.
+ * - A pattern anchored on the name alone finds it *inside another prop's
+ *   value*. `<Card description='set title="Fake"' title="Real" />` yields
+ *   `Fake`, because the first `title=` in the string is the one in the prose.
+ *   Consuming each value whole steps past it, so only real attribute positions
+ *   are ever considered.
+ * - `[^"']` for the value ends it at the first quote of *either* kind, so
+ *   `title="Don't do this"` truncates to `Don`. Callout titles are prose
+ *   headings, so apostrophes are ordinary.
+ * - `\b` before the name looks like an anchor but is not: `-` is a non-word
+ *   character, so `\btitle=` matches `data-title="Decoy"`. Comparing the parsed
+ *   name for equality settles it.
  */
 function attrValue(tag: string, name: string): string | undefined {
-  const match = tag.match(
-    new RegExp(String.raw`(?:^|\s)${name}=(?:"([^"]*)"|'([^']*)')`),
-  );
-  return match?.[1] ?? match?.[2];
+  for (const [, key, doubleQuoted, singleQuoted] of tag.matchAll(ATTR_PAIR)) {
+    if (key === name) return doubleQuoted ?? singleQuoted;
+  }
+  return undefined;
 }
 
 /** The MDX-to-Markdown rewrites, applied to prose only - never to code. */

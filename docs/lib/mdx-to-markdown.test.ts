@@ -88,9 +88,21 @@ describe("splitFences", () => {
     // throughout and contain no indented code blocks, so this is the direction
     // that loses nothing - but it is a choice, and flipping it should be
     // deliberate rather than a silent regression.
-    const body = ["Prose.", "", "    ```", "    still code", "    ```"].join("\n");
+    const body = [
+      "Prose.",
+      "",
+      "    ```",
+      "    still code",
+      "    ```",
+      "",
+      "import { Card } from 'fumadocs-ui/components/card';",
+    ].join("\n");
 
     expect(codeLines(body)).toContain("    still code");
+    // The cost is bounded by the block closing: prose after it is prose again,
+    // so the rules resume. Only an *unmatched* fence inside such a block would
+    // swallow the tail, which is the same exposure any unterminated fence has.
+    expect(mdxBodyToMarkdown(body)).not.toContain("fumadocs-ui/components/card");
   });
 
   it("handles ~~~ fences", () => {
@@ -223,6 +235,17 @@ describe("mdxBodyToMarkdown", () => {
     const raw = `<Callout data-title="Decoy">\nBody.\n</Callout>`;
 
     expect(mdxBodyToMarkdown(raw)).toBe("Body.");
+  });
+
+  it("does not read an attribute name out of another prop's value", () => {
+    // Searching for `title=` finds the one quoted inside `description`, because
+    // it comes first in the string. Walking the attributes steps past whole
+    // values, so only real attribute positions are considered.
+    const title = `<Card description='set title="Fake"' title="Real" href="/r" />`;
+    const href = `<Card description='use href="/fake"' title="Real" href="/real" />`;
+
+    expect(mdxBodyToMarkdown(title)).toBe("- [Real](/r)");
+    expect(mdxBodyToMarkdown(href)).toBe("- [Real](/real)");
   });
 
   it("strips a block comment spanning several lines", () => {
