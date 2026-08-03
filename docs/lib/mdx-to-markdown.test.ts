@@ -269,6 +269,35 @@ describe("mdxBodyToMarkdown", () => {
     expect(mdxBodyToMarkdown(braceInQuotes)).toBe("- [Real](/real)");
   });
 
+  it("applies JS string rules inside a spread, not JSX ones", () => {
+    // Inside the braces the strings are JavaScript's, so they can be backticked
+    // and can carry backslash escapes. A scanner that knows neither ends the
+    // string early, and the next `}` then closes a spread that has not really
+    // ended - handing its contents to the walk as if they were attributes.
+    const backtick = '<Card {...parse(`} title="Fake"`)} title="Real" href="/real" />';
+    const interpolated =
+      '<Card {...parse(`${x} title="Fake"`)} title="Real" href="/real" />';
+    const escapedBacktick =
+      '<Card {...parse(`a\\` } title="Fake"`)} title="Real" href="/real" />';
+
+    expect(mdxBodyToMarkdown(backtick)).toBe("- [Real](/real)");
+    expect(mdxBodyToMarkdown(interpolated)).toBe("- [Real](/real)");
+    expect(mdxBodyToMarkdown(escapedBacktick)).toBe("- [Real](/real)");
+  });
+
+  it("leaves a tag whose quoting it cannot parse alone, rather than guessing", () => {
+    // A backslash-escaped quote inside a spread is balanced to JavaScript but
+    // not to `TAG_ATTRS`, which is a flat regex and cannot know it is looking at
+    // JS. So the tag never matches and passes through verbatim. That is ugly,
+    // but it is the safe half of the trade: an unconverted tag is visible, where
+    // a wrong guess would publish `Fake` as the label and read as correct.
+    const raw = `<Card {...parse('a\\' } title="Fake"')} title="Real" href="/real" />`;
+
+    const out = mdxBodyToMarkdown(raw);
+    expect(out).toBe(raw);
+    expect(out).not.toContain("- [Fake]");
+  });
+
   it("strips a block comment spanning several lines", () => {
     // The `[\s\S]` in the comment pattern exists for this; a single-line test
     // would still pass against a narrowed `[^\n]*`.

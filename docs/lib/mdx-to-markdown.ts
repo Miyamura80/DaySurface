@@ -184,17 +184,33 @@ const ATTR_PAIR = /([A-Za-z_][\w:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
  * An unbalanced `{` swallows the rest of the tag, which loses the label; that is
  * the safe direction, since the alternative is publishing a value read out of
  * someone's JavaScript.
+ *
+ * Inside a brace the string rules are JavaScript's, and outside it they are
+ * JSX's, which is why `depth` gates them. JS has backtick strings and
+ * backslash escapes; a scanner without them ends the string early, and the
+ * first `}` after that closes a spread that has not really ended - so
+ * `` {...parse(`} title="Fake"`)} `` hands `title="Fake"` back to the walk.
+ * A JSX attribute value has neither: `title="a\"` ends at that quote, and
+ * treating the backslash as an escape would run the value on past it.
  */
 function withoutBraceExpressions(tag: string): string {
   let out = "";
   let depth = 0;
   let quote: string | null = null;
 
-  for (const ch of tag) {
+  for (let i = 0; i < tag.length; i++) {
+    const ch = tag[i];
+
     if (quote !== null) {
-      if (depth === 0) out += ch;
-      if (ch === quote) quote = null;
-    } else if (ch === '"' || ch === "'") {
+      if (depth === 0) {
+        out += ch;
+        if (ch === quote) quote = null;
+      } else if (ch === "\\") {
+        i++; // An escaped character cannot be the one that closes the string.
+      } else if (ch === quote) {
+        quote = null;
+      }
+    } else if (ch === '"' || ch === "'" || (depth > 0 && ch === "`")) {
       quote = ch;
       if (depth === 0) out += ch;
     } else if (ch === "{") {
