@@ -11,6 +11,11 @@
 // in `fumadocs-mdx:collections/server`, a virtual module that only exists after
 // the site's codegen step, which would drag a whole build into a test of a pure
 // `string -> string` function.
+//
+// Maintained in parallel with the same file in Miyamura80/MCP-Template. The two
+// copies are byte-identical on purpose; a fix here wants porting there, and vice
+// versa. Keep the comments describing shapes rather than repo-specific files so
+// they stay true on both sides.
 
 export function mdxBodyToMarkdown(raw: string): string {
   const withoutFrontmatter = raw
@@ -65,6 +70,20 @@ export type Segment = { code: boolean; text: string };
  * absolute anchor walks straight past it. The consequence is not cosmetic - an
  * unrecognised fence gets `stripMdxSyntax` applied to it, which is exactly the
  * import-eating this module exists to prevent.
+ *
+ * The allowance is deliberately unbounded, and that is a tradeoff rather than a
+ * free win. A line scanner cannot tell a nested-list fence from a CommonMark
+ * *indented* code block (4+ spaces, no fence) whose content happens to contain a
+ * line of backticks - by indent alone the two are identical, and no bound
+ * separates them, since indented code starts at exactly the depth nested fences
+ * reach. Erring toward "it's a fence" means such a block would open one and the
+ * prose after it would go unrewritten until a matching close.
+ *
+ * Chosen knowing that, because in these docs the shapes are not symmetric:
+ * fenced blocks are the house style and indented code blocks number zero across
+ * every page, while fences nested in list items are real and present. The test
+ * suite pins this direction, so flipping it is a deliberate act rather than a
+ * silent regression.
  */
 const FENCE_OPEN = /^[ \t]*(`{3,}|~{3,})/;
 /**

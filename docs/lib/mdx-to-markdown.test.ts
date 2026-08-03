@@ -81,6 +81,18 @@ describe("splitFences", () => {
     expect(mdxBodyToMarkdown(body)).toContain("import os");
   });
 
+  it("treats a fence line inside an indented block as opening a fence", () => {
+    // Pins the tradeoff `FENCE_OPEN` documents. By indent alone a nested-list
+    // fence and a CommonMark indented code block are identical, so recognising
+    // the first means also recognising the second. These docs use fenced blocks
+    // throughout and contain no indented code blocks, so this is the direction
+    // that loses nothing - but it is a choice, and flipping it should be
+    // deliberate rather than a silent regression.
+    const body = ["Prose.", "", "    ```", "    still code", "    ```"].join("\n");
+
+    expect(codeLines(body)).toContain("    still code");
+  });
+
   it("handles ~~~ fences", () => {
     const body = ["~~~python", "import os", "~~~", "", "prose"].join("\n");
 
