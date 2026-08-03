@@ -1,4 +1,12 @@
-"""Health-check endpoint with component status (no auth required)."""
+"""Health-check endpoints.
+
+``GET /health`` is public and deliberately minimal: a liveness signal only
+(``{"status": "ok"}`` / ``{"status": "degraded"}``).  Build identity (version,
+git commit) and the per-component breakdown are information disclosure to an
+anonymous caller (ASVS V14.3.3) - DaySurface is open source, so a commit SHA
+tells an attacker exactly which code is deployed.  Those details live on
+``GET /health/detail``, which requires authentication.
+"""
 
 import collections.abc
 import os
@@ -9,8 +17,10 @@ from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from loguru import logger as log
+
+from api_server.auth import AuthenticatedUser, get_authenticated_user
 
 try:
     _APP_VERSION = _pkg_version("daysurface")
@@ -228,24 +238,49 @@ def _get_git_commit() -> str | None:
         return _git_commit_value
 
 
-@router.get("/health")
-def health_check():
-    components = {
+def _collect_components() -> dict[str, dict]:
+    """Run (cached) probes for every component."""
+    return {
         "api": {"status": "ok"},
         "database": _cached_check("database", _check_database),
         "redis": _cached_check("redis", _check_redis),
         "stripe": _cached_check("stripe", _check_stripe),
     }
 
-    # "ok" if all components are ok or not_configured; "degraded" if any errored
-    overall = "ok"
+
+def _overall_status(components: dict[str, dict]) -> str:
+    """Roll components up: "ok" unless any component errored, then "degraded"."""
     for comp in components.values():
         if comp["status"] == "error":
-            overall = "degraded"
-            break
+            return "degraded"
+    return "ok"
 
+
+@router.get("/health", summary="Liveness probe (public)")
+def health_check():
+    """Public liveness signal.
+
+    Intentionally returns nothing but ``status``.  Version, commit SHA and the
+    per-component breakdown are only available to authenticated callers via
+    ``/health/detail`` - see the module docstring.  Always answers ``200`` so
+    platform healthchecks (Railway ``healthcheckPath``, Render
+    ``healthCheckPath``, the Dockerfile ``HEALTHCHECK``) keep passing while a
+    non-critical dependency is degraded.
+    """
+    return {"status": _overall_status(_collect_components())}
+
+
+@router.get("/health/detail", summary="Detailed health (authenticated)")
+def health_detail(_user: AuthenticatedUser = Depends(get_authenticated_user)):
+    """Full health payload - build identity plus per-component status.
+
+    Authenticated-only: the git commit identifies the exact deployed revision
+    of an open-source codebase, which is exactly the disclosure ASVS V14.3.3
+    warns about.
+    """
+    components = _collect_components()
     return {
-        "status": overall,
+        "status": _overall_status(components),
         "version": _APP_VERSION,
         "commit": _get_git_commit(),
         "timestamp": datetime.now(UTC).isoformat(),

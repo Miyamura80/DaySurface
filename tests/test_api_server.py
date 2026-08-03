@@ -83,10 +83,18 @@ class TestAPIServer(TestTemplate):
         app.dependency_overrides.clear()
 
     def test_health_endpoint(self):
+        # Public /health is a liveness signal only; the component breakdown
+        # moved to the authenticated /health/detail (tests/test_health_enhanced.py).
         resp = self.client.get("/health")
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] in ("ok", "degraded")
+        assert set(data) == {"status"}
+
+    def test_health_detail_endpoint(self):
+        resp = self.client.get("/health/detail")
+        assert resp.status_code == 200
+        data = resp.json()
         assert "components" in data
         assert data["components"]["api"]["status"] == "ok"
 

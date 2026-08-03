@@ -53,11 +53,12 @@ request to thread your trace ID through the server logs.
 | `503` | `service_unavailable` | Yes | Retry with backoff; check `/health` |
 
 <Callout type="info">
-`/health` is the canonical status probe (no auth required). It reports
-per-component health (`api`, `database`, `redis`, `stripe`) and returns
-`"degraded"` when any component is unhealthy - see the
-[API overview](/docs/api#health-check). Poll it to distinguish a server-side
-incident from a client-side error before retrying.
+`/health` is the canonical status probe (no auth required). It returns
+`{"status": "ok"}` or `{"status": "degraded"}` and nothing else - poll it to
+distinguish a server-side incident from a client-side error before retrying.
+The per-component breakdown (`api`, `database`, `redis`, `stripe`) is on the
+authenticated `/health/detail` - see the
+[API overview](/docs/api#health-check).
 </Callout>
 
 ## Retry Guidance
