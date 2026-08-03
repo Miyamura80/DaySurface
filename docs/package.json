@@ -9,7 +9,8 @@
     "types:check": "fumadocs-mdx && next typegen && tsc --noEmit",
     "postinstall": "fumadocs-mdx",
     "lint": "eslint",
-    "lint:links": "bun run scripts/lint.ts"
+    "lint:links": "bun run scripts/lint.ts",
+    "test": "vitest run"
   },
   "dependencies": {
     "fumadocs-core": "16.4.7",
@@ -32,6 +33,7 @@
     "next-validate-link": "^1.6.4",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.18",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.10"
   }
 }

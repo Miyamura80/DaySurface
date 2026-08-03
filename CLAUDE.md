@@ -32,7 +32,8 @@ make ruff           # Run ruff linter
 make vulture        # Find dead code
 make ty             # Run type checker
 make lint_links     # Check for broken links in markdown files (README, etc.)
-make ci             # Run all CI checks (ruff, vulture, ty, import_lint, docs_lint, check_deps, lint_links, file_len_check, blind_except_check)
+make docs_test      # Run the docs site's vitest suite (docs/lib/*.test.ts)
+make ci             # Run all CI checks (ruff, vulture, import_lint, ty, docs_lint, docs_test, check_deps, file_len_check, blind_except_check, tool_surface_docs_check, docs_links_check)
 
 # Dependencies
 uv sync             # Install dependencies (not pip install)
@@ -67,7 +68,12 @@ Layering (top calls down, never the reverse):
 - **`src/`** - CLI plumbing (`src/cli/`) + shared utils (logging, theme, errors, output).
 - **`utils/llm/`** - DSPY + LiteLLM wrapper with fallback model, Tenacity retries, LangFuse observability.
 - **`tests/`** - subclass `TestTemplate` (`tests/test_template.py:14`) for per-test config isolation.
-- **`docs/`** - Next.js + Fumadocs site; English source in `docs/content/en/`.
+- **`docs/`** - Next.js + Fumadocs site; content lives in `docs/content/docs/`.
+  `make docs_test` runs vitest over `docs/lib/*.test.ts` (in `make ci` and the docs
+  workflow). Pure helpers only - today `mdx-to-markdown.ts`, the `string -> string`
+  converter behind the agent-facing `.mdx` twins and `llms-full.txt`. It is kept out
+  of `source.ts` so it imports nothing: `source.ts` pulls in the
+  `fumadocs-mdx:collections/*` virtual modules, which need the site's codegen to exist.
 - **`landing-page/`** - standalone Astro + Tailwind v4 marketing site, **separate** from `docs/` and the Python server, with its own Railway deploy (`landing-page/railway.toml`). Data-driven: all copy lives in `src/config/landing.ts`, design tokens in `src/styles/global.css` (`@theme`). Uses `bun`, never npm. See [`landing-page/README.md`](./landing-page/README.md).
 - **`.claude/`**, **`.agents/`**, **`.codex/`** - Claude/Codex agents and skills kept in sync by `scripts/sync_agent_config.py` (pre-commit enforced).
 

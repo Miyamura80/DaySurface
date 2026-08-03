@@ -42,3 +42,7 @@ jobs:
         run: uv run python scripts/check_file_length.py
       - name: Run blind-except justification check
         run: uv run python scripts/check_blind_except_justification.py
+      # `make ci` runs from release.yml on v* tags only, so without this the
+      # docs-vs-registry check never gates a pull request. Python-only, no Bun.
+      - name: Run tool surface docs check
+        run: make tool_surface_docs_check

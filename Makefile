@@ -275,10 +275,21 @@ ty: install_tools ## Run type checker
 	@uv run ty check
 	@echo "$(GREEN)✅Typer completed.$(RESET)"
 
-docs_lint: ## Lint docs links
+.PHONY: docs_install
+docs_install: ## Install the docs site's bun dependencies (shared by docs_lint/docs_test)
+	@cd docs && bun install --frozen-lockfile
+
+.PHONY: docs_lint
+docs_lint: docs_install ## Lint docs links
 	@echo "$(YELLOW)🔍Linting docs links...$(RESET)"
-	@cd docs && bun install --frozen-lockfile && bun run lint:links
+	@cd docs && bun run lint:links
 	@echo "$(GREEN)✅Docs linting completed.$(RESET)"
+
+.PHONY: docs_test
+docs_test: docs_install ## Run the docs site's vitest suite
+	@echo "$(YELLOW)🧪Running docs tests...$(RESET)"
+	@cd docs && bun run test
+	@echo "$(GREEN)✅Docs tests completed.$(RESET)"
 
 lint_links: ## Lint all markdown links using pytest-check-links
 	@echo "$(YELLOW)🔍Linting all markdown links with pytest-check-links...$(RESET)"
@@ -315,7 +326,7 @@ docs_links_check: check_uv ## Check absolute links in docs content resolve to re
 	@uv run python scripts/check_docs_links.py
 	@echo "$(GREEN)✅Docs link check completed.$(RESET)"
 
-ci: ruff vulture import_lint ty docs_lint check_deps file_len_check blind_except_check tool_surface_docs_check docs_links_check ## Run all CI checks (ruff, vulture, import_lint, ty, docs_lint, check_deps, file_len_check, blind_except_check, tool_surface_docs_check, docs_links_check)
+ci: ruff vulture import_lint ty docs_lint docs_test check_deps file_len_check blind_except_check tool_surface_docs_check docs_links_check ## Run all CI checks (ruff, vulture, import_lint, ty, docs_lint, docs_test, check_deps, file_len_check, blind_except_check, tool_surface_docs_check, docs_links_check)
 	@echo "$(GREEN)✅CI checks completed.$(RESET)"
 
 .PHONY: sync-agent-config
