@@ -24,7 +24,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 
 import { handleRequest, resolvePublicOrigin } from "./server.ts";
-import { connectAliases } from "./src/config/landing";
+import { connectAliases, supportAliases } from "./src/config/landing";
 
 // Mount the real handler on an ephemeral port rather than spawning `bun
 // server.ts` on a fixed one: a fixed port races in parallel CI, and a subprocess
@@ -246,6 +246,60 @@ describe("indexing controls", () => {
     expect(res.headers.get("x-robots-tag")).toBe("noindex, follow");
     expect((await fetch(`${BASE}/connect`, { headers: md })).headers.get("x-robots-tag"))
       .toBeNull();
+  });
+});
+
+describe("support aliases mirror /support", () => {
+  // Same guard the connect aliases get: every alias, not a sample, so an entry
+  // added to supportAliases that collides with a real page (which Astro would
+  // let the static route shadow) fails here instead of silently serving the
+  // wrong content or becoming an indexable duplicate.
+  const aliases = supportAliases.map((a) => `/${a}`);
+
+  test.each(aliases)("%s serves the support content at a 200", async (path) => {
+    const res = await fetch(`${BASE}${path}`);
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toContain("The server will not connect, or my client rejects the URL");
+  });
+
+  test.each(aliases)("%s canonicalises to /support and is noindex", async (path) => {
+    const body = await (await fetch(`${BASE}${path}`)).text();
+    // Trailing slash matters: Astro builds /support as a directory, so this must
+    // match /support's own canonical exactly or the two split the ranking signal.
+    expect(body).toContain('rel="canonical" href="https://daysurface.com/support/"');
+    expect(body).toContain('name="robots" content="noindex, follow"');
+  });
+
+  test("/support itself is indexable; only the aliases are not", async () => {
+    const support = await (await fetch(`${BASE}/support`)).text();
+    expect(support).not.toContain('name="robots"');
+  });
+
+  test.each(supportAliases.map((a) => `/${a}.md`))(
+    "%s serves the support markdown body and is noindex",
+    async (path) => {
+      const res = await fetch(`${BASE}${path}`);
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toStartWith("text/markdown");
+      expect(res.headers.get("x-robots-tag")).toBe("noindex, follow");
+      expect(await res.text()).toContain("# Support & contact");
+    },
+  );
+
+  test("/support.md is the indexable canonical twin, not noindex", async () => {
+    const res = await fetch(`${BASE}/support.md`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-robots-tag")).toBeNull();
+  });
+
+  test.each(aliases)("%s answers markdown negotiation with the support body", async (path) => {
+    // Accept: text/markdown on the HTML alias must return the support markdown
+    // (via its .md twin), noindex, not the HTML page.
+    const res = await fetch(`${BASE}${path}`, { headers: md });
+    expect(res.headers.get("content-type")).toStartWith("text/markdown");
+    expect(res.headers.get("x-robots-tag")).toBe("noindex, follow");
+    expect(await res.text()).toContain("# Support & contact");
   });
 });
 

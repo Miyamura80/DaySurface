@@ -1,7 +1,7 @@
 /**
  * The site-wide agent indexes: llms.txt, llms-full.txt and agents.md.
  */
-import { site, hero, features, faq, compatibility, comparison, connectPage, agentGuide } from "../config/landing";
+import { site, hero, features, faq, compatibility, comparison, connectPage, agentGuide, supportEmail } from "../config/landing";
 import { effortMeta, installMatrix } from "../lib/install";
 import { trimSlash, whenToUseSection } from "./_shared";
 
@@ -43,6 +43,11 @@ own URL, and advertises the twin as \`<link rel="alternate" type="text/markdown"
 ## Resources
 - [Documentation](${site.docsUrl})
 - [Source code](${site.githubUrl})
+
+## Support
+- [support.md](${o}/support.md): Fixes for connection and Google sign-in issues, plus how to reach a human. Also served at /support (aliases /help, /contact).
+- [GitHub Issues](${site.githubUrl}/issues): Bugs and feature requests (public).
+- Email: ${supportEmail} for account, billing, or anything private.
 
 ## Optional
 - [FAQ](${o}/#faq): Common questions about clients, transports, auth and self-hosting.
@@ -185,6 +190,17 @@ ${installMatrix
 
 ${faqBlock}
 
+## Support
+
+Most problems are setup or connection related - use the streamable-HTTP endpoint
+${site.mcpUrl} (not stdio), complete Google OAuth in the browser, and add the
+server from a per-client link at ${o}/connect. If that does not resolve it:
+
+- GitHub Issues (bugs, features, public): ${site.githubUrl}/issues
+- Email (account, billing, anything private): ${supportEmail}
+
+Full troubleshooting and contact page: ${o}/support (markdown: ${o}/support.md).
+
 ## Machine-readable resources
 
 - llms.txt: ${o}/llms.txt
@@ -194,6 +210,7 @@ ${faqBlock}
 - Install matrix (JSON): ${o}/.well-known/mcp/install.json
 - auth.md (agent auth manifest): ${o}/auth.md
 - pricing.md (machine-readable pricing): ${o}/pricing.md
+- support.md (troubleshooting + contact): ${o}/support.md
 - Agent skills (JSON): ${o}/.well-known/agent-skills/index.json
 - Agent skills (shell pointer): ${o}/skills.sh
 - MCP discovery (JSON): ${o}/.well-known/mcp.json
@@ -251,6 +268,7 @@ Full matrix: ${o}/compare
 
 - Agent auth (auth.md): ${o}/auth.md
 - Pricing (pricing.md): ${o}/pricing.md
+- Support & contact (support.md): ${o}/support.md
 - Full description for LLMs: ${o}/llms-full.txt
 - Skills (JSON): ${o}/.well-known/agent-skills/index.json
 - Skills (shell pointer): ${o}/skills.sh

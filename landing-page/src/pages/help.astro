@@ -1,0 +1,21 @@
+---
+/**
+ * /help - alias of /support. Serves the support content at a 200 (rather than
+ * redirecting) so a fetcher that treats a 3xx as a failure still gets the
+ * answer, canonicalises to /support, and carries noindex so only the canonical
+ * URL is indexed. Same pattern the /connect intent aliases use.
+ */
+import Base from "../layouts/Base.astro";
+import SupportBody from "../components/SupportBody.astro";
+import { site, support } from "../config/landing";
+---
+
+<Base
+  title={`${support.title} - ${site.name}`}
+  description={`Get help with ${site.name}: fix connection and Google sign-in issues, or reach the team by GitHub or email.`}
+  canonicalPath="/support/"
+  noindex={true}
+  markdownPath="/support.md"
+>
+  <SupportBody />
+</Base>

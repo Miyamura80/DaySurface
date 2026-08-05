@@ -15,7 +15,7 @@ import sirv from "sirv";
 import { isDocsPath, proxyDocs } from "./docs-proxy.ts";
 
 import { buildAgentsMd, build404Md } from "./src/agent/content.ts";
-import { connectAliases, site } from "./src/config/landing";
+import { connectAliases, supportAliases, site } from "./src/config/landing";
 
 const PORT = Number(process.env.PORT ?? 8080);
 
@@ -143,7 +143,7 @@ const MARKDOWN_TWINS = discoverMarkdownTwins("dist");
  * `/connect.md` stay indexable.
  */
 const NOINDEX_PATHS: ReadonlySet<string> = new Set(
-  connectAliases.flatMap((a) => [`/${a}`, `/${a}.md`]),
+  [...connectAliases, ...supportAliases].flatMap((a) => [`/${a}`, `/${a}.md`]),
 );
 
 /** Strip a trailing slash (but keep the root) so `/connect/` matches `/connect`. */

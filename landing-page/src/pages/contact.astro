@@ -1,0 +1,19 @@
+---
+/**
+ * /contact - alias of /support (the footer's "Contact" link points here). Same
+ * noindex + canonicalise-to-/support treatment as /help: one page, three URLs.
+ */
+import Base from "../layouts/Base.astro";
+import SupportBody from "../components/SupportBody.astro";
+import { site } from "../config/landing";
+---
+
+<Base
+  title={`Contact - ${site.name}`}
+  description={`Contact the ${site.name} team by GitHub or email, or fix common connection and sign-in issues.`}
+  canonicalPath="/support/"
+  noindex={true}
+  markdownPath="/support.md"
+>
+  <SupportBody />
+</Base>

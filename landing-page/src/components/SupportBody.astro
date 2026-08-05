@@ -1,0 +1,124 @@
+---
+/**
+ * The /support page body, shared by /support (canonical) and its /help and
+ * /contact aliases. Applies the repo's frontend design rules:
+ *  - Common issues collapse into a native <details> accordion (detail→summary,
+ *    keyboard- and touch-accessible) instead of dumping every answer open.
+ *  - Exactly one high-contrast CTA (the `primary` channel); the rest stay dull.
+ *  - The CTA carries a reused mark, not a second label.
+ * All copy comes from `support` in the landing config.
+ */
+import { site, support } from "../config/landing";
+
+const primary = support.channels.find((c) => c.primary) ?? support.channels[0];
+const secondary = support.channels.filter((c) => c !== primary);
+---
+
+<main class="mx-auto max-w-3xl px-4 py-12 leading-relaxed sm:px-6 sm:py-16">
+  <a href="/" class="inline-flex min-h-11 items-center text-sm opacity-70 hover:opacity-100"
+    >&larr; Back to {site.name}</a
+  >
+  <h1 class="mt-6 text-4xl font-bold">{support.title}</h1>
+
+  <h2 class="mt-10 text-2xl font-semibold">{support.issuesHeading}</h2>
+  <div class="mt-4 border-y border-border/60">
+    {
+      support.troubleshooting.map((item) => (
+        <details class="group border-b border-border/60 last:border-b-0">
+          <summary class="flex cursor-pointer list-none items-center justify-between gap-4 py-4 font-medium text-fg [&::-webkit-details-marker]:hidden">
+            <span>{item.q}</span>
+            <svg
+              class="size-4 shrink-0 text-fg-subtle transition group-open:rotate-180"
+              viewBox="0 0 16 16"
+              fill="none"
+              aria-hidden="true"
+            >
+              <path
+                d="M4 6l4 4 4-4"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </summary>
+          <div class="pb-4 text-fg-muted">
+            <p>{item.a}</p>
+            {item.href && (
+              <a
+                href={item.href}
+                {...(item.href.startsWith("http")
+                  ? { target: "_blank", rel: "noopener" }
+                  : {})}
+                class="mt-2 inline-flex min-h-11 items-center text-sm underline decoration-from-font underline-offset-2 hover:text-fg"
+              >
+                {item.hrefLabel ?? "Learn more"} &rarr;
+              </a>
+            )}
+          </div>
+        </details>
+      ))
+    }
+  </div>
+  <p class="mt-4 text-sm text-fg-muted">
+    More in the
+    <a class="underline decoration-from-font underline-offset-2 hover:text-fg" href="/#faq">FAQ</a>
+    and
+    <a
+      class="underline decoration-from-font underline-offset-2 hover:text-fg"
+      href={site.docsUrl}
+      target="_blank"
+      rel="noopener">docs</a
+    >.
+  </p>
+
+  <h2 class="mt-14 text-2xl font-semibold">{support.channelsHeading}</h2>
+  {/* One CTA: the primary channel is the only high-contrast element here. */}
+  <a
+    href={primary.href}
+    {...(primary.href.startsWith("http") ? { target: "_blank", rel: "noopener" } : {})}
+    class="mt-4 inline-flex min-h-11 items-center gap-2 bg-accent px-5 text-sm font-semibold text-accent-fg transition hover:bg-accent-strong"
+  >
+    {
+      primary.icon === "mail" && (
+        <svg class="size-[18px] shrink-0" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8" />
+          <path
+            d="M4 7l8 6 8-6"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+      )
+    }
+    {
+      primary.icon === "github" && (
+        <span
+          class="size-[18px] shrink-0 bg-accent-fg"
+          style="-webkit-mask:url('/logos/github.svg') center/contain no-repeat;mask:url('/logos/github.svg') center/contain no-repeat;"
+          aria-hidden="true"
+        />
+      )
+    }
+    {primary.cta}
+  </a>
+  <p class="mt-2 text-sm text-fg-muted">{primary.blurb}</p>
+
+  {/* Secondary channels stay dull - contrast points the eye at the CTA above. */}
+  {
+    secondary.map((c) => (
+      <p class="mt-4 text-sm text-fg-muted">
+        {c.blurb} &mdash;{" "}
+        <a
+          href={c.href}
+          {...(c.href.startsWith("http") ? { target: "_blank", rel: "noopener" } : {})}
+          class="underline decoration-from-font underline-offset-2 hover:text-fg"
+        >
+          {c.cta} &rarr;
+        </a>
+      </p>
+    ))
+  }
+</main>

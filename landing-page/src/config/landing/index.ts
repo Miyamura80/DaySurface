@@ -19,4 +19,5 @@ export * from "./comparison";
 export * from "./pricing";
 export * from "./pricing-matrix";
 export * from "./content";
+export * from "./support";
 export * from "./webhooks";
