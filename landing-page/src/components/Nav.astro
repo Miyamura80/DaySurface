@@ -134,9 +134,9 @@ import GithubMark from "./GithubMark.astro";
           href={nav.github.href}
           target="_blank"
           rel="noopener noreferrer"
-          class="flex min-h-12 items-center gap-2 border-b border-border/40 text-base text-fg-muted transition hover:text-fg"
+          class="group flex min-h-12 items-center gap-2 border-b border-border/40 text-base text-fg-muted transition hover:text-fg"
         >
-          <GithubMark class="size-[18px] bg-fg-muted" />
+          <GithubMark class="size-[18px] bg-fg-muted transition group-hover:bg-accent" />
           {nav.github.label}
         </a>
       </li>

@@ -1,7 +1,9 @@
 ---
 // Shared GitHub glyph. The /logos/github.svg mask URL lives here only, so the
 // header's labelled + icon-only variants and the mobile-sheet entry can't drift
-// on the asset path. Pass sizing and colour (bg-*) via `class`.
+// on the asset path. Pass sizing and colour (bg-*) via `class`. `inline-block`
+// is baked in so the size-* width/height apply even in a plain (non-flex/grid)
+// context - an inline span would otherwise collapse the mask to zero size.
 interface Props {
   class?: string;
 }
@@ -9,7 +11,7 @@ const { class: className } = Astro.props;
 ---
 
 <span
-  class:list={["shrink-0", className]}
+  class:list={["inline-block shrink-0", className]}
   style="-webkit-mask:url('/logos/github.svg') center/contain no-repeat;mask:url('/logos/github.svg') center/contain no-repeat;"
   aria-hidden="true"
 ></span>
