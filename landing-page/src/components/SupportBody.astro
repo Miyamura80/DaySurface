@@ -20,7 +20,7 @@ const secondary = support.channels.filter((c) => c !== primary);
   >
   <h1 class="mt-6 text-4xl font-bold">{support.title}</h1>
 
-  <h2 class="mt-10 text-2xl font-semibold">Common issues</h2>
+  <h2 class="mt-10 text-2xl font-semibold">{support.issuesHeading}</h2>
   <div class="mt-4 border-y border-border/60">
     {
       support.troubleshooting.map((item) => (
@@ -60,7 +60,7 @@ const secondary = support.channels.filter((c) => c !== primary);
       ))
     }
   </div>
-  <p class="mt-4 text-sm text-fg-subtle">
+  <p class="mt-4 text-sm text-fg-muted">
     More in the
     <a class="underline decoration-from-font underline-offset-2 hover:text-fg" href="/#faq">FAQ</a>
     and
@@ -80,7 +80,7 @@ const secondary = support.channels.filter((c) => c !== primary);
     class="mt-4 inline-flex min-h-11 items-center gap-2 bg-accent px-5 text-sm font-semibold text-accent-fg transition hover:bg-accent-strong"
   >
     {
-      primary.icon === "mail" ? (
+      primary.icon === "mail" && (
         <svg class="size-[18px] shrink-0" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8" />
           <path
@@ -91,7 +91,10 @@ const secondary = support.channels.filter((c) => c !== primary);
             stroke-linejoin="round"
           />
         </svg>
-      ) : (
+      )
+    }
+    {
+      primary.icon === "github" && (
         <span
           class="size-[18px] shrink-0 bg-accent-fg"
           style="-webkit-mask:url('/logos/github.svg') center/contain no-repeat;mask:url('/logos/github.svg') center/contain no-repeat;"
@@ -101,13 +104,13 @@ const secondary = support.channels.filter((c) => c !== primary);
     }
     {primary.cta}
   </a>
-  <p class="mt-2 text-sm text-fg-subtle">{primary.blurb}.</p>
+  <p class="mt-2 text-sm text-fg-muted">{primary.blurb}</p>
 
   {/* Secondary channels stay dull - contrast points the eye at the CTA above. */}
   {
     secondary.map((c) => (
       <p class="mt-4 text-sm text-fg-muted">
-        {c.blurb}?{" "}
+        {c.blurb} &mdash;{" "}
         <a
           href={c.href}
           {...(c.href.startsWith("http") ? { target: "_blank", rel: "noopener" } : {})}

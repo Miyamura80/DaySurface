@@ -36,8 +36,12 @@ export interface SupportChannel {
   href: string;
   /** Terse routing hint - which door this is. Keep it to a few words. */
   blurb: string;
-  /** Reused mark: a logo in public/logos/, or the built-in "mail" glyph. */
-  icon: "github" | "mail";
+  /**
+   * Reused mark for the CTA: a logo in public/logos/, or the built-in "mail"
+   * glyph. Only rendered for the `primary` channel (the one drawn as a button);
+   * omit it on secondary channels, which render as plain text links.
+   */
+  icon?: "github" | "mail";
   /**
    * Exactly one channel is `primary`: it renders as the single accent CTA.
    * Every other channel is a quiet secondary link (see the design rule "one
@@ -49,11 +53,13 @@ export interface SupportChannel {
 
 export const support: {
   title: string;
+  issuesHeading: string;
   troubleshooting: TroubleshootItem[];
   channelsHeading: string;
   channels: SupportChannel[];
 } = {
   title: "Support & contact",
+  issuesHeading: "Common issues",
   troubleshooting: [
     {
       q: "The server will not connect, or my client rejects the URL",
@@ -87,8 +93,15 @@ export const support: {
       cta: "Open a GitHub issue",
       href: `${site.githubUrl}/issues`,
       blurb: "Public bugs and feature requests",
-      icon: "github",
       primary: false,
     },
   ],
 };
+
+/**
+ * Alias routes that serve the /support content: /help and /contact. Kept as one
+ * list so the HTML pages, their markdown twins (help.md.ts / contact.md.ts), and
+ * the server's noindex set can't drift out of sync - the same reason the connect
+ * intent aliases live in one `connectAliases`.
+ */
+export const supportAliases = ["help", "contact"] as const;
