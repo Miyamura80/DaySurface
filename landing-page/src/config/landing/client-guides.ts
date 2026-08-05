@@ -51,6 +51,21 @@ export interface ClientGuide {
   faq: FaqItem[];
 }
 
+/**
+ * Shared across every guide, and ONLY valid for hosts that render MCP Apps.
+ *
+ * The first two entries describe an iframe surface - a ranked inbox dashboard
+ * and an editable composer - delivered through the MCP Apps extension (`ui://`
+ * resources, see mcp_server/MCP_UI_ARCHITECTURE.md). A host that speaks MCP but
+ * does not implement Apps gets tool calls and JSON, not a dashboard, so putting
+ * this list on its page would describe something the reader will never see.
+ *
+ * Verified Apps hosts as of August 2026: Claude and Claude Desktop, ChatGPT,
+ * VS Code Copilot, Microsoft 365 Copilot, Goose, Postman, MCPJam, Archestra.
+ * Notably NOT Apps hosts, despite having install targets or logos on this site:
+ * Cursor, Codex, Cline, Zed, Windsurf, Claude Code. Adding a guide for any of
+ * those means writing it a capability list of its own - do not reuse this one.
+ */
 const CAPABILITIES: GuideCapability[] = [
   {
     title: "Triage a ranked inbox without leaving the chat",
@@ -180,6 +195,100 @@ export const clientGuides: ClientGuide[] = [
       {
         q: "The dialog opened empty - did the link fail?",
         a: "No. OpenAI publishes no install URL scheme that carries a name and endpoint, so the shortcut can open the right dialog but cannot prefill it. Pasting the endpoint yourself is the expected flow.",
+      },
+      ...SHARED_FAQ,
+    ],
+  },
+  {
+    slug: "vscode",
+    targetId: "vscode",
+    clientName: "VS Code",
+    title: "Connect Gmail to VS Code Copilot - DaySurface",
+    description:
+      "Give GitHub Copilot agent mode access to your Gmail over MCP: add one remote server, sign in with Google, and triage your inbox without leaving the editor.",
+    heading: "Connect Gmail to VS Code",
+    subhead: "One MCP server in agent mode, and Copilot can read and answer your mail.",
+    lede: "VS Code reaches outside tools through MCP servers in Copilot agent mode, so adding DaySurface gives Copilot your inbox alongside your code. VS Code also renders MCP Apps, which means the inbox arrives as an actual dashboard in the chat panel rather than as JSON for the model to paraphrase. There is nothing to install beyond the server entry itself.",
+    prerequisites: [
+      "A Google account with Gmail.",
+      "GitHub Copilot in VS Code, with agent mode available. MCP servers are an agent-mode feature - they do not appear in ask or edit mode.",
+    ],
+    steps: [
+      {
+        title: "Switch Copilot Chat to agent mode",
+        body: "Open the Copilot Chat panel and pick Agent from the mode selector. MCP tools are only offered in agent mode, so a server added while you are in ask mode will look like it did not work.",
+      },
+      {
+        title: "Add the server",
+        body: "Open the Command Palette and run MCP: Add Server, choose the HTTP option, and paste the DaySurface endpoint. This writes an entry to your MCP configuration - pick the user-level scope if you want it available across every workspace rather than one project.",
+      },
+      {
+        title: "Sign in with Google",
+        body: "Start the server and complete the Google sign-in it opens in your browser. Review the scopes on the consent screen before approving. There is no key or token to paste back into VS Code.",
+      },
+      {
+        title: "Check the tools are there",
+        body: "Open the tools picker in the Copilot Chat panel and confirm the DaySurface tools are listed and enabled. If the list looks stale, reload the window.",
+      },
+    ],
+    capabilities: CAPABILITIES,
+    faq: [
+      {
+        q: "Why do I have to be in agent mode?",
+        a: "MCP tools are wired into agent mode specifically. Ask and edit mode do not call external tools, so the server will connect fine and still appear to do nothing until you switch.",
+      },
+      {
+        q: "Can I share the server with my team through the repo?",
+        a: "Yes. A workspace-scoped MCP entry can be committed so everyone who opens the project gets the server. Each person still signs in to their own Google account - nothing about the shared config shares mail access.",
+      },
+      ...SHARED_FAQ,
+    ],
+  },
+  {
+    slug: "goose",
+    targetId: "goose",
+    clientName: "Goose",
+    title: "Connect Gmail to Goose - DaySurface",
+    description:
+      "Add DaySurface to Goose as a streamable-HTTP extension: sign in with Google, then triage your inbox and draft replies in an interactive dashboard inside Goose.",
+    heading: "Connect Gmail to Goose",
+    subhead: "One streamable-HTTP extension, and Goose can work your inbox.",
+    lede: "Goose calls MCP servers extensions, and it renders MCP Apps natively - it fetches a tool's ui:// resource and mounts it in a sandboxed iframe. That makes it one of the hosts where the ranked inbox and the composer show up as real interfaces rather than as text. Adding DaySurface is a single remote extension over streamable HTTP.",
+    prerequisites: [
+      "A Google account with Gmail.",
+      "Goose, desktop or CLI. The desktop app is the one that renders the dashboards.",
+    ],
+    steps: [
+      {
+        title: "Open the extensions settings",
+        body: "In Goose, go to Settings and then Extensions. This is where both bundled and remote extensions are managed.",
+      },
+      {
+        title: "Add a remote extension",
+        body: "Choose to add a custom extension and set its type to streamable HTTP. Goose also supports stdio extensions that run a local process - that is the wrong type here, since DaySurface is a remote server.",
+      },
+      {
+        title: "Paste the endpoint and name it",
+        body: "Give the extension a name and paste the DaySurface endpoint as its URL. Leave it enabled when you save.",
+      },
+      {
+        title: "Sign in with Google",
+        body: "Goose will take you through the OAuth flow in your browser on first use. Review the scopes before approving them.",
+      },
+      {
+        title: "Ask it about your inbox",
+        body: "Start a session and ask what needs you today. In the desktop app the inbox comes back as a dashboard you can act in, not a list you have to read.",
+      },
+    ],
+    capabilities: CAPABILITIES,
+    faq: [
+      {
+        q: "Does the inbox dashboard work in the Goose CLI?",
+        a: "No. The interactive surfaces need a host that can mount an iframe, which means the desktop app. The CLI still gets every tool, it just gets them as text and structured results.",
+      },
+      {
+        q: "Is this a stdio extension or a remote one?",
+        a: "Remote, over streamable HTTP. There is no local process to run and nothing to install, so picking the stdio type in the extension dialog will not work.",
       },
       ...SHARED_FAQ,
     ],
