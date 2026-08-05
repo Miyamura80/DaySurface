@@ -20,3 +20,5 @@ export * from "./pricing";
 export * from "./pricing-matrix";
 export * from "./content";
 export * from "./webhooks";
+export * from "./client-guides";
+export * from "./triage";

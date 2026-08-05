@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { site, comparison, pricing } from "../config/landing";
+import { site, comparison, pricing, clientGuides } from "../config/landing";
 
 // Static routes that ship in dist/. Keep in sync with src/pages/*.astro.
 const routes = [
@@ -18,6 +18,18 @@ const routes = [
   // the page targeting an existing organic query cluster rather than one that
   // only converts traffic already on the site.
   { path: "/gmail-webhooks", priority: "0.8", changefreq: "monthly" },
+  // One setup guide per chat client, generated from the same config the route
+  // renders from so a new client cannot ship without a sitemap entry. Ranked
+  // with /gmail-webhooks: same job, an existing query cluster rather than
+  // traffic already on the site.
+  ...clientGuides.map((g) => ({
+    path: `/connect-gmail-to-${g.slug}`,
+    priority: "0.8",
+    changefreq: "monthly",
+  })),
+  // The triage argument. A notch below the client guides: same intent to capture
+  // demand, but a broader query with less buying intent behind it.
+  { path: "/ai-email-triage", priority: "0.7", changefreq: "monthly" },
   ...(pricing.enabled
     ? [{ path: "/pricing", priority: "0.9", changefreq: "monthly" }]
     : []),

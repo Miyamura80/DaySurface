@@ -1,0 +1,217 @@
+---
+/*
+ * /ai-email-triage - the triage argument, on a URL that can actually be found.
+ *
+ * Commissioned as "saving hours per week with mail". That phrasing is a benefit
+ * rather than a query, so the page targets "ai email triage" and its neighbours
+ * and makes the hours case in the body instead of the title.
+ *
+ * The page carries no numbers by design - see the header of config/landing/
+ * triage.ts. There is no measurement behind a time-saved claim today, so the
+ * argument is mechanical: which steps the software removes, and an explicit
+ * refusal to estimate the rest. If that ever changes, the number goes in the
+ * config with its source, not into the markup here.
+ */
+import Base from "../layouts/Base.astro";
+import Nav from "../components/Nav.astro";
+import Footer from "../components/Footer.astro";
+import { site, triage, clientGuides } from "../config/landing";
+
+const origin = (Astro.site ?? new URL(site.url)).origin;
+const canonical = `${origin}/ai-email-triage/`;
+
+const pageTitle = "AI email triage - rank your inbox inside the chat";
+const pageDescription =
+  "What an AI agent can actually take off you in an inbox: a ranked inbox you " +
+  "act on in place, drafts you approve before they send, and thread search that " +
+  "runs over your real mail. No time-saved figures we cannot back up.";
+
+const jsonLd = [
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    headline: pageTitle,
+    description: pageDescription,
+    url: canonical,
+    inLanguage: "en",
+    isPartOf: { "@type": "WebSite", name: site.name, url: site.url },
+    publisher: { "@type": "Organization", name: site.name, url: site.url },
+    about: [
+      { "@type": "Thing", name: "Email triage" },
+      { "@type": "Thing", name: "AI email assistant" },
+      { "@type": "Thing", name: "Inbox management" },
+    ],
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: triage.faq.map((item) => ({
+      "@type": "Question",
+      name: item.q,
+      acceptedAnswer: { "@type": "Answer", text: item.a },
+    })),
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: site.url },
+      { "@type": "ListItem", position: 2, name: triage.heading, item: canonical },
+    ],
+  },
+];
+---
+
+<Base title={pageTitle} description={pageDescription} markdownPath="/ai-email-triage.md">
+  <script
+    type="application/ld+json"
+    is:inline
+    slot="head"
+    set:html={JSON.stringify(jsonLd)}
+  />
+
+  <Nav />
+  <main class="mx-auto max-w-4xl px-4 py-12 sm:px-6 sm:py-16">
+    <a
+      href="/"
+      class="inline-flex min-h-11 items-center text-sm opacity-70 hover:opacity-100"
+      >&larr; Back to {site.name}</a
+    >
+
+    <header class="mt-6">
+      <h1 class="text-4xl font-bold tracking-tight sm:text-5xl">{triage.heading}</h1>
+      <p class="mt-4 text-xl text-accent">{triage.subhead}</p>
+      <p class="mt-4 text-lg leading-relaxed text-fg-muted">{triage.lede}</p>
+    </header>
+
+    <!-- The substance: manual step on the left, what replaces it on the right.
+         Every row maps to a tool the server actually exposes. -->
+    <section class="mt-16">
+      <h2 class="text-2xl font-bold tracking-tight">{triage.loopHeading}</h2>
+      <p class="mt-4 text-pretty leading-relaxed text-fg-muted">{triage.loopIntro}</p>
+      <div class="mt-6 overflow-x-auto">
+        <table class="w-full border-collapse text-sm">
+          <thead>
+            <tr class="border-b-2 border-border text-left">
+              <th class="w-1/2 py-3 pr-4 font-semibold">Doing it by hand</th>
+              <th class="py-3 font-semibold text-accent">With {site.name}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {
+              triage.steps.map((row) => (
+                <tr class="border-b border-border/60">
+                  <td class="py-3 pr-4 align-top text-fg-muted">{row.manual}</td>
+                  <td class="py-3 align-top text-fg">{row.instead}</td>
+                </tr>
+              ))
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="mt-16">
+      <h2 class="text-2xl font-bold tracking-tight">{triage.gapsHeading}</h2>
+      <div class="mt-6 space-y-4">
+        {
+          triage.gaps.map((gap, i) => (
+            <div class="border-l-2 border-accent py-2 pl-5">
+              <h3 class="flex items-center gap-3 text-lg font-semibold">
+                <span class="font-mono text-sm text-accent">
+                  {String(i + 1).padStart(2, "0")}
+                </span>
+                {gap.title}
+              </h3>
+              <p class="mt-2 text-pretty leading-relaxed text-fg-muted">{gap.body}</p>
+            </div>
+          ))
+        }
+      </div>
+    </section>
+
+    <!-- Kept on the page rather than buried in the FAQ. A page arguing that
+         something saves time, which then declines to quantify it, is more
+         credible for saying so out loud than for staying quiet. -->
+    <section class="mt-16 border-2 border-border bg-surface-1 p-6 sm:p-8">
+      <h2 class="text-2xl font-bold tracking-tight">{triage.honestyHeading}</h2>
+      <p class="mt-4 text-pretty leading-relaxed text-fg-muted">{triage.honesty}</p>
+    </section>
+
+    <div class="mt-16 border-2 border-accent bg-accent/10 p-8 text-center">
+      <h2 class="text-2xl font-bold tracking-tight">Try it on your own inbox</h2>
+      <p class="mx-auto mt-3 max-w-xl text-pretty leading-relaxed text-fg-muted">
+        Add the server to the assistant you already use, sign in with Google, and ask
+        it what needs you today. No account to create.
+      </p>
+      <a
+        href="/#connect"
+        class="mt-6 inline-flex items-center gap-2 bg-accent px-5 py-2.5 font-semibold text-accent-fg transition hover:bg-accent-strong"
+      >
+        Add {site.name} to your client
+      </a>
+    </div>
+
+    <!-- `details` rather than a JS accordion: the answers stay in the served
+         HTML, which both the long-tail queries and the FAQPage JSON-LD need. -->
+    <section class="mt-16">
+      <h2 class="text-2xl font-bold tracking-tight">{triage.faqHeading}</h2>
+      <div class="mt-6 divide-y divide-border border-2 border-border bg-surface-1">
+        {
+          triage.faq.map((item) => (
+            <details class="group px-4 sm:px-6">
+              <summary class="flex min-h-12 cursor-pointer list-none items-center justify-between gap-4 py-4 font-medium">
+                {item.q}
+                <svg
+                  class="size-5 shrink-0 text-fg-muted transition-transform group-open:rotate-45"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  aria-hidden="true"
+                >
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+              </summary>
+              <p class="pb-5 text-pretty leading-relaxed text-fg-muted">{item.a}</p>
+            </details>
+          ))
+        }
+      </div>
+    </section>
+
+    <section class="mt-16 border-t border-border/60 pt-10">
+      <h2 class="text-sm font-semibold text-fg-muted">Keep reading</h2>
+      <ul class="mt-4 flex flex-wrap gap-3">
+        {
+          clientGuides.map((guide) => (
+            <li>
+              <a
+                href={`/connect-gmail-to-${guide.slug}`}
+                class="inline-block border border-border px-4 py-2 text-sm text-fg-muted transition hover:border-accent hover:text-fg"
+              >
+                Connect Gmail to {guide.clientName}
+              </a>
+            </li>
+          ))
+        }
+        <li>
+          <a
+            href="/compare"
+            class="inline-block border border-border px-4 py-2 text-sm text-fg-muted transition hover:border-accent hover:text-fg"
+            >Gmail MCP alternatives</a
+          >
+        </li>
+        <li>
+          <a
+            href="/gmail-webhooks"
+            class="inline-block border border-border px-4 py-2 text-sm text-fg-muted transition hover:border-accent hover:text-fg"
+            >Gmail webhooks</a
+          >
+        </li>
+      </ul>
+    </section>
+  </main>
+  <Footer />
+</Base>

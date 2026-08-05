@@ -15,9 +15,11 @@
  *   compare.ts   - compare.md, vs/<id>.md, api.md
  *   manifests.ts - skills.sh, auth.md, pricing.md
  *   webhooks.ts  - gmail-webhooks.md
+ *   guides.ts    - connect-gmail-to-<client>.md, ai-email-triage.md
  */
 export * from "./connect";
 export * from "./llms";
 export * from "./compare";
 export * from "./manifests";
 export * from "./webhooks";
+export * from "./guides";

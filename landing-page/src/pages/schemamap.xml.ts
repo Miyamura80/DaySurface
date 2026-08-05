@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { site, comparison, pricing } from "../config/landing";
+import { site, comparison, pricing, clientGuides } from "../config/landing";
 
 /**
  * NLWeb / Schema Map feed (referenced via the `Schemamap:` directive in
@@ -36,6 +36,20 @@ export const GET: APIRoute = ({ site: astroSite }) => {
     { loc: `${origin}/gmail-webhooks`, type: "TechArticle" },
     { loc: `${origin}/gmail-webhooks`, type: "FAQPage" },
     { loc: `${origin}/gmail-webhooks`, type: "BreadcrumbList" },
+    // Each /connect-gmail-to-<client> guide embeds HowTo + FAQPage +
+    // BreadcrumbList. HowTo rather than TechArticle: the page is a numbered
+    // procedure, and the steps are the part an answer engine should be able to
+    // read out. Generated from the same config as the route so the feed cannot
+    // fall behind a newly added client.
+    ...clientGuides.flatMap((g) => [
+      { loc: `${origin}/connect-gmail-to-${g.slug}`, type: "HowTo" },
+      { loc: `${origin}/connect-gmail-to-${g.slug}`, type: "FAQPage" },
+      { loc: `${origin}/connect-gmail-to-${g.slug}`, type: "BreadcrumbList" },
+    ]),
+    // /ai-email-triage embeds TechArticle + FAQPage + BreadcrumbList.
+    { loc: `${origin}/ai-email-triage`, type: "TechArticle" },
+    { loc: `${origin}/ai-email-triage`, type: "FAQPage" },
+    { loc: `${origin}/ai-email-triage`, type: "BreadcrumbList" },
     // The docs are a separate service reverse-proxied under /docs on this same
     // origin (see landing-page/server.ts), so their structured data belongs in
     // this feed too - one origin, one schemamap. Every docs page emits
