@@ -60,11 +60,22 @@ export interface ClientGuide {
  * does not implement Apps gets tool calls and JSON, not a dashboard, so putting
  * this list on its page would describe something the reader will never see.
  *
- * Verified Apps hosts as of August 2026: Claude and Claude Desktop, ChatGPT,
- * VS Code Copilot, Microsoft 365 Copilot, Goose, Postman, MCPJam, Archestra.
- * Notably NOT Apps hosts, despite having install targets or logos on this site:
- * Cursor, Codex, Cline, Zed, Windsurf, Claude Code. Adding a guide for any of
- * those means writing it a capability list of its own - do not reuse this one.
+ * Apps hosts as of August 2026, per the official extension support matrix at
+ * modelcontextprotocol.io/extensions/client-matrix: Claude (web), Claude
+ * Desktop, ChatGPT, VS Code Copilot, Microsoft 365 Copilot, Goose, Postman,
+ * MCPJam, Cursor, Archestra.AI, PostHog Code.
+ *
+ * NOT Apps hosts, despite having install targets or logos on this site: Codex
+ * (desktop and CLI), Claude Code, Cline, Zed, Windsurf. Adding a guide for any
+ * of those means writing it a capability list of its own - do not reuse this
+ * one. Codex desktop is the near miss to re-check: the implementation exists
+ * behind an `enable_mcp_apps` flag but ships disabled, so it is "not yet"
+ * rather than "no".
+ *
+ * Check the matrix rather than a blog post before adding a client - the prose
+ * list on the MCP Apps overview page omits entries the matrix carries (it is
+ * what wrongly excluded Cursor here). The matrix is community-maintained, so
+ * treat a host we ship a guide for as needing its own confirmation too.
  */
 const CAPABILITIES: GuideCapability[] = [
   {
@@ -289,6 +300,51 @@ export const clientGuides: ClientGuide[] = [
       {
         q: "Is this a stdio extension or a remote one?",
         a: "Remote, over streamable HTTP. There is no local process to run and nothing to install, so picking the stdio type in the extension dialog will not work.",
+      },
+      ...SHARED_FAQ,
+    ],
+  },
+  {
+    slug: "cursor",
+    targetId: "cursor",
+    clientName: "Cursor",
+    title: "Connect Gmail to Cursor - DaySurface",
+    description:
+      "Add DaySurface to Cursor as a remote MCP server: sign in with Google, then read threads, draft replies and clear your inbox without leaving the editor.",
+    heading: "Connect Gmail to Cursor",
+    subhead: "One remote MCP server, and Cursor's agent can work your inbox.",
+    lede: "Cursor talks to outside tools over MCP, and it renders MCP Apps, so the inbox comes back as something you can act in rather than a blob of JSON in the agent transcript. Adding DaySurface is one remote server entry - there is no local process to run and no key to paste.",
+    prerequisites: [
+      "A Google account with Gmail.",
+      "Cursor, with the agent available. MCP tools are called by the agent, not by inline completions.",
+    ],
+    steps: [
+      {
+        title: "Open the MCP settings",
+        body: "In Cursor, go to Settings and then MCP. This lists the servers the agent can reach and is where a new one is added.",
+      },
+      {
+        title: "Add the server",
+        body: "Add a new MCP server, choose the remote or HTTP option, and paste the DaySurface endpoint. Cursor writes this to an mcp.json - user-level makes it available everywhere, project-level scopes it to one repo.",
+      },
+      {
+        title: "Sign in with Google",
+        body: "Cursor opens the OAuth flow in your browser the first time the server is used. Check the scopes on the consent screen before approving them.",
+      },
+      {
+        title: "Check the tools are listed",
+        body: "Back in MCP settings, the server should show as connected with its tools enumerated. If it looks stuck, toggling the server off and on again re-runs the handshake.",
+      },
+    ],
+    capabilities: CAPABILITIES,
+    faq: [
+      {
+        q: "Cursor uses \"mcpServers\" - can I copy a config from another editor?",
+        a: "Not safely. The key names differ between clients: Cursor and Cline use mcpServers, VS Code uses servers, Zed uses context_servers, and Windsurf wants serverUrl where the others want url. A snippet pasted across clients tends to fail silently rather than error.",
+      },
+      {
+        q: "Should I commit the server to my repo?",
+        a: "You can, via a project-level mcp.json, and everyone who opens the project gets the server. Each person still signs in to their own Google account - sharing the config never shares mail access.",
       },
       ...SHARED_FAQ,
     ],
