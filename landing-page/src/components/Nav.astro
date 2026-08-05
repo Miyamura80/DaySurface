@@ -49,6 +49,24 @@ import { site, nav } from "../config/landing";
         <span class="hidden sm:inline">{nav.github.label}</span>
       </a>
 
+      {/* Icon-only GitHub link for the phone header bar - the labelled button
+          above is sm:inline-flex, so below sm the repo would otherwise only be
+          reachable inside the hamburger sheet. Square to match the menu trigger. */}
+      <a
+        href={nav.github.href}
+        target="_blank"
+        rel="noopener noreferrer"
+        title={nav.github.title}
+        aria-label={nav.github.title}
+        class="group grid size-11 shrink-0 place-items-center border border-accent/40 transition hover:border-accent hover:bg-surface-1 sm:hidden"
+      >
+        <span
+          class="size-[18px] shrink-0 bg-fg-muted transition group-hover:bg-accent"
+          style="-webkit-mask:url('/logos/github.svg') center/contain no-repeat;mask:url('/logos/github.svg') center/contain no-repeat;"
+          aria-hidden="true"
+        ></span>
+      </a>
+
       <a
         href={nav.cta.href}
         class="inline-flex min-h-11 items-center whitespace-nowrap bg-accent px-2.5 text-xs font-semibold text-accent-fg transition hover:bg-accent-strong sm:px-4 sm:text-sm"
@@ -113,21 +131,6 @@ import { site, nav } from "../config/landing";
           </li>
         ))
       }
-      <li class="sm:hidden">
-        <a
-          href={nav.github.href}
-          target="_blank"
-          rel="noopener noreferrer"
-          class="flex min-h-12 items-center gap-2 border-b border-border/40 text-base text-fg-muted transition hover:text-fg"
-        >
-          <span
-            class="size-[18px] shrink-0 bg-fg-muted"
-            style="-webkit-mask:url('/logos/github.svg') center/contain no-repeat;mask:url('/logos/github.svg') center/contain no-repeat;"
-            aria-hidden="true"
-          />
-          {nav.github.label}
-        </a>
-      </li>
     </ul>
   </div>
 </header>
