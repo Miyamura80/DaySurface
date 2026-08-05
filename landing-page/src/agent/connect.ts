@@ -122,6 +122,7 @@ nothing to install - see ${o}/connect.
 - ${o}/compare - how it compares to other Gmail MCP servers
 - ${o}/api - the HTTP API
 - ${o}/docs - full documentation
+- ${o}/support - get help or contact the team (also /support.md)
 - ${o}/privacy, ${o}/terms
 
 ## Machine-readable

@@ -1,0 +1,78 @@
+---
+/**
+ * The /support page body, shared by /support (canonical) and its /help and
+ * /contact aliases. Prose-only shell, same typography and theme tokens as
+ * /about, /privacy and /terms - self-serve troubleshooting first, then the
+ * human channels. All copy comes from `support` in the landing config.
+ */
+import { site, support } from "../config/landing";
+---
+
+<main class="mx-auto max-w-3xl px-4 py-12 leading-relaxed sm:px-6 sm:py-16">
+  <a href="/" class="inline-flex min-h-11 items-center text-sm opacity-70 hover:opacity-100"
+    >&larr; Back to {site.name}</a
+  >
+  <h1 class="mt-6 text-4xl font-bold">{support.title}</h1>
+  <p class="mt-4 text-fg-muted">{support.intro}</p>
+
+  <h2 class="mt-12 text-2xl font-semibold">Common issues</h2>
+  <div class="mt-4 space-y-6">
+    {
+      support.troubleshooting.map((item) => (
+        <div class="border-l-2 border-border/60 pl-4">
+          <h3 class="font-semibold text-fg">{item.q}</h3>
+          <p class="mt-2 text-fg-muted">{item.a}</p>
+          {item.href && (
+            <a
+              href={item.href}
+              class="mt-2 inline-flex min-h-11 items-center text-sm underline decoration-from-font underline-offset-2 hover:text-fg"
+              {...(item.href.startsWith("http")
+                ? { target: "_blank", rel: "noopener" }
+                : {})}
+            >
+              {item.hrefLabel ?? "Learn more"} &rarr;
+            </a>
+          )}
+        </div>
+      ))
+    }
+  </div>
+
+  <p class="mt-8 text-sm text-fg-muted">
+    More questions are answered in the
+    <a class="underline decoration-from-font underline-offset-2" href="/#faq">FAQ</a>
+    and the
+    <a
+      class="underline decoration-from-font underline-offset-2"
+      href={site.docsUrl}
+      target="_blank"
+      rel="noopener">documentation</a
+    >.
+  </p>
+
+  <h2 class="mt-14 text-2xl font-semibold">{support.channelsHeading}</h2>
+  <div class="mt-4 grid gap-4 sm:grid-cols-2">
+    {
+      support.channels.map((channel) => (
+        <a
+          href={channel.href}
+          {...(channel.href.startsWith("http")
+            ? { target: "_blank", rel: "noopener" }
+            : {})}
+          class="group block border border-border/60 bg-surface-1/40 p-5 transition hover:border-accent/60 hover:bg-surface-1"
+        >
+          <div class="flex items-center gap-2">
+            <span class="font-semibold text-fg">{channel.label}</span>
+            <span class="text-xs uppercase tracking-wide text-fg-subtle">
+              {channel.kind === "private" ? "private" : "public"}
+            </span>
+          </div>
+          <p class="mt-2 text-sm text-fg-muted">{channel.description}</p>
+          <span class="mt-3 inline-flex items-center text-sm font-medium text-fg transition group-hover:text-accent">
+            {channel.cta} &rarr;
+          </span>
+        </a>
+      ))
+    }
+  </div>
+</main>
