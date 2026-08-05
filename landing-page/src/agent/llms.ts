@@ -98,6 +98,17 @@ export function buildLlmsFullTxt(origin: string): string {
             ? `Paste this into the agent:\n\n${c.setup_prompt}`
             : numbered(c.steps);
           break;
+        case "manual":
+          // No install link and no prompt. These carry their click-path on
+          // their own /connect-gmail-to-<slug> guide instead of here, which is
+          // what keeps /connect inside its payload budget - see the comment
+          // above the manual targets in connect.ts. Fall back to steps anyway,
+          // so a future manual target that does carry them is not silently
+          // reduced to one line.
+          how = c.steps?.length
+            ? numbered(c.steps)
+            : "Add the server by hand in this client's own settings, using the MCP endpoint above.";
+          break;
       }
       return `### ${c.name}\n${how}${c.note ? `\n${c.note}` : ""}`;
     })

@@ -42,7 +42,7 @@ import { deepLink } from "../utils/deeplink";
  * worse than shipping no link at all - it tells someone the job is done while
  * the form in front of them is blank. That rule is expressed here, once.
  */
-export type InstallEffort = "one-click" | "command" | "dialog-only" | "prompt";
+export type InstallEffort = "one-click" | "command" | "dialog-only" | "prompt" | "manual";
 
 /**
  * Every string that varies by effort, in one table.
@@ -97,6 +97,12 @@ export const effortMeta: Record<
     stepsLabel: "Or add it by hand",
     shortHow: "paste the setup prompt into the client.",
   },
+  manual: {
+    heading: "Add it by hand",
+    badge: "manual",
+    stepsLabel: "Click-path",
+    shortHow: "add the server by hand - no install link and no setup prompt.",
+  },
 };
 
 /** Render order for the effort groups. */
@@ -105,6 +111,7 @@ const EFFORT_ORDER: readonly InstallEffort[] = [
   "command",
   "dialog-only",
   "prompt",
+  "manual",
 ];
 
 /** A single client's install path, flattened for JSON and markdown alike. */
@@ -128,13 +135,17 @@ export interface InstallClient {
 /**
  * Classify a target by the work left after the click.
  *
- * `manual` targets (no install URL, no prompt - just a click-path) currently
- * do not exist; connect.ts keeps the method for the next host that ships no URL
- * scheme at all. They group with `prompt`, whose heading and steps handling
- * already fit "you configure this yourself".
+ * `manual` targets - no install URL, no setup prompt, just a click-path - get
+ * their own bucket rather than sharing `prompt`'s. They used to share it, back
+ * when none existed. Once Postman, MCPJam and M365 Copilot arrived, that
+ * grouping silently broke the shared-prompt collapse in `groupedInstallMatrix`:
+ * the collapse only fires when EVERY client in a group carries the same prompt,
+ * and a manual client carries none, so one ~450-char prompt went from printed
+ * once to printed four times. `agent-journey.test.ts` catches exactly that.
  */
 function effortOf(t: InstallTarget): InstallEffort {
   if (t.method === "deeplink") return t.prefills === false ? "dialog-only" : "one-click";
+  if (t.method === "manual") return "manual";
   if (t.setupKind === "command") return "command";
   return "prompt";
 }

@@ -130,6 +130,30 @@
       "note": "Windsurf uses “serverUrl”, not “url” - a snippet copied from another client will fail silently."
     },
     {
+      "id": "postman",
+      "name": "Postman",
+      "method": "manual",
+      "effort": "manual",
+      "install_url": null,
+      "prefills": null,
+      "steps": null,
+      "setup_prompt": null,
+      "setup_kind": null,
+      "note": "For inspecting the server, not reading your mail. MCP is its own request type - see /connect-gmail-to-postman."
+    },
+    {
+      "id": "mcpjam",
+      "name": "MCPJam",
+      "method": "manual",
+      "effort": "manual",
+      "install_url": null,
+      "prefills": null,
+      "steps": null,
+      "setup_prompt": null,
+      "setup_kind": null,
+      "note": "The inspector view. Pick OAuth, not Bearer Token - see /connect-gmail-to-mcpjam."
+    },
+    {
       "id": "other",
       "name": "Any MCP client",
       "method": "prompt",
