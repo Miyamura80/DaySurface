@@ -1,5 +1,6 @@
 ---
 import { site, nav } from "../config/landing";
+import GithubMark from "./GithubMark.astro";
 ---
 
 <header
@@ -41,12 +42,25 @@ import { site, nav } from "../config/landing";
         title={nav.github.title}
         class="group hidden min-h-11 items-center gap-2 border border-accent/40 px-3 text-sm font-medium text-fg-muted transition hover:border-accent hover:bg-surface-1 hover:text-fg sm:inline-flex"
       >
-        <span
-          class="size-[18px] shrink-0 bg-fg-muted transition group-hover:bg-accent"
-          style="-webkit-mask:url('/logos/github.svg') center/contain no-repeat;mask:url('/logos/github.svg') center/contain no-repeat;"
-          aria-hidden="true"
-        ></span>
+        <GithubMark class="size-[18px] bg-fg-muted transition group-hover:bg-accent" />
         <span class="hidden sm:inline">{nav.github.label}</span>
+      </a>
+
+      {/* Icon-only GitHub link for the phone header bar. The labelled button
+          above is sm:inline-flex, so below sm the repo would otherwise only be
+          reachable inside the hamburger sheet. Gated at min-[360px]: at 320px
+          the bar has no room for a fourth 44px control without clipping the CTA
+          and menu trigger, so on those narrowest phones the repo stays in the
+          sheet entry below instead. Square to match the menu trigger. */}
+      <a
+        href={nav.github.href}
+        target="_blank"
+        rel="noopener noreferrer"
+        title={nav.github.title}
+        aria-label={nav.github.title}
+        class="group hidden size-11 shrink-0 place-items-center border border-accent/40 transition hover:border-accent hover:bg-surface-1 min-[360px]:grid sm:hidden"
+      >
+        <GithubMark class="size-[18px] bg-fg-muted transition group-hover:bg-accent" />
       </a>
 
       <a
@@ -113,18 +127,16 @@ import { site, nav } from "../config/landing";
           </li>
         ))
       }
-      <li class="sm:hidden">
+      {/* Only below 360px, where the header bar has no room for the icon-only
+          GitHub control - above that the bar variant takes over. */}
+      <li class="min-[360px]:hidden">
         <a
           href={nav.github.href}
           target="_blank"
           rel="noopener noreferrer"
-          class="flex min-h-12 items-center gap-2 border-b border-border/40 text-base text-fg-muted transition hover:text-fg"
+          class="group flex min-h-12 items-center gap-2 border-b border-border/40 text-base text-fg-muted transition hover:text-fg"
         >
-          <span
-            class="size-[18px] shrink-0 bg-fg-muted"
-            style="-webkit-mask:url('/logos/github.svg') center/contain no-repeat;mask:url('/logos/github.svg') center/contain no-repeat;"
-            aria-hidden="true"
-          />
+          <GithubMark class="size-[18px] bg-fg-muted transition group-hover:bg-accent" />
           {nav.github.label}
         </a>
       </li>
