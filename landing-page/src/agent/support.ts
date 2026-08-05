@@ -22,16 +22,18 @@ export function buildSupportMd(origin: string): string {
     })
     .join("\n\n");
 
-  const channels = support.channels
+  // Primary first, so the fetch order matches the page's visual priority.
+  const ordered = [...support.channels].sort(
+    (a, b) => Number(b.primary) - Number(a.primary),
+  );
+  const channels = ordered
     .map((c) => {
       const target = c.href.startsWith("mailto:") ? supportEmail : c.href;
-      return `### ${c.label} (${c.kind})\n${c.description}\n  ${c.cta === supportEmail ? `Email: ${supportEmail}` : `${c.cta}: ${target}`}`;
+      return `### ${c.cta}\n${c.blurb}.\n  ${c.href.startsWith("mailto:") ? `Email: ${supportEmail}` : target}`;
     })
     .join("\n\n");
 
   return `# ${support.title}
-
-${support.intro}
 
 ## Common issues
 

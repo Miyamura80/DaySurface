@@ -31,28 +31,29 @@ export interface TroubleshootItem {
 }
 
 export interface SupportChannel {
-  label: string;
-  /** When to use this one, so a user picks the right door the first time. */
-  description: string;
-  href: string;
-  /** Button/label text. */
+  /** Link / button text. */
   cta: string;
+  href: string;
+  /** Terse routing hint - which door this is. Keep it to a few words. */
+  blurb: string;
+  /** Reused mark: a logo in public/logos/, or the built-in "mail" glyph. */
+  icon: "github" | "mail";
   /**
-   * "public"  - anyone can read it (GitHub Issues): bugs, features, how-tos.
-   * "private" - one-to-one (email): billing, account, anything with your data.
+   * Exactly one channel is `primary`: it renders as the single accent CTA.
+   * Every other channel is a quiet secondary link (see the design rule "one
+   * CTA per view"). DaySurface serves end users, so email leads and GitHub is
+   * the developer fallback.
    */
-  kind: "public" | "private";
+  primary: boolean;
 }
 
 export const support: {
   title: string;
-  intro: string;
   troubleshooting: TroubleshootItem[];
   channelsHeading: string;
   channels: SupportChannel[];
 } = {
   title: "Support & contact",
-  intro: `Hit a snag or have a question? Most issues are setup or connection related and are covered below. If that does not sort it, reach a human through one of the channels underneath.`,
   troubleshooting: [
     {
       q: "The server will not connect, or my client rejects the URL",
@@ -72,30 +73,22 @@ export const support: {
       href: "/connect",
       hrefLabel: "Reconnect",
     },
-    {
-      q: "Do I need an account, and which URL do I paste?",
-      a: `No account, no signup, nothing to install. Paste the endpoint ${site.mcpUrl} into any MCP client; the server name is ${site.serverName}. Full per-client walkthrough is on the connect page.`,
-      href: "/connect",
-      hrefLabel: "Connect guide",
-    },
   ],
-  channelsHeading: "Still stuck? Talk to us",
+  channelsHeading: "Still stuck?",
   channels: [
     {
-      label: "GitHub Issues",
-      description:
-        "Bugs, feature requests, and anything technical or reproducible. Public and searchable, so others hit by the same thing find the answer.",
-      href: `${site.githubUrl}/issues`,
-      cta: "Open an issue",
-      kind: "public",
+      cta: "Email support",
+      href: `mailto:${supportEmail}`,
+      blurb: "Billing, account, or anything private",
+      icon: "mail",
+      primary: true,
     },
     {
-      label: "Email support",
-      description:
-        "Account, billing, security, or anything involving your data that should not be public. Goes straight to the team.",
-      href: `mailto:${supportEmail}`,
-      cta: supportEmail,
-      kind: "private",
+      cta: "Open a GitHub issue",
+      href: `${site.githubUrl}/issues`,
+      blurb: "Public bugs and feature requests",
+      icon: "github",
+      primary: false,
     },
   ],
 };
