@@ -227,38 +227,20 @@ export const connect: {
       setupPrompt: AGENT_SETUP_PROMPT,
       note: "Windsurf uses “serverUrl”, not “url” - a snippet copied from another client will fail silently.",
     },
-    // Inspection tools and the enterprise assistant. Last on purpose: someone
-    // opening this picker usually wants their inbox in a chat client, and these
-    // are either for looking at the server or for a rollout that is not theirs
-    // to do. All three are `manual` - none ships a URL scheme carrying a name
-    // and endpoint.
+    // Two MCP Apps hosts are deliberately absent from this picker.
     //
-    // No `steps` here, unlike every other target, and that is deliberate. Each
-    // of these has a full guide at /connect-gmail-to-<slug> carrying the whole
-    // click-path, and /connect is under a hard payload budget (see the
-    // "payload budgets" test) precisely so a fetcher that truncates still gets
-    // the answer. Three more click-paths cost ~2.6KB and broke it. The note
-    // names the one thing each host gets wrong; the guide has the rest.
-    {
-      id: "postman",
-      name: "Postman",
-      logo: "/logos/mcp.svg",
-      method: "manual",
-      note: "For inspecting the server, not reading your mail. MCP is its own request type - see /connect-gmail-to-postman.",
-    },
-    {
-      id: "mcpjam",
-      name: "MCPJam",
-      logo: "/logos/mcp.svg",
-      method: "manual",
-      note: "The inspector view. Pick OAuth, not Bearer Token - see /connect-gmail-to-mcpjam.",
-    },
-    // Microsoft 365 Copilot is deliberately NOT here, despite having a guide at
-    // /connect-gmail-to-microsoft-365-copilot. This picker answers "add it to
-    // the client in front of you"; M365 is provisioned by a tenant admin from
-    // the Microsoft 365 admin center or Copilot Studio, needs Global or AI
-    // Administrator, and cannot be self-served from a marketing page. Listing it
-    // beside one-click targets would promise something the visitor cannot do.
+    // Microsoft 365 Copilot, despite having a guide at
+    // /connect-gmail-to-microsoft-365-copilot: it is provisioned by a tenant
+    // admin from the Microsoft 365 admin center or Copilot Studio and needs
+    // Global or AI Administrator, so it cannot be self-served from a marketing
+    // page. Listing it beside one-click targets would promise the visitor
+    // something they cannot do.
+    //
+    // Postman and MCPJam, which had entries here and were removed: both render
+    // MCP Apps, but they are tools for inspecting a server rather than clients
+    // anyone reads mail in, and this picker answers "add it to the client in
+    // front of you". Anyone pointing an inspector at the endpoint already knows
+    // how; "Any MCP client" below covers them.
     {
       id: "other",
       name: "Any MCP client",

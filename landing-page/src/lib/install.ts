@@ -136,12 +136,14 @@ export interface InstallClient {
  * Classify a target by the work left after the click.
  *
  * `manual` targets - no install URL, no setup prompt, just a click-path - get
- * their own bucket rather than sharing `prompt`'s. They used to share it, back
- * when none existed. Once Postman, MCPJam and M365 Copilot arrived, that
- * grouping silently broke the shared-prompt collapse in `groupedInstallMatrix`:
- * the collapse only fires when EVERY client in a group carries the same prompt,
- * and a manual client carries none, so one ~450-char prompt went from printed
- * once to printed four times. `agent-journey.test.ts` catches exactly that.
+ * their own bucket rather than sharing `prompt`'s, even though none exist right
+ * now. They did briefly, and the shared bucket broke immediately: the
+ * shared-prompt collapse in `groupedInstallMatrix` only fires when EVERY client
+ * in a group carries the same prompt, and a manual client carries none, so one
+ * ~450-char prompt went from printed once to printed four times on the two
+ * surfaces whose whole job is surviving truncation. `agent-journey.test.ts`
+ * catches it. The bucket stays so the next manual target does not reintroduce
+ * the bug - `connect.ts` keeps the method for exactly that eventuality.
  */
 function effortOf(t: InstallTarget): InstallEffort {
   if (t.method === "deeplink") return t.prefills === false ? "dialog-only" : "one-click";

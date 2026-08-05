@@ -1,11 +1,10 @@
 /**
  * Types and shared copy for the `/connect-gmail-to-<client>` guides.
  *
- * Split out of `client-guides.ts` so the guide data can live in more than one
- * module without a cycle: this file owns the contract and the reusable blocks,
- * `client-guides.ts` owns the end-user assistants, `client-guides-tooling.ts`
- * owns the inspection and enterprise hosts, and `client-guides.ts` assembles the
- * final array. Nothing here imports either data module.
+ * Split out of `client-guides.ts` so the contract and the reusable copy sit
+ * apart from the guide data, which is the part that grows every time a client is
+ * added. `client-guides.ts` was within ~50 lines of the 500-line file limit with
+ * five guides in it. Nothing here imports the data module.
  */
 import type { FaqItem } from "./content";
 
@@ -90,34 +89,6 @@ export const CAPABILITIES: GuideCapability[] = [
   {
     title: "Search across threads by meaning, not just keywords",
     body: "Search runs server-side over your mail and returns threads, so the agent works from what is actually in your inbox rather than what it can hold in context.",
-  },
-];
-
-/**
- * Capability list for the inspection hosts (Postman, MCPJam).
- *
- * Both render MCP Apps, so CAPABILITIES would be *accurate* on their pages and
- * still wrong: nobody triages their mail in an API client. Someone connecting
- * DaySurface in Postman is evaluating the server, not clearing their inbox, and
- * a page that pitches them a morning routine has misread why they are there.
- * These describe what the tool is actually for.
- */
-export const DEV_CAPABILITIES: GuideCapability[] = [
-  {
-    title: "See the whole tool surface before you commit",
-    body: "Connecting lists every tool the server exposes with its input and output schema, so you can judge the surface area without reading the source or adding it to a client you use daily.",
-  },
-  {
-    title: "Call tools by hand with your own arguments",
-    body: "Invoke any tool directly and inspect the raw result. Useful for checking what a call actually returns before you trust an agent to make it.",
-  },
-  {
-    title: "Watch the OAuth exchange end to end",
-    body: "The sign-in is a standard OAuth flow with dynamic client registration. Both tools show the authorisation steps, which is the fastest way to debug an integration that is failing before any tool is ever called.",
-  },
-  {
-    title: "Render the MCP Apps surfaces",
-    body: "Both hosts implement the MCP Apps extension, so the ui:// resources mount rather than showing up as an unrendered payload. What you see is what a chat client's user would see.",
   },
 ];
 

@@ -19,15 +19,20 @@
  * install widget and this guide must not disagree about it.
  */
 import { type ClientGuide, CAPABILITIES, SHARED_FAQ } from "./client-guides-shared";
-import { toolingGuides } from "./client-guides-tooling";
 
 export type { ClientGuide, GuideStep, GuideCapability } from "./client-guides-shared";
 
 /**
- * The everyday chat assistants. Ordered by who the reader is most likely to be,
- * which is also the order they cross-link in.
+ * Every guide, ordered by who the reader is most likely to be. That order is
+ * also the sitemap order and the order of the "keep reading" links at the foot
+ * of each page, so the mainstream assistants stay the obvious next click.
+ *
+ * Postman and MCPJam had guides here and were removed deliberately. Both render
+ * MCP Apps, so they qualified on capability, but neither is a place anyone reads
+ * their mail - they are for inspecting a server - and "connect gmail to postman"
+ * has no search behind it. Capability alone is not a reason to ship a page.
  */
-const assistantGuides: ClientGuide[] = [
+export const clientGuides: ClientGuide[] = [
   {
     slug: "claude",
     targetId: "claude",
@@ -261,17 +266,60 @@ const assistantGuides: ClientGuide[] = [
       ...SHARED_FAQ,
     ],
   },
+  {
+    slug: "microsoft-365-copilot",
+    // Null on purpose - see the field's doc comment. The install picker cannot
+    // offer a tenant-admin provisioning flow, so this guide is the only place
+    // M365 Copilot is documented.
+    targetId: null,
+    clientName: "Microsoft 365 Copilot",
+    title: "Connect Gmail to Microsoft 365 Copilot - DaySurface",
+    description:
+      "Add the DaySurface Gmail MCP server to Microsoft 365 Copilot as a custom connector, or as an MCP tool on a Copilot Studio agent. Requires a tenant administrator.",
+    heading: "Connect Gmail to Microsoft 365 Copilot",
+    subhead: "An admin adds this one - there is no per-user settings screen.",
+    lede: "Microsoft 365 Copilot reaches third-party MCP servers through connectors managed at the tenant level, so this is not something an individual turns on for themselves. There are two documented routes: a custom connector in the Microsoft 365 admin center, which makes the server available across the tenant, or an MCP tool on a specific Copilot Studio agent. Both need elevated rights.",
+    prerequisites: [
+      "A Google account with Gmail.",
+      "Global Administrator or AI Administrator in the Microsoft 365 admin center for the connector route.",
+      "For the admin-center route, authentication configured in advance - the connector form asks for a registration ID, not a URL and a password.",
+    ],
+    steps: [
+      {
+        title: "Open the Copilot connectors gallery",
+        body: "Sign in to the Microsoft 365 admin center and go to Copilot, then Connectors. Open the Gallery tab.",
+      },
+      {
+        title: "Start a custom connector",
+        body: "Under Created by your org, find the Create a new connector tile and select Add.",
+      },
+      {
+        title: "Point it at the MCP server",
+        body: "On the custom connector page, under Connect to MCP server, select Add and supply the DaySurface endpoint along with the registration ID matching your authentication method - the SSO or OAuth registration ID from the Teams Developer Portal.",
+      },
+      {
+        title: "Save and roll out",
+        body: "Save to create the connector. It then follows your tenant's normal rollout and consent path rather than appearing instantly for everyone.",
+      },
+      {
+        title: "Or add it to one Copilot Studio agent instead",
+        body: "If you want it scoped to a single agent rather than the tenant, open that agent's Tools page in Copilot Studio, choose Add a tool, then New tool, then MCP, and run the onboarding wizard with the endpoint and OAuth 2.0.",
+      },
+    ],
+    capabilities: CAPABILITIES,
+    faq: [
+      {
+        q: "Can I add this myself without an admin?",
+        a: "No. Both documented routes need elevated rights - Global or AI Administrator for a tenant connector, and maker access to the agent for the Copilot Studio route. If you want DaySurface on your own account today, use a client you control, such as Claude or ChatGPT.",
+      },
+      {
+        q: "Microsoft's guidance mentions read-only tools. Does that rule this out?",
+        a: "That guidance is about federated connectors used for grounding, where the tools are search and fetch. DaySurface exposes tools that change mailbox state as well, so check the route you pick against your own tenant policy before rolling it out - and note that sending is gated behind a draft you approve rather than happening on the model's judgement.",
+      },
+      ...SHARED_FAQ,
+    ],
+  },
 ];
-
-/**
- * Every guide, assistants first.
- *
- * Order matters twice over: it is the order of the sitemap entries and of the
- * "keep reading" links at the foot of each page, so the assistants stay the
- * obvious next click and the inspection tools sit where someone evaluating the
- * server will still find them.
- */
-export const clientGuides: ClientGuide[] = [...assistantGuides, ...toolingGuides];
 
 /** Lookup used by `getStaticPaths` and the markdown twin. */
 export function clientGuideBySlug(slug: string): ClientGuide | undefined {
