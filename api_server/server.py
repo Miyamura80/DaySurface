@@ -68,16 +68,6 @@ _API_DESCRIPTION = (
 )
 
 
-def _is_dev() -> bool:
-    """True on a developer machine, where the server is reachable over http://.
-
-    Same predicate as ``api_server/routes/google/webhooks.py``: only the two
-    explicit development values relax anything, so an unset or unrecognised
-    ``DEV_ENV`` (staging, prod, a typo) is treated as production.
-    """
-    return (getattr(global_config, "DEV_ENV", "") or "").lower() in {"local", "dev"}
-
-
 class SessionCookiePolicy(TypedDict):
     """The subset of ``SessionMiddleware`` options this app pins deliberately."""
 
@@ -97,8 +87,11 @@ def session_cookie_policy() -> SessionCookiePolicy:
     ``same_site`` is stated rather than inherited so the CSRF posture is
     explicit: ``lax`` still lets the cookie ride the top-level GET redirect
     back from Google's OAuth consent screen, which ``strict`` would drop.
+
+    ``global_config.is_dev`` fails secure - an unset or misspelled ``DEV_ENV``
+    reads as production - so a typo cannot drop the ``Secure`` flag.
     """
-    return {"https_only": not _is_dev(), "same_site": "lax"}
+    return {"https_only": not global_config.is_dev, "same_site": "lax"}
 
 
 @asynccontextmanager
@@ -151,7 +144,22 @@ app.add_middleware(
 # because the mount goes through `app.mount`; a second ASGI app composed
 # *around* `app` (e.g. `Mount("/mcp", mcp_app)` in a parent Starlette router)
 # would need its own registration.
-app.add_middleware(SecurityHeadersMiddleware)  # type: ignore[arg-type]
+#
+# The docs paths are read off the app rather than hardcoded in the middleware,
+# so customising or disabling `docs_url`/`redoc_url` can never leave the looser
+# CSP pointed at a path FastAPI no longer serves the bundles on.
+app.add_middleware(
+    SecurityHeadersMiddleware,  # type: ignore[arg-type]
+    docs_paths=frozenset(
+        path
+        for path in (
+            app.docs_url,
+            app.redoc_url,
+            app.swagger_ui_oauth2_redirect_url,
+        )
+        if path
+    ),
+)
 
 # --- Exception handlers ---------------------------------------------------
 # Map the oversized-attachment domain error to 413 so an over-cap

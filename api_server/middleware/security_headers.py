@@ -10,99 +10,57 @@ for the same reason ``MCPAuthMiddleware`` is: headers are rewritten on the
 ``http.response.start`` message, so the SSE streams FastMCP emits on ``/mcp``
 are never buffered.
 
-Content-Security-Policy comes in two flavours. The default is a deny-everything
-policy: this host serves JSON to agents plus three small self-contained HTML
-documents (the landing page in ``api_server/routes/_landing.html`` and the
-Google OAuth success/error pages in ``api_server/routes/google_oauth.py``),
-none of which load a script, an image, a font, or an external stylesheet. The
-one thing they do need is the landing page's inline ``<style>`` block, which is
-allowed by *hash* rather than by ``'unsafe-inline'`` - the hashes are derived
-from the template at import time, so they cannot drift from what is served
-(``tests/test_security_headers.py`` pins that).
+The default Content-Security-Policy denies everything. This host serves JSON to
+agents plus a few small self-contained HTML documents, none of which load a
+script, an image, a font, or an external stylesheet. A route that legitimately
+needs more sets its own ``Content-Security-Policy`` on the response and the
+middleware leaves it alone (every header here is applied with ``setdefault``) -
+that is how ``api_server/routes/index.py`` allows the landing page's inline
+``<style>`` by hash, computed from the exact markup it is about to send.
+Deriving the exception where the document is rendered keeps it scoped to that
+one response instead of widening ``style-src`` on every response the server
+emits, and makes "the hash cannot drift" true by construction.
 
-The exception is FastAPI's interactive docs (``/docs``, ``/redoc``, and the
-Swagger OAuth2 redirect page). Those are third-party bundles loaded from a CDN
-with an inline bootstrap script, so they get a narrower-than-default-src but
-necessarily looser policy scoped to just those paths.
+The one exception the middleware owns is FastAPI's interactive docs. Those are
+third-party bundles loaded from a CDN with an inline bootstrap script, so they
+get a necessarily looser policy - scoped by exact path match to the URLs the
+FastAPI app actually serves them on, which ``server.py`` passes in rather than
+this module hardcoding (and later desyncing from) the defaults.
 """
-
-import base64
-import hashlib
-import re
-from pathlib import Path
 
 from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
-
-# The HTML this server renders itself. Only ``_landing.html`` carries a
-# `<style>` element today; the OAuth pages are unstyled markup.
-_OWN_HTML_TEMPLATES = (Path(__file__).resolve().parent.parent / "routes",)
-
-_STYLE_ELEMENT_RE = re.compile(r"<style[^>]*>(.*?)</style>", re.DOTALL | re.IGNORECASE)
-
-# Paths serving FastAPI's Swagger/ReDoc bundles. Matched on the path segment
-# (never a bare prefix) so ``/docsearch`` is not handed the looser policy.
-_DOCS_ROOTS = ("/docs", "/redoc")
 
 _CDN = "https://cdn.jsdelivr.net"
 _FASTAPI_FAVICON_HOST = "https://fastapi.tiangolo.com"
 _GOOGLE_FONTS_CSS = "https://fonts.googleapis.com"
 _GOOGLE_FONTS_FILES = "https://fonts.gstatic.com"
 
-
-def _inline_style_hashes() -> tuple[str, ...]:
-    """CSP ``sha256-`` source expressions for every inline style we serve.
-
-    Read from the HTML templates on disk so the policy is generated from the
-    same bytes the response body carries. A template whose ``<style>`` content
-    is substituted at render time would break this - none are today, and the
-    test suite asserts the hash matches the live ``/`` response.
-    """
-    hashes: list[str] = []
-    for directory in _OWN_HTML_TEMPLATES:
-        for template in sorted(directory.glob("*.html")):
-            markup = template.read_text(encoding="utf-8")
-            for block in _STYLE_ELEMENT_RE.findall(markup):
-                digest = hashlib.sha256(block.encode("utf-8")).digest()
-                expression = f"'sha256-{base64.b64encode(digest).decode('ascii')}'"
-                if expression not in hashes:
-                    hashes.append(expression)
-    return tuple(hashes)
-
-
-def _default_csp() -> str:
-    """Deny-by-default policy for the API and this server's own HTML."""
-    style_src = " ".join(("'self'", *_inline_style_hashes()))
-    return "; ".join(
-        (
-            "default-src 'none'",
-            "base-uri 'none'",
-            "form-action 'none'",
-            "frame-ancestors 'none'",
-            "script-src 'none'",
-            "object-src 'none'",
-            f"style-src {style_src}",
-            # Browsers request /favicon.ico unprompted; without img-src that
-            # fetch is a console error on every page view.
-            "img-src 'self' data:",
-            "connect-src 'self'",
-        )
+DEFAULT_CSP = "; ".join(
+    (
+        "default-src 'none'",
+        "base-uri 'none'",
+        "form-action 'none'",
+        "frame-ancestors 'none'",
+        "script-src 'none'",
+        "object-src 'none'",
+        "style-src 'self'",
+        # Browsers request /favicon.ico unprompted; without img-src that fetch
+        # is a console error on every page view.
+        "img-src 'self' data:",
+        "connect-src 'self'",
     )
+)
 
-
-# Computed once at import: the templates are read from disk, and re-hashing
-# them per request would put a file read in the hot path of every response.
-_DEFAULT_CSP = _default_csp()
-
-_DOCS_CSP = "; ".join(
+DOCS_CSP = "; ".join(
     (
         "default-src 'self'",
         "base-uri 'self'",
         "form-action 'self'",
         "frame-ancestors 'none'",
         # Swagger UI and ReDoc ship as CDN bundles booted by an inline script.
-        # 'unsafe-inline' is confined to these three documentation paths and
-        # never reaches an endpoint that renders user or attacker input.
+        # 'unsafe-inline' is confined to the documentation paths and never
+        # reaches an endpoint that renders user or attacker input.
         f"script-src 'self' 'unsafe-inline' {_CDN}",
         f"style-src 'self' 'unsafe-inline' {_CDN} {_GOOGLE_FONTS_CSS}",
         f"font-src 'self' data: {_GOOGLE_FONTS_FILES}",
@@ -158,33 +116,34 @@ STATIC_SECURITY_HEADERS: tuple[tuple[str, str], ...] = (
 )
 
 
-def is_docs_path(path: str) -> bool:
-    """True for FastAPI's Swagger/ReDoc documents and their sub-paths."""
-    return any(path == root or path.startswith(f"{root}/") for root in _DOCS_ROOTS)
-
-
-def content_security_policy(path: str) -> str:
-    """The CSP this server serves for *path*."""
-    return _DOCS_CSP if is_docs_path(path) else _DEFAULT_CSP
-
-
 class SecurityHeadersMiddleware:
     """Attach the ASVS V14.4 response headers to every HTTP response.
 
     Existing header values are never overwritten: a route that deliberately
-    sets its own (say, a permissive ``Content-Security-Policy`` for an embedded
-    document) stays in control of its response.
+    sets its own (say, a ``Content-Security-Policy`` carrying a hash for its
+    own inline style) stays in control of its response.
+
+    ``docs_paths`` is the exact set of URLs serving FastAPI's Swagger/ReDoc
+    bundles. It is injected rather than hardcoded so it tracks whatever the app
+    is actually configured with, and matched exactly rather than by prefix so
+    an unmatched path under ``/docs/`` - which falls through to the MCP mount's
+    404 handler - is not handed the looser policy on the strength of its URL
+    shape alone.
     """
 
-    def __init__(self, app: ASGIApp) -> None:
+    def __init__(self, app: ASGIApp, docs_paths: frozenset[str] = frozenset()) -> None:
         self.app = app
+        self.docs_paths = docs_paths
+
+    def _csp_for(self, path: str) -> str:
+        return DOCS_CSP if path in self.docs_paths else DEFAULT_CSP
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
 
-        policy = content_security_policy(scope.get("path", ""))
+        policy = self._csp_for(scope.get("path", ""))
 
         async def send_with_security_headers(message: Message) -> None:
             if message["type"] == "http.response.start":

@@ -104,9 +104,11 @@ curl https://api.daysurface.com/health
 { "status": "ok" }
 ```
 
-Status is `"ok"` when all components are healthy, `"degraded"` if any have
-errors. The endpoint always answers `200`, so a platform healthcheck keeps
-passing while a non-critical dependency is degraded.
+Liveness only: the endpoint answers `200` with a fixed body whenever the
+process is serving, and deliberately runs no dependency probes. Readiness -
+whether the database, Redis and Stripe are actually reachable - is on
+`/health/detail` below, so that a slow or hanging dependency can never stall
+the probe a platform healthcheck restarts the container over.
 
 ### Detailed health
 

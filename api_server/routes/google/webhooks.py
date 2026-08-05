@@ -31,10 +31,6 @@ from services.webhook_delivery_svc import drain_due_deliveries
 router = APIRouter(prefix="/api/v1/google", tags=["google-webhooks"])
 
 
-def _is_dev() -> bool:
-    return (getattr(global_config, "DEV_ENV", "") or "").lower() in {"local", "dev"}
-
-
 def _verify_oidc(authorization: str | None) -> None:
     """Verify the Pub/Sub OIDC bearer token or raise HTTPException.
 
@@ -67,7 +63,7 @@ def _verify_oidc(authorization: str | None) -> None:
         # Fail closed outside dev: without the SA-email check, ANY Google-signed
         # OIDC token with the right audience would be accepted, letting a third
         # party spoof push notifications for arbitrary mailboxes.
-        if not _is_dev():
+        if not global_config.is_dev:
             raise HTTPException(
                 status_code=503,
                 detail="Gmail push identity (GMAIL_PUSH_SA_EMAIL) not configured",

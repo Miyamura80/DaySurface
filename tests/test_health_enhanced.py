@@ -64,7 +64,7 @@ class TestHealthPublic(TestTemplate):
         assert resp.status_code == 200
         data = resp.json()
         assert set(data) == {"status"}
-        assert data["status"] in ("ok", "degraded")
+        assert data["status"] == "ok"
 
     def test_health_discloses_no_build_identity(self):
         data = self.client.get("/health").json()
@@ -81,14 +81,20 @@ class TestHealthPublic(TestTemplate):
         mock_commit.assert_not_called()
 
     @patch("api_server.routes.health._check_database")
-    def test_degraded_still_reported_publicly(self, mock_db):
-        # The liveness verdict is preserved -- only the breakdown is withheld.
+    def test_public_health_runs_no_dependency_probes(self, mock_db):
+        """Liveness must not touch the database.
+
+        The engine has `pool_pre_ping=True` and no connect timeout, so a probe
+        against an unreachable host blocks on OS TCP retries. On this sync
+        route that parks an anyio threadpool thread per caller, and the
+        Dockerfile healthcheck (`--timeout=5s --retries=3`) would restart the
+        container. Readiness lives on /health/detail instead.
+        """
         mock_db.return_value = {"status": "error", "message": "OperationalError"}
         resp = self.client.get("/health")
         assert resp.status_code == 200
-        data = resp.json()
-        assert data["status"] == "degraded"
-        assert "components" not in data
+        assert resp.json() == {"status": "ok"}
+        mock_db.assert_not_called()
         assert "OperationalError" not in resp.text
 
     def test_health_detail_requires_auth(self):

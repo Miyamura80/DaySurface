@@ -1,11 +1,13 @@
 """Health-check endpoints.
 
 ``GET /health`` is public and deliberately minimal: a liveness signal only
-(``{"status": "ok"}`` / ``{"status": "degraded"}``).  Build identity (version,
-git commit) and the per-component breakdown are information disclosure to an
-anonymous caller (ASVS V14.3.3) - DaySurface is open source, so a commit SHA
-tells an attacker exactly which code is deployed.  Those details live on
-``GET /health/detail``, which requires authentication.
+(``{"status": "ok"}``), with no dependency probes at all.  Build identity
+(version, git commit) and the per-component breakdown are information
+disclosure to an anonymous caller (ASVS V14.3.3) - DaySurface is open source,
+so a commit SHA tells an attacker exactly which code is deployed.  Those
+details, and the readiness rollup, live on ``GET /health/detail``, which
+requires authentication.  See ``health_check`` for why probing on the public
+path is an availability hazard rather than a nicety.
 """
 
 import collections.abc
@@ -258,16 +260,28 @@ def _overall_status(components: dict[str, dict]) -> str:
 
 @router.get("/health", summary="Liveness probe (public)")
 def health_check():
-    """Public liveness signal.
+    """Public liveness signal: this process is up and serving.
 
-    Intentionally returns nothing but ``status``.  Version, commit SHA and the
-    per-component breakdown are only available to authenticated callers via
-    ``/health/detail`` - see the module docstring.  Always answers ``200`` so
-    platform healthchecks (Railway ``healthcheckPath``, Render
-    ``healthCheckPath``, the Dockerfile ``HEALTHCHECK``) keep passing while a
-    non-critical dependency is degraded.
+    Runs **no dependency probes**.  Liveness and readiness are different
+    questions and this endpoint answers only the first, for three reasons:
+
+    - ``db/engine.py`` builds the engine with ``pool_pre_ping=True`` and no
+      connect timeout, so a database host that stops answering SYN blocks the
+      probe on OS TCP retries (~130s on Linux).  The Dockerfile healthcheck is
+      ``--timeout=5s --retries=3``, so probing here would turn a transient
+      failover into a container restart loop.
+    - This is a sync ``def``, so it runs on the anyio threadpool.  A probe that
+      can hang lets unauthenticated callers park every thread in that pool and
+      stall every other sync route in the app.
+    - A per-component rollup readable by anonymous callers is a disclosure
+      oracle in its own right ("one of their backends is erroring right now").
+
+    Nothing consumes the rollup: Railway ``healthcheckPath``, Render
+    ``healthCheckPath`` and the Dockerfile ``HEALTHCHECK`` all assert on the
+    status code alone.  Readiness lives on ``/health/detail``, where an
+    authenticated caller can afford to wait.
     """
-    return {"status": _overall_status(_collect_components())}
+    return {"status": "ok"}
 
 
 @router.get("/health/detail", summary="Detailed health (authenticated)")

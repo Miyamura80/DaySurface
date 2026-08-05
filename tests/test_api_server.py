@@ -88,8 +88,7 @@ class TestAPIServer(TestTemplate):
         resp = self.client.get("/health")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["status"] in ("ok", "degraded")
-        assert set(data) == {"status"}
+        assert data == {"status": "ok"}
 
     def test_health_detail_endpoint(self):
         resp = self.client.get("/health/detail")

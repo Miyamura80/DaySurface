@@ -18,7 +18,10 @@ self-contained page, everything else - agents, ``curl``, registry crawlers -
 gets JSON.
 """
 
+import base64
+import hashlib
 import html
+import re
 from pathlib import Path
 from string import Template
 from urllib.parse import urlsplit
@@ -29,6 +32,7 @@ from starlette.responses import Response
 
 from api_server.auth.authkit_auth import authkit_domain
 from api_server.middleware.mcp_auth import is_mcp_path
+from api_server.middleware.security_headers import DEFAULT_CSP
 from common import global_config
 
 router = APIRouter(tags=["index"])
@@ -285,6 +289,29 @@ def _landing_page(doc: dict) -> str:
     )
 
 
+_STYLE_ELEMENT_RE = re.compile(r"<style[^>]*>(.*?)</style>", re.DOTALL | re.IGNORECASE)
+
+
+def _landing_csp(markup: str) -> str:
+    """The default CSP, widened by a ``sha256-`` source for *markup*'s styles.
+
+    ``<style>`` is a raw-text element, so no entity decoding applies: CSP
+    hashes the exact source text between the tags, which is what the regex
+    captures. Derived from the rendered response body rather than the template
+    on disk, so substitution inside a style block could never desync the hash
+    from what the browser sees.
+    """
+    hashes = [
+        f"'sha256-{base64.b64encode(hashlib.sha256(block.encode()).digest()).decode()}'"
+        for block in _STYLE_ELEMENT_RE.findall(markup)
+    ]
+    if not hashes:
+        return DEFAULT_CSP
+    return DEFAULT_CSP.replace(
+        "style-src 'self'", "style-src 'self' " + " ".join(hashes)
+    )
+
+
 # HEAD is spelled out because FastAPI, unlike plain Starlette, does not imply it
 # from GET - and uptime probes and link checkers reach for HEAD first.
 @router.api_route("/", methods=["GET", "HEAD"], include_in_schema=False)
@@ -298,7 +325,18 @@ def index(request: Request) -> Response:
     # at: registry crawlers and browser-based agents read them cross-origin.
     headers = {"Vary": "Accept", "Access-Control-Allow-Origin": "*"}
     if _prefers_html(request):
-        return HTMLResponse(_landing_page(doc), headers=headers)
+        markup = _landing_page(doc)
+        # The default policy (SecurityHeadersMiddleware) is `style-src 'self'`,
+        # which would drop this page's inline <style>. Allow it by hash rather
+        # than 'unsafe-inline', computed from the markup being sent on this very
+        # response - so the hash cannot drift from the bytes the browser hashes,
+        # and the exception is scoped to this document instead of widening
+        # style-src on every response the server emits. setdefault in the
+        # middleware means this value wins.
+        return HTMLResponse(
+            markup,
+            headers={**headers, "Content-Security-Policy": _landing_csp(markup)},
+        )
     return JSONResponse(doc, headers=headers)
 
 

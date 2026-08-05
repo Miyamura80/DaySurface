@@ -25,12 +25,9 @@ from starlette.responses import PlainTextResponse
 from starlette.routing import Route
 
 from api_server.auth.api_key_auth import create_api_key
-from api_server.middleware.security_headers import (
-    STATIC_SECURITY_HEADERS,
-    content_security_policy,
-    is_docs_path,
-)
+from api_server.middleware.security_headers import SecurityHeadersMiddleware
 from api_server.server import SessionCookiePolicy, app, session_cookie_policy
+from common import global_config
 from db import engine as db_engine
 from db.base import Base
 from tests.test_template import TestTemplate
@@ -46,6 +43,7 @@ _EXPECTED = {
     "x-frame-options": lambda v: v == "DENY",
     "referrer-policy": lambda v: v == "no-referrer",
     "permissions-policy": lambda v: "geolocation=()" in v and "camera=()" in v,
+    "x-permitted-cross-domain-policies": lambda v: v == "none",
 }
 
 
@@ -143,9 +141,11 @@ class TestSecurityHeaders(TestTemplate):
     def test_csp_permits_the_landing_page_inline_style(self):
         """The CSP must carry a hash for the style block it actually serves.
 
-        Pins the middleware's import-time hashing to the rendered document, so
-        editing `_landing.html` without regenerating the policy fails here
-        instead of silently shipping an unstyled page.
+        `index.py` hashes the markup it is about to send and sets the header on
+        that response; the middleware's setdefault leaves it alone. Editing
+        `_landing.html` therefore cannot desync the policy - but this pins the
+        wiring, so dropping the route's header fails here rather than silently
+        shipping an unstyled page.
         """
         resp = TestClient(app).get("/", headers={"Accept": "text/html"})
         assert resp.status_code == 200
@@ -163,33 +163,73 @@ class TestSecurityHeaders(TestTemplate):
         assert "'unsafe-inline'" not in csp
 
     def test_csp_forbids_scripts_and_framing_on_the_api_surface(self):
-        csp = content_security_policy("/health")
+        csp = TestClient(app).get("/health").headers["content-security-policy"]
         assert "script-src 'none'" in csp
         assert "frame-ancestors 'none'" in csp
         assert "object-src 'none'" in csp
         assert "base-uri 'none'" in csp
 
     def test_docs_get_a_scoped_exception(self):
-        # Swagger/ReDoc are CDN bundles with an inline bootstrap script; the
-        # looser policy must stay confined to those paths.
-        assert is_docs_path("/docs")
-        assert is_docs_path("/docs/oauth2-redirect")
-        assert is_docs_path("/redoc")
-        assert not is_docs_path("/docsearch")
-        assert not is_docs_path("/health")
+        """Swagger/ReDoc need a looser policy; it must reach only those paths.
 
-        docs_csp = content_security_policy("/docs")
+        Asserted on live responses rather than on the path predicate, so the
+        selection *wiring* is covered: reading the wrong scope key, or a
+        root_path that shifts the served path, would serve Swagger under
+        `script-src 'none'` - a blank page that a pure-function test cannot see.
+        """
+        client = TestClient(app)
+        docs_csp = client.get("/docs").headers["content-security-policy"]
         assert "https://cdn.jsdelivr.net" in docs_csp
         assert "frame-ancestors 'none'" in docs_csp
-        assert "'unsafe-inline'" not in content_security_policy("/health")
 
-    def test_existing_response_headers_are_not_overwritten(self):
-        # setdefault semantics: a route that sets its own value keeps it.
-        assert all(name == name.lower() for name, _ in STATIC_SECURITY_HEADERS)
-        resp = TestClient(app).get("/")
-        # The index route sets its own CORS header; the middleware must not
-        # have disturbed the rest of the response.
-        assert resp.headers.get("access-control-allow-origin") == "*"
+        assert (
+            "https://cdn.jsdelivr.net"
+            in client.get("/redoc").headers["content-security-policy"]
+        )
+
+        # Neighbours that merely look like the docs must keep the default.
+        for path in ("/health", "/docsearch", "/docs/not-a-real-page"):
+            assert (
+                "'unsafe-inline'"
+                not in client.get(path).headers["content-security-policy"]
+            ), path
+
+    def test_a_route_may_override_a_security_header(self):
+        """setdefault semantics, asserted against a route that actually sets one.
+
+        Load-bearing rather than cosmetic: `index.py` relies on it to attach the
+        landing page's style hash. Replacing setdefault with assignment must
+        fail this test.
+        """
+
+        async def opinionated(request: Request) -> PlainTextResponse:
+            return PlainTextResponse(
+                "ok",
+                headers={
+                    "Content-Security-Policy": "default-src 'self'",
+                    "X-Frame-Options": "SAMEORIGIN",
+                },
+            )
+
+        probe = Starlette(routes=[Route("/", opinionated)])
+        probe.add_middleware(SecurityHeadersMiddleware)
+        resp = TestClient(probe).get("/")
+
+        assert resp.headers["content-security-policy"] == "default-src 'self'"
+        assert resp.headers["x-frame-options"] == "SAMEORIGIN"
+        # Headers the route did not claim are still applied.
+        assert resp.headers["x-content-type-options"] == "nosniff"
+        # ...and exactly once - a duplicate CSP would be intersected by the
+        # browser, silently reinstating the stricter default.
+        assert len(resp.headers.get_list("content-security-policy")) == 1
+
+    def test_the_landing_page_owns_its_csp_not_the_middleware(self):
+        # The style-hash exception must be scoped to the document that needs
+        # it; a second HTML route must not widen style-src for the whole host.
+        assert (
+            "sha256-"
+            not in TestClient(app).get("/health").headers["content-security-policy"]
+        )
 
 
 class TestSessionCookieFlags(TestTemplate):
@@ -207,8 +247,7 @@ class TestSessionCookieFlags(TestTemplate):
         return resp.headers["set-cookie"]
 
     def test_production_session_cookie_is_secure(self):
-        with patch("api_server.server.global_config") as cfg:
-            cfg.DEV_ENV = "prod"
+        with patch.object(global_config, "DEV_ENV", "prod"):
             policy = session_cookie_policy()
         assert policy["https_only"] is True
         assert policy["same_site"] == "lax"
@@ -223,14 +262,14 @@ class TestSessionCookieFlags(TestTemplate):
     def test_unknown_dev_env_fails_secure(self):
         # Staging, a typo, or an unset value must not be read as development.
         for value in ("staging", "", "production", None):
-            with patch("api_server.server.global_config") as cfg:
-                cfg.DEV_ENV = value
+            with patch.object(global_config, "DEV_ENV", value):
+                assert global_config.is_dev is False, value
                 assert session_cookie_policy()["https_only"] is True, value
 
     def test_local_development_stays_on_plain_http(self):
         for value in ("dev", "local", "DEV"):
-            with patch("api_server.server.global_config") as cfg:
-                cfg.DEV_ENV = value
+            with patch.object(global_config, "DEV_ENV", value):
+                assert global_config.is_dev is True, value
                 assert session_cookie_policy()["https_only"] is False, value
 
     def test_the_app_registers_session_middleware_with_the_policy(self):
