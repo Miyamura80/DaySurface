@@ -48,6 +48,17 @@ MCP deliberately hides are fully reachable over HTTP.
 
 ## 1. Critical - Full secret disclosure via `config_show` / `config_get` (HTTP)
 
+> **Status: FIXED on this branch.** `config_show` / `config_get` now read a
+> YAML-only view (`global_config.to_yaml_dict()`) instead of the full
+> `to_dict()` dump. Every secret is loaded from the environment by a separate
+> pydantic-settings source and is absent from the YAML view by construction, so
+> no secret can be disclosed on any transport (HTTP, MCP, or CLI) - and a
+> secret field added in future cannot regress this. Regression tests:
+> `tests/test_services.py::TestConfigService::test_config_show_excludes_env_secrets`
+> and `test_config_get_rejects_env_secrets`. The route stays registered, so the
+> existing `tests/test_api_server.py:126` assertion is unaffected. See #2 for the
+> still-open write/exec exposure on the same surface.
+
 `api_server/routes/services.py` registers one `POST /api/v1/services/{name}`
 route per registry entry with no filtering:
 
@@ -102,6 +113,12 @@ surface.
 ---
 
 ## 2. High - Config tampering & server-side subprocess via `config_set` / `doctor_fix` (HTTP)
+
+> **Status: STILL OPEN.** The #1 fix removes *secret disclosure* but does not
+> touch these write/exec paths: `config_set` can still rewrite the process-wide
+> override file and `doctor_fix` can still shell out, both over HTTP behind only
+> `services:execute`. Recommended follow-up: exclude `config_set`/`doctor_fix`
+> from `_register_service_routes` or gate them behind an admin scope.
 
 Same root cause as #1. `config_set` (`mutating=True`) is reachable at
 `POST /api/v1/services/config_set` and writes an arbitrary dot-path key into the

@@ -349,8 +349,28 @@ class Config(BaseSettings):
         )
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert config to dictionary."""
+        """Convert config to dictionary.
+
+        Includes environment-sourced fields (secrets). Internal use only - do
+        NOT expose the result to any transport. Anything user-facing must use
+        :meth:`to_yaml_dict`.
+        """
         return self.model_dump()
+
+    def to_yaml_dict(self) -> dict[str, Any]:
+        """Return only the YAML-sourced configuration, never ``.env`` secrets.
+
+        Rebuilds the merged YAML view (``global_config.yaml`` + split configs +
+        the production overlay + ``.global_config.yaml``) directly from the YAML
+        settings source. Every secret (API keys, ``BACKEND_DB_URI``,
+        ``GOOGLE_TOKEN_ENC_KEY``, ``SESSION_SECRET_KEY``, ...) is loaded from the
+        environment by a *different* settings source and is therefore absent
+        here by construction - so this can never disclose a secret, even if a
+        new secret field is added later. This is the safe view for the
+        ``config_show`` / ``config_get`` services, which are reachable over the
+        authenticated HTTP transport.
+        """
+        return YamlSettingsSource(type(self)).yaml_data
 
     def _identify_provider(self, model_name: str) -> str:
         """Identify the LLM provider from a model name string."""

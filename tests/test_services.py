@@ -40,6 +40,35 @@ class TestConfigService(TestTemplate):
         with pytest.raises(KeyError):
             config_get(ConfigGetInput(key="nonexistent.key"))
 
+    def test_config_show_excludes_env_secrets(self):
+        # config_show must never expose environment-sourced secrets: they live
+        # in a different settings source than the YAML config and must stay out
+        # of any transport-reachable dump. Guards against the secret-disclosure
+        # regression where config_show returned the full env-inclusive dump.
+        result = config_show(ConfigShowInput())
+        for secret_field in (
+            "OPENAI_API_KEY",
+            "ANTHROPIC_API_KEY",
+            "BACKEND_DB_URI",
+            "GOOGLE_TOKEN_ENC_KEY",
+            "SESSION_SECRET_KEY",
+            "STRIPE_SECRET_KEY",
+            "WORKOS_API_KEY",
+            "X402_PRIVATE_KEY",
+        ):
+            assert secret_field not in result.config
+
+    def test_config_get_rejects_env_secrets(self):
+        # A secret key is unreachable through config_get - it raises KeyError
+        # rather than returning the value.
+        for secret_field in (
+            "OPENAI_API_KEY",
+            "BACKEND_DB_URI",
+            "GOOGLE_TOKEN_ENC_KEY",
+        ):
+            with pytest.raises(KeyError):
+                config_get(ConfigGetInput(key=secret_field))
+
 
 class TestDoctorService(TestTemplate):
     def test_doctor_runs(self):
