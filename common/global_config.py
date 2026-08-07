@@ -1,6 +1,7 @@
 import os
 import re
 import warnings
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -38,6 +39,11 @@ from .config_models import (
 root_dir = Path(__file__).parent.parent
 
 OPENAI_O_SERIES_PATTERN = r"o(\d+)(-mini)?"
+
+# Merged YAML view (env-free), captured once when the Config singleton is built
+# (see Config.settings_customise_sources). Consumed by Config.to_yaml_dict() as
+# the secret-free config view for the config_show / config_get services.
+_yaml_config_cache: dict[str, Any] = {}
 
 
 # Custom YAML settings source
@@ -341,10 +347,16 @@ class Config(BaseSettings):
         3. YAML files (custom .global_config.yaml > production_config.yaml > global_config.yaml)
         4. Init settings (passed to constructor)
         """
+        yaml_source = YamlSettingsSource(settings_cls)
+        # Capture the merged YAML data once, here, where it is already computed
+        # to populate the model - so to_yaml_dict() reuses it instead of
+        # re-reading disk on every call and diverging from this singleton.
+        global _yaml_config_cache  # noqa: PLW0603
+        _yaml_config_cache = yaml_source.yaml_data
         return (
             env_settings,
             dotenv_settings,
-            YamlSettingsSource(settings_cls),
+            yaml_source,
             init_settings,
         )
 
@@ -360,17 +372,22 @@ class Config(BaseSettings):
     def to_yaml_dict(self) -> dict[str, Any]:
         """Return only the YAML-sourced configuration, never ``.env`` secrets.
 
-        Rebuilds the merged YAML view (``global_config.yaml`` + split configs +
-        the production overlay + ``.global_config.yaml``) directly from the YAML
-        settings source. Every secret (API keys, ``BACKEND_DB_URI``,
-        ``GOOGLE_TOKEN_ENC_KEY``, ``SESSION_SECRET_KEY``, ...) is loaded from the
-        environment by a *different* settings source and is therefore absent
-        here by construction - so this can never disclose a secret, even if a
-        new secret field is added later. This is the safe view for the
-        ``config_show`` / ``config_get`` services, which are reachable over the
-        authenticated HTTP transport.
+        The merged YAML layer (``global_config.yaml`` + split configs + the
+        production overlay + ``.global_config.yaml``), captured once when this
+        singleton was built. Every secret (API keys, ``BACKEND_DB_URI``,
+        ``GOOGLE_TOKEN_ENC_KEY``, ``SESSION_SECRET_KEY``, ...) loads from the
+        environment via a *different* settings source, so secrets are absent
+        here by construction - this can never disclose one, even if a new secret
+        field is added later. This is the safe view for the ``config_show`` /
+        ``config_get`` services, reachable over the authenticated HTTP transport.
+
+        Note: this is the YAML *layer*, not the effective config. Pydantic
+        defaults for fields absent from every YAML file, and non-secret env-var
+        overrides (e.g. ``LLM_CONFIG__CACHE_ENABLED``), are intentionally not
+        reflected. Callers needing effective runtime values must not use this.
+        A fresh copy is returned so callers cannot mutate the cached view.
         """
-        return YamlSettingsSource(type(self)).yaml_data
+        return deepcopy(_yaml_config_cache)
 
     def _identify_provider(self, model_name: str) -> str:
         """Identify the LLM provider from a model name string."""

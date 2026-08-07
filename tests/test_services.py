@@ -35,6 +35,7 @@ class TestConfigService(TestTemplate):
     def test_config_get(self):
         result = config_get(ConfigGetInput(key="llm_config.cache_enabled"))
         assert result.key == "llm_config.cache_enabled"
+        assert result.value is False
 
     def test_config_get_nonexistent(self):
         with pytest.raises(KeyError):
