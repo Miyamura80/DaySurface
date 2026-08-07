@@ -1,0 +1,62 @@
+---
+/*
+ * The `<details>` FAQ list, rendered on four surfaces (homepage, /gmail-webhooks,
+ * /ai-email-triage and every /connect-gmail-to-<client> guide).
+ *
+ * `<details>` rather than a JS accordion, everywhere: the answers have to be in
+ * the served HTML for both the long-tail queries and the FAQPage JSON-LD that
+ * marks them up. That constraint is the whole reason this markup exists, so it
+ * lives with the markup rather than being restated at each call site.
+ *
+ * NO `<script>` here on purpose. `Faq.astro` needs a "load more" toggle; the
+ * three editorial pages show every question and ship no JS at all. Putting the
+ * toggle's script in this component would hoist it onto those pages to do
+ * nothing, so `Faq.astro` owns the button and the behaviour and this owns the
+ * list. `collapseFrom` is the seam: it only marks which items are extra.
+ */
+import type { FaqItem } from "../config/landing";
+
+interface Props {
+  items: FaqItem[];
+  /**
+   * Index from which items are tagged `data-faq-extra`, for a caller that
+   * supplies its own show/hide behaviour. Omit to render every item plainly.
+   */
+  collapseFrom?: number;
+  /** Extra classes on the wrapper, for the caller's own vertical rhythm. */
+  class?: string;
+}
+
+const { items, collapseFrom, class: className } = Astro.props;
+const isExtra = (i: number) => collapseFrom !== undefined && i >= collapseFrom;
+---
+
+<div
+  class:list={[
+    "divide-y divide-border border-2 border-border bg-surface-1",
+    className,
+  ]}
+  data-faq-list
+>
+  {
+    items.map((item, i) => (
+      <details class="group px-4 sm:px-6" data-faq-extra={isExtra(i) ? "true" : undefined}>
+        <summary class="flex min-h-12 cursor-pointer list-none items-center justify-between gap-4 py-4 font-medium">
+          {item.q}
+          <svg
+            class="size-5 shrink-0 text-fg-muted transition-transform group-open:rotate-45"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            aria-hidden="true"
+          >
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+        </summary>
+        <p class="pb-5 text-pretty leading-relaxed text-fg-muted">{item.a}</p>
+      </details>
+    ))
+  }
+</div>

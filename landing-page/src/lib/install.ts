@@ -136,14 +136,21 @@ export interface InstallClient {
  * Classify a target by the work left after the click.
  *
  * `manual` targets - no install URL, no setup prompt, just a click-path - get
- * their own bucket rather than sharing `prompt`'s, even though none exist right
- * now. They did briefly, and the shared bucket broke immediately: the
- * shared-prompt collapse in `groupedInstallMatrix` only fires when EVERY client
- * in a group carries the same prompt, and a manual client carries none, so one
- * ~450-char prompt went from printed once to printed four times on the two
- * surfaces whose whole job is surviving truncation. `agent-journey.test.ts`
- * catches it. The bucket stays so the next manual target does not reintroduce
- * the bug - `connect.ts` keeps the method for exactly that eventuality.
+ * their own bucket because their install experience is not a prompt target's.
+ * Grouping them under `prompt` puts the heading "Paste this prompt into the
+ * client" above a client that has no prompt to paste, which is simply wrong.
+ * That is the reason; everything else follows from it.
+ *
+ * It also avoids a sharp edge. The shared-prompt collapse in
+ * `groupedInstallMatrix` only fires when EVERY client in a group carries the
+ * same prompt, so one manual client in the prompt bucket switched it off and
+ * reprinted a ~450-char prompt once per client, on the two surfaces whose whole
+ * job is surviving truncation. `agent-journey.test.ts` catches that.
+ *
+ * No target uses `manual` today - `connect.ts` keeps the method for the next
+ * host that ships no URL scheme at all, and this keeps that path correct for it.
+ * Note that means this branch is unverified rather than tested: nothing in
+ * `make ci` executes it while the bucket is empty.
  */
 function effortOf(t: InstallTarget): InstallEffort {
   if (t.method === "deeplink") return t.prefills === false ? "dialog-only" : "one-click";

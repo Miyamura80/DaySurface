@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { site, comparison, pricing, clientGuides } from "../config/landing";
+import { site, comparison, pricing, clientGuides, guidePath } from "../config/landing";
 
 // Static routes that ship in dist/. Keep in sync with src/pages/*.astro.
 const routes = [
@@ -23,7 +23,7 @@ const routes = [
   // with /gmail-webhooks: same job, an existing query cluster rather than
   // traffic already on the site.
   ...clientGuides.map((g) => ({
-    path: `/connect-gmail-to-${g.slug}`,
+    path: guidePath(g.slug),
     priority: "0.8",
     changefreq: "monthly",
   })),

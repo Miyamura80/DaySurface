@@ -1,0 +1,31 @@
+---
+/*
+ * The bordered call-to-action block that closes each editorial page's argument,
+ * before the FAQ.
+ *
+ * `href` defaults to the homepage connect anchor because that is where all three
+ * pages point today. It stays a prop rather than a constant: a page whose reader
+ * needs somewhere else - a docs reference, a specific guide - should be able to
+ * say so without forking the markup.
+ */
+interface Props {
+  heading: string;
+  body: string;
+  ctaLabel: string;
+  href?: string;
+  class?: string;
+}
+
+const { heading, body, ctaLabel, href = "/#connect", class: className } = Astro.props;
+---
+
+<div class:list={["border-2 border-accent bg-accent/10 p-8 text-center", className]}>
+  <h2 class="text-2xl font-bold tracking-tight">{heading}</h2>
+  <p class="mx-auto mt-3 max-w-xl text-pretty leading-relaxed text-fg-muted">{body}</p>
+  <a
+    href={href}
+    class="mt-6 inline-flex items-center gap-2 bg-accent px-5 py-2.5 font-semibold text-accent-fg transition hover:bg-accent-strong"
+  >
+    {ctaLabel}
+  </a>
+</div>

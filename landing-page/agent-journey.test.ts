@@ -24,7 +24,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 
 import { handleRequest, resolvePublicOrigin } from "./server.ts";
-import { connectAliases } from "./src/config/landing";
+import { clientGuides, connect, connectAliases } from "./src/config/landing";
 
 // Mount the real handler on an ephemeral port rather than spawning `bun
 // server.ts` on a fixed one: a fixed port races in parallel CI, and a subprocess
@@ -83,6 +83,36 @@ describe("/developers redirects to the docs", () => {
     const res = await fetch(`${BASE}${from}`, { redirect: "manual" });
     expect(res.status).toBe(301);
     expect(res.headers.get("location")).toBe(to);
+  });
+});
+
+describe("client guides stay consistent with the install picker", () => {
+  // `ClientGuide.targetId` claims to be the matching `connect.ts` target id, so
+  // the two can be cross-checked. Nothing cross-checked it - the field was
+  // declared, documented as a guarantee, and read by nothing, which is worse
+  // than having no field at all because the next reader trusts the comment.
+  test("every non-null targetId resolves to a real install target", () => {
+    const ids = new Set(connect.targets.map((t) => t.id));
+    const dangling = clientGuides
+      .filter((g) => g.targetId !== null && !ids.has(g.targetId))
+      .map((g) => `${g.slug} -> ${g.targetId}`);
+    expect(dangling).toEqual([]);
+  });
+
+  // A guide whose client IS in the picker must not be marked `null`, or the
+  // page silently stops claiming a relationship the site actually offers.
+  test("targetId is only null for clients the picker deliberately omits", () => {
+    const ids = new Set(connect.targets.map((t) => t.id));
+    const wronglyNull = clientGuides
+      .filter((g) => g.targetId === null && ids.has(g.slug))
+      .map((g) => g.slug);
+    expect(wronglyNull).toEqual([]);
+  });
+
+  test("every guide points at a logo that ships", () => {
+    for (const g of clientGuides) {
+      expect(existsSync(new URL(`./public${g.logo}`, import.meta.url))).toBe(true);
+    }
   });
 });
 

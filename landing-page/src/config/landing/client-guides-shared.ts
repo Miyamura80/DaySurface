@@ -37,14 +37,8 @@ export interface ClientGuide {
   /**
    * Path under `public/logos/`. Carried here rather than read off the matching
    * `connect.ts` target because a guide can have no target at all - M365
-   * Copilot does not - and that guide still needs a mark.
-   *
-   * Rendered through the same CSS-mask treatment as the install picker and the
-   * trust strip: only the SVG's alpha channel survives, tinted with the current
-   * text colour. Two consequences when adding one. A mark with an opaque
-   * background rect masks to a solid block, and a mark that carries its shape
-   * in `stop-opacity="0"` gradient stops masks to holes - check it rendered,
-   * do not just check the file downloaded.
+   * Copilot does not - and that guide still needs a mark. Masking caveats are
+   * documented where the masking happens, on `EditorialPage`'s `logo` prop.
    */
   logo: string;
   /** <title>. Leads with the query, closes with the brand. */
@@ -69,22 +63,16 @@ export interface ClientGuide {
  * does not implement Apps gets tool calls and JSON, not a dashboard, so putting
  * this list on its page would describe something the reader will never see.
  *
- * Apps hosts as of August 2026, per the official extension support matrix at
- * modelcontextprotocol.io/extensions/client-matrix: Claude (web), Claude
- * Desktop, ChatGPT, VS Code Copilot, Microsoft 365 Copilot, Goose, Postman,
- * MCPJam, Cursor, Archestra.AI, PostHog Code.
+ * So: only attach this list to a host you have confirmed renders MCP Apps, and
+ * confirm it against the current client matrix at
+ * modelcontextprotocol.io/extensions/client-matrix rather than the prose list on
+ * the Apps overview page, which omits entries the matrix carries. A host that
+ * does not render Apps needs a capability list of its own.
  *
- * NOT Apps hosts, despite having install targets or logos on this site: Codex
- * (desktop and CLI), Claude Code, Cline, Zed, Windsurf. Adding a guide for any
- * of those means writing it a capability list of its own - do not reuse this
- * one. Codex desktop is the near miss to re-check: the implementation exists
- * behind an `enable_mcp_apps` flag but ships disabled, so it is "not yet"
- * rather than "no".
- *
- * Check the matrix rather than a blog post before adding a client - the prose
- * list on the MCP Apps overview page omits entries the matrix carries (it is
- * what wrongly excluded Cursor here). The matrix is community-maintained, so
- * treat a host we ship a guide for as needing its own confirmation too.
+ * No roster of hosts here on purpose. It would be stale within months, nothing
+ * checks it, and the repo's CLAUDE.md is explicit that MCP behaviour must be
+ * verified against the current spec rather than recalled - a list in a comment
+ * is exactly the cached assumption that instruction warns about.
  */
 export const CAPABILITIES: GuideCapability[] = [
   {

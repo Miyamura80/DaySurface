@@ -327,7 +327,3 @@ export const clientGuides: ClientGuide[] = [
   },
 ];
 
-/** Lookup used by `getStaticPaths` and the markdown twin. */
-export function clientGuideBySlug(slug: string): ClientGuide | undefined {
-  return clientGuides.find((g) => g.slug === slug);
-}

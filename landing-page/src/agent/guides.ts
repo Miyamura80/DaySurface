@@ -8,20 +8,31 @@
  * part an answer engine wants to quote, so they are spelled out here rather than
  * left to a converter to recover.
  */
-import { site, clientGuides, clientGuideBySlug, connect, triage } from "../config/landing";
-import { trimSlash } from "./_shared";
+import {
+  site,
+  clientGuides,
+  connect,
+  triage,
+  guideMdPath,
+  type ClientGuide,
+} from "../config/landing";
+import { faqSection, trimSlash } from "./_shared";
 
-export function buildClientGuideMd(origin: string, slug: string): string {
+/**
+ * Takes the guide itself, not a slug to look up.
+ *
+ * The route hands it straight through from `getStaticPaths` props, so there is
+ * no miss to handle. Looking it up here instead meant a `# Not found` body
+ * served with HTTP 200 and `Content-Type: text/markdown` for a state the static
+ * build makes unreachable - a fallback that could only ever have lied about
+ * having found something.
+ */
+export function buildClientGuideMd(origin: string, guide: ClientGuide): string {
   const o = trimSlash(origin);
-  const guide = clientGuideBySlug(slug);
-  if (!guide) {
-    const known = clientGuides.map((g) => `${o}/connect-gmail-to-${g.slug}.md`).join(", ");
-    return `# Not found\n\nNo connect guide for \`${slug}\`. Available: ${known}\n`;
-  }
 
   const others = clientGuides
     .filter((g) => g.slug !== guide.slug)
-    .map((g) => `- Connect Gmail to ${g.clientName}: ${o}/connect-gmail-to-${g.slug}.md`)
+    .map((g) => `- Connect Gmail to ${g.clientName}: ${o}${guideMdPath(g.slug)}`)
     .join("\n");
 
   return `# ${guide.heading}
@@ -53,7 +64,7 @@ ${guide.capabilities.map((c) => `### ${c.title}\n${c.body}`).join("\n\n")}
 
 ## Questions
 
-${guide.faq.map((f) => `### ${f.q}\n${f.a}`).join("\n\n")}
+${faqSection(guide.faq)}
 
 ## More
 
@@ -96,12 +107,12 @@ ${triage.honesty}
 
 ## ${triage.faqHeading}
 
-${triage.faq.map((f) => `### ${f.q}\n${f.a}`).join("\n\n")}
+${faqSection(triage.faq)}
 
 ## More
 
 ${clientGuides
-  .map((g) => `- Connect Gmail to ${g.clientName}: ${o}/connect-gmail-to-${g.slug}.md`)
+  .map((g) => `- Connect Gmail to ${g.clientName}: ${o}${guideMdPath(g.slug)}`)
   .join("\n")}
 - Gmail MCP alternatives: ${o}/compare.md
 - Get connected: ${o}/connect.md

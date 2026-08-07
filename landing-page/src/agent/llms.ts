@@ -1,7 +1,7 @@
 /**
  * The site-wide agent indexes: llms.txt, llms-full.txt and agents.md.
  */
-import { site, hero, features, faq, compatibility, comparison, connectPage, agentGuide, clientGuides } from "../config/landing";
+import { site, hero, features, faq, compatibility, comparison, connectPage, agentGuide, clientGuides, guideMdPath } from "../config/landing";
 import { effortMeta, installMatrix } from "../lib/install";
 import { trimSlash, whenToUseSection } from "./_shared";
 
@@ -38,7 +38,7 @@ ${agentGuide.whenToUse.map((s) => `- ${s}`).join("\n")}
 ${clientGuides
   .map(
     (g) =>
-      `- [connect-gmail-to-${g.slug}.md](${o}/connect-gmail-to-${g.slug}.md): Step-by-step setup for ${g.clientName} - settings path, OAuth sign-in and what it can do once connected.`,
+      `- [connect-gmail-to-${g.slug}.md](${o}${guideMdPath(g.slug)}): Step-by-step setup for ${g.clientName} - settings path, OAuth sign-in and what it can do once connected.`,
   )
   .join("\n")}
 - [ai-email-triage.md](${o}/ai-email-triage.md): What an agent can and cannot take off a human in an inbox. Carries no time-saved figures - nothing is measured, so nothing is claimed.
@@ -91,23 +91,20 @@ export function buildLlmsFullTxt(origin: string): string {
         case "command":
           how = `Run this in a terminal:\n\n${c.setup_prompt}`;
           break;
+        // `manual` shares this arm rather than inventing prose of its own. A
+        // manual target has no prompt, so it always falls to `numbered(steps)`
+        // - which is the whole answer for it. The bespoke sentence that used to
+        // live here ("add the server by hand in this client's own settings")
+        // only rendered when a manual target shipped without steps, i.e. when
+        // its config was incomplete, and shipped a useless instruction to
+        // agents as though it were guidance.
         case "prompt":
+        case "manual":
           // Inline the actual text - an agent reading this cannot go and fetch
           // "the setup prompt from the site".
           how = c.setup_prompt
             ? `Paste this into the agent:\n\n${c.setup_prompt}`
             : numbered(c.steps);
-          break;
-        case "manual":
-          // No install link and no prompt. These carry their click-path on
-          // their own /connect-gmail-to-<slug> guide instead of here, which is
-          // what keeps /connect inside its payload budget - see the comment
-          // above the manual targets in connect.ts. Fall back to steps anyway,
-          // so a future manual target that does carry them is not silently
-          // reduced to one line.
-          how = c.steps?.length
-            ? numbered(c.steps)
-            : "Add the server by hand in this client's own settings, using the MCP endpoint above.";
           break;
       }
       return `### ${c.name}\n${how}${c.note ? `\n${c.note}` : ""}`;

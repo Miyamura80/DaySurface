@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { site, comparison, pricing, clientGuides } from "../config/landing";
+import { site, comparison, pricing, clientGuides, guidePath } from "../config/landing";
 
 /**
  * NLWeb / Schema Map feed (referenced via the `Schemamap:` directive in
@@ -42,9 +42,9 @@ export const GET: APIRoute = ({ site: astroSite }) => {
     // read out. Generated from the same config as the route so the feed cannot
     // fall behind a newly added client.
     ...clientGuides.flatMap((g) => [
-      { loc: `${origin}/connect-gmail-to-${g.slug}`, type: "HowTo" },
-      { loc: `${origin}/connect-gmail-to-${g.slug}`, type: "FAQPage" },
-      { loc: `${origin}/connect-gmail-to-${g.slug}`, type: "BreadcrumbList" },
+      { loc: `${origin}${guidePath(g.slug)}`, type: "HowTo" },
+      { loc: `${origin}${guidePath(g.slug)}`, type: "FAQPage" },
+      { loc: `${origin}${guidePath(g.slug)}`, type: "BreadcrumbList" },
     ]),
     // /ai-email-triage embeds TechArticle + FAQPage + BreadcrumbList.
     { loc: `${origin}/ai-email-triage`, type: "TechArticle" },

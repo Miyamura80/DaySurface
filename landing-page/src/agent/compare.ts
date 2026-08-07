@@ -5,7 +5,7 @@
  * the comparison matrix is a grid of SVG marks, and /api renders itself in
  * client-side JavaScript.
  */
-import { site, comparison } from "../config/landing";
+import { site, comparison, type Competitor } from "../config/landing";
 import { trimSlash } from "./_shared";
 
 /** Render a matrix cell as text an answer engine can quote without a legend. */
@@ -78,11 +78,16 @@ ${comparison.competitors
 `;
 }
 
-/** vs/<id>.md - one competitor, in full. */
-export function buildVsMd(origin: string, id: string): string {
+/**
+ * vs/<id>.md - one competitor, in full.
+ *
+ * Takes the competitor, not an id to look up: the route passes it through from
+ * `getStaticPaths` props, so there is no miss to handle. The lookup this
+ * replaced returned a `# Not found` body with HTTP 200 for a state the static
+ * build cannot reach.
+ */
+export function buildVsMd(origin: string, c: Competitor): string {
   const o = trimSlash(origin);
-  const c = comparison.competitors.find((x) => x.id === id);
-  if (!c) return `# Not found\n\nNo comparison page for \`${id}\`. See ${o}/compare.md.\n`;
 
   // Carry each row's `detail` (why the capability matters), same as the hub.
   // Without it /vs/<id>.md is not self-contained: an answer engine quoting a
