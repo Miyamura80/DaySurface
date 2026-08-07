@@ -4,6 +4,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
+from typing import Literal, TypedDict
 
 import uvicorn
 from fastapi import FastAPI
@@ -17,6 +18,7 @@ from api_server.middleware.error_handler import (
 )
 from api_server.middleware.mcp_auth import MCPAuthMiddleware
 from api_server.middleware.rate_limit import RateLimitMiddleware
+from api_server.middleware.security_headers import SecurityHeadersMiddleware
 from api_server.routes import (
     agentic_payments,
     ask,
@@ -66,6 +68,32 @@ _API_DESCRIPTION = (
 )
 
 
+class SessionCookiePolicy(TypedDict):
+    """The subset of ``SessionMiddleware`` options this app pins deliberately."""
+
+    https_only: bool
+    same_site: Literal["lax", "strict", "none"]
+
+
+def session_cookie_policy() -> SessionCookiePolicy:
+    """Cookie flags for ``SessionMiddleware`` (ASVS V3.4.1 / V3.4.3).
+
+    Starlette defaults ``https_only`` to False, which ships the session cookie
+    without ``Secure`` - it would then travel over a downgraded http:// request.
+    Turned on everywhere except local development, where the server is served
+    over plain http and a ``Secure`` cookie would simply never be stored,
+    breaking any browser flow that round-trips through the session.
+
+    ``same_site`` is stated rather than inherited so the CSRF posture is
+    explicit: ``lax`` still lets the cookie ride the top-level GET redirect
+    back from Google's OAuth consent screen, which ``strict`` would drop.
+
+    ``global_config.is_dev`` fails secure - an unset or misspelled ``DEV_ENV``
+    reads as production - so a typo cannot drop the ``Secure`` flag.
+    """
+    return {"https_only": not global_config.is_dev, "same_site": "lax"}
+
+
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Compose the FastMCP session manager with the periodic webhook runner."""
@@ -94,6 +122,7 @@ app.add_middleware(MCPAuthMiddleware)  # type: ignore[arg-type]
 app.add_middleware(
     SessionMiddleware,  # type: ignore[arg-type]
     secret_key=global_config.SESSION_SECRET_KEY,
+    **session_cookie_policy(),
 )
 
 app.add_middleware(
@@ -102,6 +131,34 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+# Outermost, deliberately: it is the only middleware that must stamp *every*
+# byte-producing path, including CORS preflights, the MCPAuthMiddleware 401
+# challenge (which writes to `send` directly), and the FastMCP mount below.
+#
+# On the mount: `mount_mcp_server(app)` calls `app.mount("/", mcp_app)`, which
+# registers an ordinary route on `app.router`. `add_middleware` wraps the
+# router, not the individual routes, so /mcp responses traverse this middleware
+# exactly like /health does - the mount does not bypass it. That holds only
+# because the mount goes through `app.mount`; a second ASGI app composed
+# *around* `app` (e.g. `Mount("/mcp", mcp_app)` in a parent Starlette router)
+# would need its own registration.
+#
+# The docs paths are read off the app rather than hardcoded in the middleware,
+# so customising or disabling `docs_url`/`redoc_url` can never leave the looser
+# CSP pointed at a path FastAPI no longer serves the bundles on.
+app.add_middleware(
+    SecurityHeadersMiddleware,  # type: ignore[arg-type]
+    docs_paths=frozenset(
+        path
+        for path in (
+            app.docs_url,
+            app.redoc_url,
+            app.swagger_ui_oauth2_redirect_url,
+        )
+        if path
+    ),
 )
 
 # --- Exception handlers ---------------------------------------------------

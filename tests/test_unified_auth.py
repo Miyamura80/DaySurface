@@ -11,6 +11,7 @@ from sqlalchemy.pool import StaticPool
 
 from api_server.auth import AuthenticatedUser, get_authenticated_user
 from api_server.auth.api_key_auth import create_api_key
+from common import global_config
 from db.base import Base
 from db.engine import get_db_session
 from tests.test_template import TestTemplate
@@ -44,10 +45,13 @@ def _setup_app():
 
 
 class TestUnifiedAuth(TestTemplate):
+    @patch.object(global_config, "DEV_ENV", "dev")
     @patch("api_server.auth.workos_auth.global_config")
     def test_jwt_auth_succeeds(self, mock_config):
+        # DEV_ENV is patched on the real config, not on the mock: the gate
+        # reads `global_config.is_dev`, which a MagicMock would fake as truthy.
         mock_config.WORKOS_CLIENT_ID = "test-client"
-        mock_config.DEV_ENV = "dev"
+        mock_config.is_dev = global_config.is_dev
         app, _sl = _setup_app()
         client = TestClient(app)
         token = json.dumps({"sub": "jwt-user", "email": "j@t.com"})
@@ -96,7 +100,10 @@ class TestUnifiedAuth(TestTemplate):
     def test_invalid_bearer_fails_fast(self, mock_workos_config, mock_unified_config):
         """An invalid Bearer token should 401 when WorkOS is configured."""
         mock_workos_config.WORKOS_CLIENT_ID = "test-client"
-        mock_workos_config.DEV_ENV = "prod"
+        # Mirror the real predicate; `mock.is_dev` alone would be truthy and
+        # would silently enable the unsigned-JSON bypass under DEV_ENV=prod.
+        with patch.object(global_config, "DEV_ENV", "prod"):
+            mock_workos_config.is_dev = global_config.is_dev
         mock_unified_config.WORKOS_CLIENT_ID = "test-client"
         app, sl = _setup_app()
         session = sl()

@@ -92,10 +92,31 @@ response above. `did_you_mean` is present only when a known alias matches.
 
 ## Health Check
 
-No authentication required.
+`/health` is the public liveness probe. No authentication required, and the
+response is deliberately minimal - it carries no build identity and no
+per-component breakdown.
 
 ```bash
 curl https://api.daysurface.com/health
+```
+
+```json
+{ "status": "ok" }
+```
+
+Liveness only: the endpoint answers `200` with a fixed body whenever the
+process is serving, and deliberately runs no dependency probes. Readiness -
+whether the database, Redis and Stripe are actually reachable - is on
+`/health/detail` below, so that a slow or hanging dependency can never stall
+the probe a platform healthcheck restarts the container over.
+
+### Detailed health
+
+The full payload - version, commit and per-component status - requires
+authentication.
+
+```bash
+curl -H "X-API-KEY: $DAYSURFACE_API_KEY" https://api.daysurface.com/health/detail
 ```
 
 ```json
@@ -112,8 +133,6 @@ curl https://api.daysurface.com/health
   }
 }
 ```
-
-Status is `"ok"` when all components are healthy, `"degraded"` if any have errors.
 
 ## Next Steps
 
