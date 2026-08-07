@@ -131,11 +131,23 @@ class SecurityHeadersMiddleware:
     shape alone.
     """
 
-    def __init__(self, app: ASGIApp, docs_paths: frozenset[str] = frozenset()) -> None:
+    def __init__(self, app: ASGIApp, docs_paths: frozenset[str]) -> None:
         self.app = app
         self.docs_paths = docs_paths
 
-    def _csp_for(self, path: str) -> str:
+    def _csp_for(self, scope: Scope) -> str:
+        """Pick the policy for this request's path.
+
+        ``app.docs_url`` and friends are *root_path-relative*, but this
+        middleware is the outermost layer and sees the full path: mounted under
+        ``root_path="/api"``, Swagger arrives as ``/api/docs`` while
+        ``docs_paths`` holds ``/docs``. Strip the prefix before comparing, or
+        the docs bundle silently gets ``script-src 'none'`` and renders blank.
+        """
+        path = scope.get("path", "")
+        root = scope.get("root_path", "")
+        if root and path.startswith(root):
+            path = path[len(root) :] or "/"
         return DOCS_CSP if path in self.docs_paths else DEFAULT_CSP
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
@@ -143,7 +155,7 @@ class SecurityHeadersMiddleware:
             await self.app(scope, receive, send)
             return
 
-        policy = self._csp_for(scope.get("path", ""))
+        policy = self._csp_for(scope)
 
         async def send_with_security_headers(message: Message) -> None:
             if message["type"] == "http.response.start":

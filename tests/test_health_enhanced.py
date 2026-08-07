@@ -14,7 +14,6 @@ from sqlalchemy.pool import StaticPool
 
 from api_server.auth import AuthenticatedUser, get_authenticated_user
 from api_server.routes import health as health_module
-from api_server.routes.health import _health_cache
 from api_server.server import app
 from db.base import Base
 from db.engine import get_db_session
@@ -48,7 +47,6 @@ class TestHealthPublic(TestTemplate):
     """Anonymous callers get a liveness signal and nothing else."""
 
     def setup_method(self):
-        _health_cache.clear()
         app.dependency_overrides.clear()
         # Only the DB session is overridden (no BACKEND_DB_URI under test);
         # get_authenticated_user is deliberately left real so the client is
@@ -107,7 +105,6 @@ class TestHealthDetailAuthenticated(TestTemplate):
     """Authenticated callers still get the full payload."""
 
     def setup_method(self):
-        _health_cache.clear()
         app.dependency_overrides[get_authenticated_user] = _override_auth
         app.dependency_overrides[get_db_session] = _override_db
         self.client = TestClient(app)

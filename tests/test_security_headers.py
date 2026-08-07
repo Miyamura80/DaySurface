@@ -14,6 +14,7 @@ import re
 from contextlib import contextmanager
 from unittest.mock import patch
 
+import anyio
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -194,6 +195,42 @@ class TestSecurityHeaders(TestTemplate):
                 not in client.get(path).headers["content-security-policy"]
             ), path
 
+    def test_docs_csp_survives_a_root_path_mount(self):
+        """`app.docs_url` is root_path-relative; this middleware sees the full path.
+
+        Behind a path-rewriting proxy the docs arrive as `/api/docs` while
+        `docs_paths` holds `/docs`. Without stripping the prefix the bundle gets
+        `script-src 'none'` and Swagger renders blank - a failure no
+        same-origin test reaches.
+        """
+        captured: dict[str, str] = {}
+
+        async def receive():
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        async def send(message):
+            if message["type"] == "http.response.start":
+                captured.update(
+                    {
+                        k.decode(): v.decode()
+                        for k, v in message["headers"]
+                        if k == b"content-security-policy"
+                    }
+                )
+
+        async def inner(scope, receive, send):
+            await send({"type": "http.response.start", "status": 200, "headers": []})
+            await send({"type": "http.response.body", "body": b""})
+
+        mw = SecurityHeadersMiddleware(inner, docs_paths=frozenset({"/docs"}))
+        anyio.run(
+            mw,
+            {"type": "http", "path": "/api/docs", "root_path": "/api"},
+            receive,
+            send,
+        )
+        assert "cdn.jsdelivr.net" in captured["content-security-policy"]
+
     def test_a_route_may_override_a_security_header(self):
         """setdefault semantics, asserted against a route that actually sets one.
 
@@ -212,7 +249,7 @@ class TestSecurityHeaders(TestTemplate):
             )
 
         probe = Starlette(routes=[Route("/", opinionated)])
-        probe.add_middleware(SecurityHeadersMiddleware)
+        probe.add_middleware(SecurityHeadersMiddleware, docs_paths=frozenset())
         resp = TestClient(probe).get("/")
 
         assert resp.headers["content-security-policy"] == "default-src 'self'"

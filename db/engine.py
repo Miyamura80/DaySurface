@@ -17,6 +17,27 @@ _engine: Engine | None = None
 _SessionLocal: sessionmaker[Session] | None = None
 
 
+CONNECT_TIMEOUT_SECONDS = 5
+
+
+def _connect_args(uri: str) -> dict[str, object]:
+    """Driver-specific connect args, principally a bounded connect timeout.
+
+    Without one, a database host that stops answering SYN (a failover, a
+    security group change) leaves every connect blocked on OS TCP retries -
+    ~130s on Linux. Anything holding a worker while that happens is stuck for
+    the duration, so an unreachable database degrades from "queries fail" to
+    "the process stops serving". ``pool_pre_ping`` does not help: the ping is
+    itself a connect.
+
+    Only libpq-backed URIs get it; SQLite (used by the test suite) has no such
+    option and would reject the kwarg.
+    """
+    if uri.startswith(("postgresql", "postgres:")):
+        return {"connect_args": {"connect_timeout": CONNECT_TIMEOUT_SECONDS}}
+    return {}
+
+
 def _init_engine() -> Engine:
     """Create the engine from ``global_config.BACKEND_DB_URI``."""
     global _engine, _SessionLocal  # noqa: PLW0603
@@ -31,7 +52,7 @@ def _init_engine() -> Engine:
             "Set it in your .env file to use database features."
         )
 
-    _engine = create_engine(uri, pool_pre_ping=True)
+    _engine = create_engine(uri, pool_pre_ping=True, **_connect_args(uri))
     _SessionLocal = sessionmaker(bind=_engine, autoflush=False, expire_on_commit=False)
     return _engine
 
