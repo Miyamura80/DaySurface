@@ -96,6 +96,15 @@ const jsonLd = [
     >
 
     <header class="mt-6">
+      <!-- Same CSS-mask treatment as the install picker and the trust strip: the
+           mark is carried in the SVG's alpha channel and tinted with the current
+           text colour, so a full-colour vendor logo never fights the monochrome
+           palette. Decorative - the client's name is in the h1 right beside it. -->
+      <span
+        class="mb-4 block size-10 bg-accent"
+        style={`-webkit-mask:url('${guide.logo}') center/contain no-repeat;mask:url('${guide.logo}') center/contain no-repeat;`}
+        aria-hidden="true"
+      />
       <h1 class="text-4xl font-bold tracking-tight sm:text-5xl">
         {guide.heading}
       </h1>

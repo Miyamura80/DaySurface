@@ -37,6 +37,7 @@ export const clientGuides: ClientGuide[] = [
     slug: "claude",
     targetId: "claude",
     clientName: "Claude",
+    logo: "/logos/claude.svg",
     title: "Connect Gmail to Claude - DaySurface",
     description:
       "Give Claude access to your Gmail over MCP: add one remote server, sign in with Google, then triage your inbox and draft replies inside the chat. No API key, no account to create.",
@@ -82,6 +83,7 @@ export const clientGuides: ClientGuide[] = [
     slug: "chatgpt",
     targetId: "chatgpt",
     clientName: "ChatGPT",
+    logo: "/logos/chatgpt.svg",
     title: "Connect Gmail to ChatGPT - DaySurface",
     description:
       "Give ChatGPT access to your Gmail over MCP: turn on Developer mode, create a connector pointing at the DaySurface endpoint, sign in with Google, and work your inbox from the chat.",
@@ -131,6 +133,7 @@ export const clientGuides: ClientGuide[] = [
     slug: "vscode",
     targetId: "vscode",
     clientName: "VS Code",
+    logo: "/logos/vscode.svg",
     title: "Connect Gmail to VS Code Copilot - DaySurface",
     description:
       "Give GitHub Copilot agent mode access to your Gmail over MCP: add one remote server, sign in with Google, and triage your inbox without leaving the editor.",
@@ -176,6 +179,7 @@ export const clientGuides: ClientGuide[] = [
     slug: "goose",
     targetId: "goose",
     clientName: "Goose",
+    logo: "/logos/goose.svg",
     title: "Connect Gmail to Goose - DaySurface",
     description:
       "Add DaySurface to Goose as a streamable-HTTP extension: sign in with Google, then triage your inbox and draft replies in an interactive dashboard inside Goose.",
@@ -225,6 +229,7 @@ export const clientGuides: ClientGuide[] = [
     slug: "cursor",
     targetId: "cursor",
     clientName: "Cursor",
+    logo: "/logos/cursor.svg",
     title: "Connect Gmail to Cursor - DaySurface",
     description:
       "Add DaySurface to Cursor as a remote MCP server: sign in with Google, then read threads, draft replies and clear your inbox without leaving the editor.",
@@ -273,6 +278,7 @@ export const clientGuides: ClientGuide[] = [
     // M365 Copilot is documented.
     targetId: null,
     clientName: "Microsoft 365 Copilot",
+    logo: "/logos/m365-copilot.svg",
     title: "Connect Gmail to Microsoft 365 Copilot - DaySurface",
     description:
       "Add the DaySurface Gmail MCP server to Microsoft 365 Copilot as a custom connector, or as an MCP tool on a Copilot Studio agent. Requires a tenant administrator.",

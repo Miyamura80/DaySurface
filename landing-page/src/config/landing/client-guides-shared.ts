@@ -34,6 +34,19 @@ export interface ClientGuide {
    */
   targetId: string | null;
   clientName: string;
+  /**
+   * Path under `public/logos/`. Carried here rather than read off the matching
+   * `connect.ts` target because a guide can have no target at all - M365
+   * Copilot does not - and that guide still needs a mark.
+   *
+   * Rendered through the same CSS-mask treatment as the install picker and the
+   * trust strip: only the SVG's alpha channel survives, tinted with the current
+   * text colour. Two consequences when adding one. A mark with an opaque
+   * background rect masks to a solid block, and a mark that carries its shape
+   * in `stop-opacity="0"` gradient stops masks to holes - check it rendered,
+   * do not just check the file downloaded.
+   */
+  logo: string;
   /** <title>. Leads with the query, closes with the brand. */
   title: string;
   description: string;
