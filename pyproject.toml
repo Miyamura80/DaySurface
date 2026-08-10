@@ -176,6 +176,7 @@ exclude = [
     "tests/cli/test_stdin.py",
     "tests/test_rate_limit.py",
     "tests/test_health_enhanced.py",
+    "tests/test_security_headers.py",
     "tests/test_billing.py",
     "tests/test_idempotency.py",
     "tests/test_enhancer_fallback.py",

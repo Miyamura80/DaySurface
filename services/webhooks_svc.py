@@ -93,10 +93,6 @@ def decrypt_secret(ciphertext: bytes) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _is_dev() -> bool:
-    return (getattr(global_config, "DEV_ENV", "") or "").lower() in {"local", "dev"}
-
-
 def _candidate_ips(host: str) -> list[ipaddress.IPv4Address | ipaddress.IPv6Address]:
     """Best-effort resolution of ``host`` to IPs. Empty if it cannot resolve.
 
@@ -137,7 +133,7 @@ def _validate_webhook_url(url: str) -> None:
     if not host:
         raise ValueError("Webhook url must include a host")
 
-    dev = _is_dev()
+    dev = global_config.is_dev
     is_loopback_name = host.lower() in {"localhost", "ip6-localhost"}
     if parsed.scheme == "http" and not (dev and is_loopback_name):
         raise ValueError("Webhook url must use https")

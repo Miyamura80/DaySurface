@@ -8,6 +8,7 @@ import jwt as pyjwt
 from cryptography.hazmat.primitives.asymmetric import rsa
 
 from api_server.auth.workos_auth import verify_workos_token
+from common import global_config
 from tests.test_template import TestTemplate
 
 
@@ -18,16 +19,38 @@ def _generate_rsa_keypair():
 
 
 class TestWorkOSAuth(TestTemplate):
-    @patch("api_server.auth.workos_auth.global_config")
-    def test_test_mode_bypass(self, mock_config):
-        """JSON test-mode token should be accepted in local dev."""
-        mock_config.WORKOS_CLIENT_ID = "client_test123"
-        mock_config.DEV_ENV = "dev"
+    def test_test_mode_bypass(self):
+        """JSON test-mode token should be accepted in local dev.
+
+        Patches the real config rather than substituting a MagicMock: the gate
+        reads ``global_config.is_dev``, and a mock auto-creates that attribute
+        as truthy, so ``DEV_ENV`` would be decorative and the companion test
+        below would pass no matter what the predicate did.
+        """
         token = json.dumps({"sub": "user-abc", "email": "a@b.com"})
-        user = verify_workos_token(token)
+        with (
+            patch.object(global_config, "WORKOS_CLIENT_ID", "client_test123"),
+            patch.object(global_config, "DEV_ENV", "dev"),
+        ):
+            user = verify_workos_token(token)
         assert user is not None
         assert user.user_id == "user-abc"
         assert user.email == "a@b.com"
+
+    def test_test_mode_bypass_is_refused_outside_dev(self):
+        """The unsigned-JSON bypass must never authenticate in production.
+
+        This is the direction that matters and it was untested: the bypass
+        accepts an arbitrary ``sub``/``email`` with no signature, so leaving it
+        reachable in production is full authentication bypass.
+        """
+        token = json.dumps({"sub": "attacker", "email": "a@evil.com"})
+        for dev_env in ("prod", "production", "staging", ""):
+            with (
+                patch.object(global_config, "WORKOS_CLIENT_ID", "client_test123"),
+                patch.object(global_config, "DEV_ENV", dev_env),
+            ):
+                assert verify_workos_token(token) is None, dev_env
 
     @patch("api_server.auth.workos_auth.global_config")
     def test_no_client_id_returns_none(self, mock_config):

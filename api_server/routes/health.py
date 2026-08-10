@@ -1,16 +1,26 @@
-"""Health-check endpoint with component status (no auth required)."""
+"""Health-check endpoints.
 
-import collections.abc
+``GET /health`` is public and deliberately minimal: a liveness signal only
+(``{"status": "ok"}``), with no dependency probes at all.  Build identity
+(version, git commit) and the per-component breakdown are information
+disclosure to an anonymous caller (ASVS V14.3.3) - DaySurface is open source,
+so a commit SHA tells an attacker exactly which code is deployed.  Those
+details, and the readiness rollup, live on ``GET /health/detail``, which
+requires authentication.  See ``health_check`` for why probing on the public
+path is an availability hazard rather than a nicety.
+"""
+
 import os
 import subprocess
 import threading
-import time
 from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from loguru import logger as log
+
+from api_server.auth import AuthenticatedUser, get_authenticated_user
 
 try:
     _APP_VERSION = _pkg_version("daysurface")
@@ -18,45 +28,6 @@ except PackageNotFoundError:
     _APP_VERSION = "0.1.0"
 
 router = APIRouter(tags=["health"])
-
-# TTL cache for component health checks (avoids DB/Redis hit on every poll)
-_HEALTH_TTL = 15  # seconds
-_health_cache: dict[str, tuple[dict, float]] = {}
-_health_locks: dict[str, threading.Lock] = {}
-_health_locks_meta = threading.Lock()
-
-
-def _get_component_lock(name: str) -> threading.Lock:
-    """Return a per-component lock, creating one lazily if needed."""
-    lock = _health_locks.get(name)
-    if lock is not None:
-        return lock
-    with _health_locks_meta:
-        if name not in _health_locks:
-            _health_locks[name] = threading.Lock()
-        return _health_locks[name]
-
-
-def _cached_check(name: str, check_fn: collections.abc.Callable[[], dict]) -> dict:
-    """Return cached result if fresh, otherwise call check_fn under lock.
-
-    Each component has its own lock so a slow DB probe doesn't block
-    Redis or Stripe checks.  With a 15 s TTL the serialisation is
-    negligible for health endpoints.
-    """
-    cached = _health_cache.get(name)
-    now = time.monotonic()
-    if cached and cached[1] > now:
-        return cached[0]
-    with _get_component_lock(name):
-        # Double-check after acquiring lock
-        cached = _health_cache.get(name)
-        now = time.monotonic()
-        if cached and cached[1] > now:
-            return cached[0]
-        result = check_fn()
-        _health_cache[name] = (result, time.monotonic() + _HEALTH_TTL)
-    return result
 
 
 def _check_database() -> dict:
@@ -228,24 +199,75 @@ def _get_git_commit() -> str | None:
         return _git_commit_value
 
 
-@router.get("/health")
-def health_check():
-    components = {
+def _collect_components() -> dict[str, dict]:
+    """Probe every component, uncached.
+
+    Results were cached behind a 15s TTL when the public liveness endpoint
+    polled them; ``/health/detail`` is the only caller now, and an operator
+    checking whether a failover recovered wants the current answer, not one
+    from up to fifteen seconds ago with no way to bust it.
+    """
+    return {
         "api": {"status": "ok"},
-        "database": _cached_check("database", _check_database),
-        "redis": _cached_check("redis", _check_redis),
-        "stripe": _cached_check("stripe", _check_stripe),
+        "database": _check_database(),
+        "redis": _check_redis(),
+        "stripe": _check_stripe(),
     }
 
-    # "ok" if all components are ok or not_configured; "degraded" if any errored
-    overall = "ok"
+
+def _overall_status(components: dict[str, dict]) -> str:
+    """Roll components up: "ok" unless any component errored, then "degraded"."""
     for comp in components.values():
         if comp["status"] == "error":
-            overall = "degraded"
-            break
+            return "degraded"
+    return "ok"
 
+
+@router.get("/health", summary="Liveness probe (public)")
+def health_check():
+    """Public liveness signal: this process is up and serving.
+
+    Runs **no dependency probes**.  Liveness and readiness are different
+    questions and this endpoint answers only the first, for three reasons:
+
+    - ``db/engine.py`` builds the engine with ``pool_pre_ping=True`` and no
+      connect timeout, so a database host that stops answering SYN blocks the
+      probe on OS TCP retries (~130s on Linux).  The Dockerfile healthcheck is
+      ``--timeout=5s --retries=3``, so probing here would turn a slow
+      dependency into a container restart loop.
+    - This is a sync ``def``, so it runs on the anyio threadpool.  A probe that
+      blocks lets unauthenticated callers park every thread in that pool and
+      stall every other sync route in the app.  ``db/engine.py`` now bounds the
+      connect at ``CONNECT_TIMEOUT_SECONDS``, but a bounded probe on an
+      anonymous endpoint is still a lever an attacker can pull for free.
+    - A per-component rollup readable by anonymous callers is a disclosure
+      oracle in its own right ("one of their backends is erroring right now").
+
+    Nothing consumes the rollup: Railway ``healthcheckPath``, Render
+    ``healthCheckPath`` and the Dockerfile ``HEALTHCHECK`` all assert on the
+    status code alone.  Readiness lives on ``/health/detail``.
+    """
+    return {"status": "ok"}
+
+
+@router.get("/health/detail", summary="Detailed health (authenticated)")
+def health_detail(_user: AuthenticatedUser = Depends(get_authenticated_user)):
+    """Full health payload - build identity plus per-component status.
+
+    Authenticated-only: the git commit identifies the exact deployed revision
+    of an open-source codebase, which is exactly the disclosure ASVS V14.3.3
+    warns about.
+
+    This is a sync ``def`` and it does probe, so the threadpool argument in
+    ``health_check`` applies here too - authentication changes who can pull the
+    lever, not that it exists.  What bounds it is ``db/engine.py``'s
+    ``CONNECT_TIMEOUT_SECONDS``: the Redis client already carries its own
+    socket timeouts and the Stripe probe makes no network call, so with the
+    database connect bounded, no probe here can hold a worker indefinitely.
+    """
+    components = _collect_components()
     return {
-        "status": overall,
+        "status": _overall_status(components),
         "version": _APP_VERSION,
         "commit": _get_git_commit(),
         "timestamp": datetime.now(UTC).isoformat(),

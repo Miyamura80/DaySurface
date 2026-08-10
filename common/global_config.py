@@ -287,6 +287,17 @@ class Config(BaseSettings):
         )
     )
 
+    @property
+    def is_dev(self) -> bool:
+        """True only for the two explicit development values.
+
+        Fails secure: anything else - unset, ``staging``, ``prod``, or a typo -
+        is treated as production, so a misspelled ``DEV_ENV`` can never relax a
+        security control. This is the single owner of that predicate; callers
+        must not re-derive it from ``DEV_ENV``.
+        """
+        return (self.DEV_ENV or "").lower() in {"local", "dev"}
+
     @model_validator(mode="after")
     def _require_secret_in_prod(self) -> "Config":
         if (

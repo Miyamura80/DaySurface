@@ -92,8 +92,7 @@ def require_encryption() -> TokenEncryption:
     if enc is not None:
         return enc
 
-    dev_env = (getattr(global_config, "DEV_ENV", "") or "").lower()
-    if dev_env in {"local", "dev"}:
+    if global_config.is_dev:
         log.warning(
             "GOOGLE_TOKEN_ENC_KEY is not set; falling back to PlaintextEncryption "
             "for refresh-token storage. NEVER use this in production."
