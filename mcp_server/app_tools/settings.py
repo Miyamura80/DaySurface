@@ -43,6 +43,14 @@ def get(user_id: str = "") -> WebhookSettingsResult:
     return _webhook_settings(WebhookSettingsInput(user_id=uid))
 
 
+# SECURITY (audit #3): the headless `webhook_subscribe` service is hard-removed
+# from the LLM surface (`hide_from_llm=True`), but this app-tool twin calls the
+# same logic and is only kept from the model by the `visibility=["app"]` hint -
+# which is advisory, not a server-side guarantee (see app_tools/__init__.py). On
+# a host that ignores the hint, an injected email could still drive
+# `settings.subscribe` to exfiltrate mail. Closing that fully requires serving
+# app-only tools from a separate FastMCP instance (out of scope here); until
+# then this path's safety is host-dependent, unlike the headless service.
 @mcp.tool(
     name="settings.subscribe",
     description="Register a webhook endpoint (returns the one-time signing secret).",
