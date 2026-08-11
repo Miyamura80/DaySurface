@@ -1,0 +1,46 @@
+---
+/*
+ * The numbered `border-l-2` list: a zero-padded ordinal, a title, a paragraph.
+ *
+ * Three uses, two of them semantically different, which is what `ordered` is
+ * for. /gmail-webhooks and /ai-email-triage list unordered *reasons* - the
+ * numbering is a visual rhythm, so they render `<div>`s. The connect guides list
+ * *steps* that must be followed in sequence, so they render an `<ol>` and get
+ * `#step-N` anchors the HowTo JSON-LD points at.
+ */
+interface Item {
+  title: string;
+  body: string;
+}
+
+interface Props {
+  items: Item[];
+  /**
+   * Render as `<ol>/<li>` with `#<idPrefix>-N` anchors. Use when the order is
+   * load-bearing; the default `<div>`s are for lists that merely happen to be
+   * numbered.
+   */
+  ordered?: boolean;
+  /** Anchor id stem for ordered lists. Ignored otherwise. */
+  idPrefix?: string;
+  class?: string;
+}
+
+const { items, ordered = false, idPrefix = "step", class: className } = Astro.props;
+const Wrapper = ordered ? "ol" : "div";
+const Row = ordered ? "li" : "div";
+---
+
+<Wrapper class:list={["space-y-4", className]}>
+  {
+    items.map((item, i) => (
+      <Row id={ordered ? `${idPrefix}-${i + 1}` : undefined} class="border-l-2 border-accent py-2 pl-5">
+        <h3 class="flex items-center gap-3 text-lg font-semibold">
+          <span class="font-mono text-sm text-accent">{String(i + 1).padStart(2, "0")}</span>
+          {item.title}
+        </h3>
+        <p class="mt-2 text-pretty leading-relaxed text-fg-muted">{item.body}</p>
+      </Row>
+    ))
+  }
+</Wrapper>

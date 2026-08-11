@@ -6,7 +6,7 @@
  * part an answer engine most wants to quote, so they are spelled out here.
  */
 import { site, webhooks } from "../config/landing";
-import { trimSlash } from "./_shared";
+import { faqSection, trimSlash } from "./_shared";
 
 export function buildGmailWebhooksMd(origin: string): string {
   const o = trimSlash(origin);
@@ -42,7 +42,7 @@ captured signature cannot be replayed.
 
 ## ${webhooks.faqHeading}
 
-${webhooks.faq.map((f) => `### ${f.q}\n${f.a}`).join("\n\n")}
+${faqSection(webhooks.faq)}
 
 ## More
 

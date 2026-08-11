@@ -86,7 +86,14 @@ export function buildLlmsFullTxt(origin: string): string {
         case "command":
           how = `Run this in a terminal:\n\n${c.setup_prompt}`;
           break;
+        // `manual` shares this arm rather than inventing prose of its own. A
+        // manual target has no prompt, so it always falls to `numbered(steps)`
+        // - which is the whole answer for it. A bespoke sentence here would
+        // only render when a manual target shipped without steps, i.e. when its
+        // config was incomplete, and would ship a useless instruction to agents
+        // as though it were guidance.
         case "prompt":
+        case "manual":
           // Inline the actual text - an agent reading this cannot go and fetch
           // "the setup prompt from the site".
           how = c.setup_prompt

@@ -1,0 +1,79 @@
+---
+/*
+ * The shell every standalone editorial page shares: head, nav, back-link,
+ * title block, a centred column, and the footer.
+ *
+ * /gmail-webhooks, /ai-email-triage and /connect-gmail-to-<client> were three
+ * copies of this scaffold, differing in their config identifiers. The body of
+ * each page - the part that is actually about something - goes in the default
+ * slot.
+ *
+ * Not used by /compare or /vs/<slug>: those run a wider column (max-w-6xl) and
+ * a different header, and bending this to fit them would mean two layout props
+ * that exist only to undo it. They stay on Base directly.
+ */
+import Base from "./Base.astro";
+import Nav from "../components/Nav.astro";
+import Footer from "../components/Footer.astro";
+import { site } from "../config/landing";
+
+interface Props {
+  title: string;
+  description: string;
+  /** Path of the `.md` twin, advertised as `rel="alternate"` by Base. */
+  markdownPath: string;
+  /** Emitted as one `application/ld+json` block in `<head>`. */
+  jsonLd: unknown[];
+  heading: string;
+  subhead: string;
+  lede: string;
+  /**
+   * Optional mark above the h1, under `public/logos/`. Rendered through the
+   * same CSS mask as the install picker and trust strip: only the SVG's alpha
+   * survives, tinted with the accent. A logo with an opaque background rect
+   * masks to a solid block, and one carrying its shape in `stop-opacity="0"`
+   * gradient stops masks to holes - check it rendered, do not just check the
+   * file downloaded.
+   */
+  logo?: string;
+}
+
+const { title, description, markdownPath, jsonLd, heading, subhead, lede, logo } =
+  Astro.props;
+---
+
+<Base title={title} description={description} markdownPath={markdownPath}>
+  <script
+    type="application/ld+json"
+    is:inline
+    slot="head"
+    set:html={JSON.stringify(jsonLd)}
+  />
+
+  <Nav />
+  <main class="mx-auto max-w-4xl px-4 py-12 sm:px-6 sm:py-16">
+    <a
+      href="/"
+      class="inline-flex min-h-11 items-center text-sm opacity-70 hover:opacity-100"
+      >&larr; Back to {site.name}</a
+    >
+
+    <header class="mt-6">
+      {
+        logo && (
+          <span
+            class="mb-4 block size-10 bg-accent"
+            style={`-webkit-mask:url('${logo}') center/contain no-repeat;mask:url('${logo}') center/contain no-repeat;`}
+            aria-hidden="true"
+          />
+        )
+      }
+      <h1 class="text-4xl font-bold tracking-tight sm:text-5xl">{heading}</h1>
+      <p class="mt-4 text-xl text-accent">{subhead}</p>
+      <p class="mt-4 text-lg leading-relaxed text-fg-muted">{lede}</p>
+    </header>
+
+    <slot />
+  </main>
+  <Footer />
+</Base>
