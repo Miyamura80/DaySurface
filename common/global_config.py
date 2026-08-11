@@ -482,10 +482,13 @@ def _redact_secret_keys(value: Any) -> Any:
     a secret-named key never appears in the returned view at all.
     """
     if isinstance(value, dict):
+        # Case-insensitive: pydantic-settings is case_sensitive=False, so a
+        # lowercase YAML key like ``openai_api_key`` still populates the secret
+        # field and must be dropped too.
         return {
             k: _redact_secret_keys(v)
             for k, v in value.items()
-            if k not in _SECRET_FIELD_NAMES
+            if not (isinstance(k, str) and k.upper() in _SECRET_FIELD_NAMES)
         }
     if isinstance(value, list):
         return [_redact_secret_keys(v) for v in value]

@@ -73,16 +73,18 @@ class TestConfigService(TestTemplate):
         # The module (not the singleton, which shadows it via common/__init__).
         gc = sys.modules["common.global_config"]
         original = gc._yaml_config_cache
-        gc._yaml_config_cache = {
+        gc._yaml_config_cache = {  # ty: ignore[unresolved-attribute]
             **original,
             "OPENAI_API_KEY": "leaked",
+            "openai_api_key": "leaked-lowercase",  # pydantic is case-insensitive
             "nested": {"SESSION_SECRET_KEY": "leaked", "keep": 1},
         }
         try:
             cfg = config_show(ConfigShowInput()).config
         finally:
-            gc._yaml_config_cache = original
+            gc._yaml_config_cache = original  # ty: ignore[unresolved-attribute]
         assert "OPENAI_API_KEY" not in cfg
+        assert "openai_api_key" not in cfg  # lowercase secret dropped too
         assert "SESSION_SECRET_KEY" not in cfg["nested"]
         assert cfg["nested"]["keep"] == 1  # non-secret siblings survive
 
