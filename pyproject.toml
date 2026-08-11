@@ -228,6 +228,9 @@ exclude = [
     "api_server/middleware/rate_limit.py",
     "tests/test_gmail_services.py",
     "tests/test_inbox_curation.py",
+    # Broad API-server integration suite (route registration + auth/scope
+    # regression tests); grows with each route, like the peers above.
+    "tests/test_api_server.py",
     "services/gmail_messages_svc.py",
     "services/gmail_svc.py",
 ]

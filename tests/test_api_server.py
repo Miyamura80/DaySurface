@@ -251,6 +251,27 @@ class TestAPIServer(TestTemplate):
                 resp = client.post(route, json=payload)
                 assert resp.status_code == 403, f"{route} should require admin scope"
 
+    def test_admin_read_cannot_reach_write_services(self):
+        """admin:read may reach the read routes but not the mutating ones.
+
+        Guards the admin:read vs admin:write boundary on the *unary* services -
+        a regression downgrading config_set/doctor_fix to admin:read (or
+        dropping the write gate) would otherwise pass silently.
+        """
+        with _scoped_user("admin:read") as client:
+            # Read routes accept admin:read (not 403; content/idempotency aside).
+            assert (
+                client.post(
+                    "/api/v1/services/config_get", json={"key": "server.port"}
+                ).status_code
+                != 403
+            )
+            # Write routes require admin:write.
+            for route in ("config_set", "doctor_fix"):
+                payload = {"key": "x", "value": "1"} if route == "config_set" else {}
+                resp = client.post(f"/api/v1/services/{route}", json=payload)
+                assert resp.status_code == 403, f"{route} must require admin:write"
+
     def test_403_on_insufficient_scopes(self):
         """A key with read-only scopes should be rejected from service execution."""
         with _scoped_user("services:read") as client:
