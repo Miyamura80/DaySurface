@@ -37,9 +37,12 @@ export function buildCompareMd(origin: string): string {
     })
     .join("\n");
 
-  return `# ${comparison.heading}
+  // Mirrors the HTML page, so it takes the page headings rather than the
+  // homepage section's - an answer engine quoting this should get the same
+  // category framing a searcher sees.
+  return `# ${comparison.pageHeading}
 
-> ${comparison.subhead}
+> ${comparison.pageSubhead}
 
 Accurate as of ${comparison.asOf}. ${comparison.disclaimer}
 

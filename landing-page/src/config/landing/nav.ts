@@ -59,6 +59,15 @@ export const footer: { columns: FooterColumn[]; copyright: string } = {
         { label: "Docs", href: site.docsUrl },
         { label: "API Reference", href: "/api" },
         { label: "Support", href: "/support" },
+        // The two editorial pages that are not per-client. Sitewide links,
+        // because both were reachable from nothing but the sitemap - and the
+        // footer is the cheapest inbound path a page can have. The six
+        // /connect-gmail-to-<client> guides are deliberately NOT here: they are
+        // linked from the compatibility strip on the homepage, where the
+        // question they answer is actually being asked, and six more entries
+        // would push /connect against the payload budget its test enforces.
+        { label: "Gmail webhooks", href: "/gmail-webhooks" },
+        { label: "AI email triage", href: "/ai-email-triage" },
         { label: "GitHub", href: site.githubUrl },
         { label: "Changelog", href: site.githubUrl + "/releases" },
       ],

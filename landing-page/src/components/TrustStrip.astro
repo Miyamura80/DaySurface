@@ -1,5 +1,13 @@
 ---
-import { compatibility } from "../config/landing";
+/*
+ * The "works with every MCP client" strip.
+ *
+ * Hosts with a setup guide render as links to it. Before that, the seven client
+ * guides were reachable from nothing but the sitemap and each other, which is a
+ * poor position for pages whose entire purpose is being found - and this strip
+ * is where the question those pages answer actually gets asked.
+ */
+import { compatibility, guidePath } from "../config/landing";
 ---
 
 <section class="border-y border-border/60 bg-surface-1/40 py-10 sm:py-12">
@@ -38,9 +46,19 @@ import { compatibility } from "../config/landing";
                 {host.name.charAt(0)}
               </span>
             )}
-            <span class="text-base font-medium text-fg-muted transition group-hover:text-fg">
-              {host.name}
-            </span>
+            {host.guideSlug ? (
+              <a
+                href={guidePath(host.guideSlug)}
+                class="text-base font-medium text-fg-muted underline decoration-border underline-offset-4 transition hover:text-fg hover:decoration-accent"
+                title={`Connect Gmail to ${host.name}`}
+              >
+                {host.name}
+              </a>
+            ) : (
+              <span class="text-base font-medium text-fg-muted transition group-hover:text-fg">
+                {host.name}
+              </span>
+            )}
           </li>
         ))
       }

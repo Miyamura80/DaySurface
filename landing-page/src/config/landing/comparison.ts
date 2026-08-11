@@ -78,9 +78,22 @@ export interface ComparisonPillar {
 }
 
 export const comparison: {
-  /** Section + page headings. */
+  /** Homepage comparison section (Comparison.astro). Brand-led on purpose: by
+   *  the time a visitor scrolls this far they know whose site they are on. */
   heading: string;
   subhead: string;
+  /**
+   * `/compare` page headings, deliberately NOT the same strings.
+   *
+   * Someone arriving on the homepage already has the brand; someone searching
+   * "gmail mcp alternatives" does not, and a page that answers them with "How
+   * DaySurface compares" leads with the one word they did not type. These lead
+   * with the category instead. Keep the two pairs separate - collapsing them
+   * back into one would re-brand the homepage section as a side effect.
+   */
+  pageHeading: string;
+  pageSubhead: string;
+  pageDescription: string;
   /** Defensibility stamp surfaced on the comparison pages. */
   asOf: string;
   disclaimer: string;
@@ -92,6 +105,11 @@ export const comparison: {
   heading: "How DaySurface compares",
   subhead:
     "Most Gmail MCPs hand your agent a wall of JSON. DaySurface is a Gmail product: an inbox you drive from inside the chat, open source and yours to host.",
+  pageHeading: "Gmail MCP alternatives",
+  pageSubhead:
+    "Four Gmail MCP servers, what each one actually gives your agent, and where DaySurface differs.",
+  pageDescription:
+    "Compare Gmail MCP servers: DaySurface, GongRzhe's gmail-mcp, Composio, Zapier/Pipedream and Google Workspace MCP. Capability matrix, transports, self-hosting and licensing.",
   asOf: "June 2026",
   disclaimer:
     "Comparison reflects publicly documented capabilities as of June 2026. The MCP ecosystem moves fast - if something here is out of date, open an issue and we'll fix it.",
