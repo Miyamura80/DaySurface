@@ -441,6 +441,18 @@ class TestWebhookSSRF(TestTemplate):
         assert pinned == "https://93.184.216.34/hook"  # no credentials in the URL
         assert auth == ("user", "pass")
 
+    def test_pinning_percent_decodes_userinfo(self):
+        # Reserved chars in URL credentials are percent-encoded; the auth tuple
+        # must carry the decoded values, not the literal %xx text.
+        with patch(
+            "src.utils.ssrf.socket.getaddrinfo",
+            return_value=_addrinfo("93.184.216.34"),
+        ):
+            _pinned, _headers, _ext, auth = resolve_and_pin_webhook(
+                "https://us%40er:p%3Ass@example.com/hook"
+            )
+        assert auth == ("us@er", "p:ss")
+
     def test_rejects_host_that_resolves_to_internal_address(self):
         # DNS rebind: the name resolved fine at subscribe, now points at metadata.
         with (

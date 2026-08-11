@@ -24,7 +24,7 @@ import ipaddress
 import socket
 from collections.abc import Callable
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 _IpAddress = ipaddress.IPv4Address | ipaddress.IPv6Address
 
@@ -53,7 +53,9 @@ def _extract_auth(parsed: Any) -> _Auth:
     """
     if parsed.username is None:
         return None
-    return (parsed.username, parsed.password or "")
+    # urlparse does not percent-decode userinfo; httpx's own URL handling would,
+    # so decode here to authenticate with the real credentials, not the %xx text.
+    return (unquote(parsed.username), unquote(parsed.password or ""))
 
 
 def pin_url_to_validated_ip(
