@@ -42,7 +42,7 @@ import { deepLink } from "../utils/deeplink";
  * worse than shipping no link at all - it tells someone the job is done while
  * the form in front of them is blank. That rule is expressed here, once.
  */
-export type InstallEffort = "one-click" | "command" | "dialog-only" | "prompt" | "manual";
+export type InstallEffort = "one-click" | "command" | "dialog-only" | "prompt";
 
 /**
  * Every string that varies by effort, in one table.
@@ -97,12 +97,6 @@ export const effortMeta: Record<
     stepsLabel: "Or add it by hand",
     shortHow: "paste the setup prompt into the client.",
   },
-  manual: {
-    heading: "Add it by hand",
-    badge: "manual",
-    stepsLabel: "Click-path",
-    shortHow: "add the server by hand - no install link and no setup prompt.",
-  },
 };
 
 /** Render order for the effort groups. */
@@ -111,7 +105,6 @@ const EFFORT_ORDER: readonly InstallEffort[] = [
   "command",
   "dialog-only",
   "prompt",
-  "manual",
 ];
 
 /** A single client's install path, flattened for JSON and markdown alike. */
@@ -135,26 +128,28 @@ export interface InstallClient {
 /**
  * Classify a target by the work left after the click.
  *
- * `manual` targets - no install URL, no setup prompt, just a click-path - get
- * their own bucket because their install experience is not a prompt target's.
- * Grouping them under `prompt` puts the heading "Paste this prompt into the
- * client" above a client that has no prompt to paste, which is simply wrong.
- * That is the reason; everything else follows from it.
+ * `manual` targets (no install URL, no prompt - just a click-path) currently
+ * do not exist; connect.ts keeps the method for the next host that ships no URL
+ * scheme at all. They group with `prompt`, whose heading and steps handling
+ * already fit "you configure this yourself".
  *
- * It also avoids a sharp edge. The shared-prompt collapse in
- * `groupedInstallMatrix` only fires when EVERY client in a group carries the
- * same prompt, so one manual client in the prompt bucket switched it off and
- * reprinted a ~450-char prompt once per client, on the two surfaces whose whole
- * job is surviving truncation. `agent-journey.test.ts` catches that.
+ * If you add one, expect two things to go wrong, both found the hard way when
+ * three manual targets briefly existed here:
  *
- * No target uses `manual` today - `connect.ts` keeps the method for the next
- * host that ships no URL scheme at all, and this keeps that path correct for it.
- * Note that means this branch is unverified rather than tested: nothing in
- * `make ci` executes it while the bucket is empty.
+ *   1. The shared-prompt collapse in `groupedInstallMatrix` only fires when
+ *      EVERY client in a bucket carries the same prompt. A manual client carries
+ *      none, so dropping one into `prompt` switches the collapse off and
+ *      reprints a ~450-char prompt once per client on /connect and connect.md -
+ *      the two surfaces with byte budgets. `agent-journey.test.ts` catches this.
+ *   2. The `prompt` heading reads "Paste this prompt into the client", which is
+ *      simply wrong above a client that has no prompt. Nothing catches that.
+ *
+ * The fix both times is to give `manual` its own bucket here, in `effortMeta`
+ * and in `EFFORT_ORDER`. That was written and then removed, deliberately: it
+ * was machinery for zero users, and this note costs less than carrying it.
  */
-export function effortOf(t: InstallTarget): InstallEffort {
+function effortOf(t: InstallTarget): InstallEffort {
   if (t.method === "deeplink") return t.prefills === false ? "dialog-only" : "one-click";
-  if (t.method === "manual") return "manual";
   if (t.setupKind === "command") return "command";
   return "prompt";
 }
