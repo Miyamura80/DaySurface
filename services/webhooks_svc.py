@@ -93,38 +93,10 @@ def decrypt_secret(ciphertext: bytes) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _candidate_ips(host: str) -> list[ipaddress.IPv4Address | ipaddress.IPv6Address]:
-    """Best-effort resolution of ``host`` to IPs. Empty if it cannot resolve.
+def _parse_webhook_url(url: str) -> tuple[Any, str, bool]:
+    """Parse and scheme-check a subscriber URL. Returns ``(parsed, host, dev)``.
 
-    A literal IP resolves to itself. For a hostname we do a DNS lookup; if that
-    fails (offline, bogus name) we return [] and let the guard pass - the
-    delivery attempt will simply fail later rather than blocking subscription.
-    """
-    try:
-        return [ipaddress.ip_address(host)]
-    except ValueError:
-        pass
-    try:
-        infos = socket.getaddrinfo(host, None)
-    except OSError:
-        return []
-    ips: list[ipaddress.IPv4Address | ipaddress.IPv6Address] = []
-    for info in infos:
-        addr = str(info[4][0]).split("%")[0]  # strip IPv6 scope id
-        try:
-            ips.append(ipaddress.ip_address(addr))
-        except ValueError:
-            continue
-    return ips
-
-
-def _validate_webhook_url(url: str) -> None:
-    """Reject non-https and SSRF-prone subscriber URLs.
-
-    Blocks private / link-local / reserved / multicast destinations so a tenant
-    cannot point the delivery worker at cloud metadata endpoints or internal
-    services. Loopback + cleartext http are permitted only in dev for local
-    testing.
+    Rejects non-http(s) schemes and cleartext http except to a dev loopback name.
     """
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https"):
@@ -132,24 +104,100 @@ def _validate_webhook_url(url: str) -> None:
     host = parsed.hostname
     if not host:
         raise ValueError("Webhook url must include a host")
-
     dev = global_config.is_dev
     is_loopback_name = host.lower() in {"localhost", "ip6-localhost"}
     if parsed.scheme == "http" and not (dev and is_loopback_name):
         raise ValueError("Webhook url must use https")
+    return parsed, host, dev
 
-    for ip in _candidate_ips(host):
-        if ip.is_loopback:
-            if not dev:
-                raise ValueError("Webhook url must not target a loopback address")
-        elif (
-            ip.is_private
-            or ip.is_link_local
-            or ip.is_reserved
-            or ip.is_multicast
-            or ip.is_unspecified
-        ):
-            raise ValueError("Webhook url must not target a private/reserved address")
+
+def _reject_if_ssrf(
+    ip: ipaddress.IPv4Address | ipaddress.IPv6Address, dev: bool
+) -> None:
+    """Raise if *ip* is an SSRF-prone target (metadata / internal / loopback).
+
+    Loopback is permitted only in dev for local testing.
+    """
+    if ip.is_loopback:
+        if not dev:
+            raise ValueError("Webhook url must not target a loopback address")
+    elif (
+        ip.is_private
+        or ip.is_link_local
+        or ip.is_reserved
+        or ip.is_multicast
+        or ip.is_unspecified
+    ):
+        raise ValueError("Webhook url must not target a private/reserved address")
+
+
+def _validate_webhook_url(url: str) -> None:
+    """Reject non-https and SSRF-prone subscriber URLs at subscribe time.
+
+    Best-effort by design: it rejects a URL that *currently* resolves to an
+    internal/reserved address, but a host that cannot be resolved right now is
+    allowed through (a webhook endpoint may be briefly down at registration).
+    This is safe because :func:`resolve_and_pin_webhook` re-checks and pins at
+    delivery time and fails closed there - that, not this, is the authoritative
+    SSRF guard.
+    """
+    parsed, host, dev = _parse_webhook_url(url)
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except OSError:
+        return  # unresolvable now; the delivery-time guard is authoritative
+    for info in infos:
+        _reject_if_ssrf(ipaddress.ip_address(str(info[4][0]).split("%")[0]), dev)
+
+
+def resolve_and_pin_webhook(url: str) -> tuple[str, dict[str, str], dict[str, str]]:
+    """Validate + pin a subscriber URL for delivery. Returns ``(url, headers, ext)``.
+
+    Resolves the host, rejects any non-public destination (loopback allowed only
+    in dev), then rewrites the URL to target one validated IP while preserving
+    the hostname in the ``Host`` header and (for https) TLS SNI - closing the
+    resolve-then-reconnect DNS-rebinding window. IP-literal hosts pass through
+    unchanged. Fails **closed**: an unresolvable host is rejected. Called at
+    delivery time so a DNS record flipped to an internal address after
+    subscription is caught when the payload is actually sent. Mirrors
+    ``services/image_proxy.py:_validate_and_pin`` with a dev-loopback carve-out.
+    """
+    parsed, host, dev = _parse_webhook_url(url)
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError(f"Invalid port in webhook url {url!r}") from exc
+    default_port = 80 if parsed.scheme == "http" else 443
+    try:
+        infos = socket.getaddrinfo(host, port or default_port, proto=socket.IPPROTO_TCP)
+    except OSError as exc:
+        raise ValueError(f"Webhook url host {host!r} does not resolve") from exc
+    if not infos:
+        raise ValueError(f"Webhook url host {host!r} does not resolve")
+
+    addresses: list[str] = []
+    for info in infos:
+        ip = ipaddress.ip_address(str(info[4][0]).split("%")[0])  # strip scope id
+        _reject_if_ssrf(ip, dev)
+        addresses.append(str(ip))
+
+    try:
+        ipaddress.ip_address(host)
+        return url, {}, {}  # IP literal (validated above): nothing to pin
+    except ValueError:
+        pass
+
+    ip_str = addresses[0]
+    ip_netloc = f"[{ip_str}]" if ":" in ip_str else ip_str
+    if port:
+        ip_netloc += f":{port}"
+    pinned = parsed._replace(netloc=ip_netloc).geturl()
+    host_header = host if not port else f"{host}:{port}"
+    headers = {"Host": host_header}
+    # httpcore uses sni_hostname for both the TLS handshake and cert hostname
+    # verification, so cert checks still run against the real host.
+    extensions = {"sni_hostname": host} if parsed.scheme == "https" else {}
+    return pinned, headers, extensions
 
 
 # ---------------------------------------------------------------------------

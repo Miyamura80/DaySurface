@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import socket
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from unittest.mock import patch
@@ -37,12 +38,18 @@ from services.webhooks_svc import (
     SIGNATURE_HEADER,
     TIMESTAMP_HEADER,
     enqueue_event,
+    resolve_and_pin_webhook,
     webhook_list,
     webhook_rotate_secret,
     webhook_subscribe,
     webhook_unsubscribe,
 )
 from tests.test_template import TestTemplate
+
+
+def _addrinfo(ip: str, port: int = 443):
+    """Build a getaddrinfo-shaped result resolving to a single ``ip``."""
+    return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (ip, port))]
 
 
 @contextmanager
@@ -245,9 +252,11 @@ class TestEnqueueEvent(TestTemplate):
 
 class TestDelivery(TestTemplate):
     def _seed(self, event_types=None):
+        # Loopback literal: resolves offline and is allowed in dev, so the
+        # delivery-time resolve-and-pin guard is deterministic in tests.
         res = webhook_subscribe(
             WebhookSubscribeInput(
-                user_id="u1", url="https://sub.example/hook", event_types=event_types
+                user_id="u1", url="https://127.0.0.1/hook", event_types=event_types
             )
         )
         with db_engine.use_db_session() as session:
@@ -383,6 +392,77 @@ class TestDelivery(TestTemplate):
                 assert d.status == "pending"
                 assert d.attempts == 1
                 assert "undecryptable" in (d.last_error or "")
+
+
+class TestWebhookSSRF(TestTemplate):
+    """Delivery-time resolve-and-pin closes the DNS-rebinding SSRF window."""
+
+    def test_pins_public_host_to_ip_preserving_host_and_sni(self):
+        with patch(
+            "services.webhooks_svc.socket.getaddrinfo",
+            return_value=_addrinfo("93.184.216.34"),
+        ):
+            pinned, headers, ext = resolve_and_pin_webhook("https://example.com/hook")
+        assert pinned == "https://93.184.216.34/hook"
+        assert headers["Host"] == "example.com"
+        assert ext["sni_hostname"] == "example.com"
+
+    def test_rejects_host_that_resolves_to_internal_address(self):
+        # DNS rebind: the name resolved fine at subscribe, now points at metadata.
+        with (
+            patch(
+                "services.webhooks_svc.socket.getaddrinfo",
+                return_value=_addrinfo("169.254.169.254"),
+            ),
+            pytest.raises(ValueError, match="private|reserved|loopback"),
+        ):
+            resolve_and_pin_webhook("https://rebind.example/hook")
+
+    def test_fails_closed_when_host_does_not_resolve(self):
+        with (
+            patch(
+                "services.webhooks_svc.socket.getaddrinfo",
+                side_effect=OSError("no dns"),
+            ),
+            pytest.raises(ValueError, match="does not resolve"),
+        ):
+            resolve_and_pin_webhook("https://gone.example/hook")
+
+    def test_delivery_to_rebound_host_is_not_sent(self):
+        """A subscription whose host later resolves internal never gets POSTed."""
+        called = {"n": 0}
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            called["n"] += 1
+            return httpx.Response(200)
+
+        with _patch_db(), _plaintext_encryption():
+            # Subscribe passes (best-effort; host unresolvable in the sandbox).
+            webhook_subscribe(
+                WebhookSubscribeInput(user_id="u1", url="https://rebind.example/hook")
+            )
+            with db_engine.use_db_session() as session:
+                enqueue_event(
+                    session, user_id="u1", event_type="gmail.message.new", payload={}
+                )
+                session.commit()
+            # At delivery the name now resolves to a private address.
+            with (
+                _mock_http(handler),
+                patch(
+                    "services.webhooks_svc.socket.getaddrinfo",
+                    return_value=_addrinfo("10.0.0.5"),
+                ),
+            ):
+                counts = drain_due_deliveries()
+            assert counts["sent"] == 0
+            assert called["n"] == 0  # no POST ever left the process
+            with db_engine.use_db_session() as session:
+                d = session.query(WebhookDelivery).one()
+                assert d.status in ("pending", "failed")
+                assert "private" in (d.last_error or "") or "reserved" in (
+                    d.last_error or ""
+                )
 
 
 class TestBackoffSchedule(TestTemplate):

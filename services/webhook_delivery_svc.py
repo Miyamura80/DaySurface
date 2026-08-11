@@ -42,6 +42,7 @@ from services.webhooks_svc import (
     SIGNATURE_HEADER,
     TIMESTAMP_HEADER,
     decrypt_secret,
+    resolve_and_pin_webhook,
     sign_payload,
 )
 
@@ -124,8 +125,20 @@ def _post(
         EVENT_TYPE_HEADER: event.event_type,
         DELIVERY_ID_HEADER: delivery.id,
     }
-    with httpx.Client(timeout=_HTTP_TIMEOUT_S) as client:
-        resp = client.post(url, content=body, headers=headers)
+    # Re-validate and pin at delivery time (not just at subscribe): the DNS
+    # record may have flipped to an internal/metadata address since the
+    # subscription was created. Raises ValueError if the host now resolves
+    # somewhere it shouldn't - caught by _process as a delivery failure.
+    # Redirects are disabled (a 3xx to an internal host would reconnect
+    # unpinned) and env proxies ignored so nothing can re-route the request.
+    pinned_url, pin_headers, extensions = resolve_and_pin_webhook(url)
+    headers.update(pin_headers)
+    with httpx.Client(
+        timeout=_HTTP_TIMEOUT_S, follow_redirects=False, trust_env=False
+    ) as client:
+        resp = client.post(
+            pinned_url, content=body, headers=headers, extensions=extensions
+        )
     resp.raise_for_status()
 
 
