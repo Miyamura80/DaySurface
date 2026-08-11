@@ -227,6 +227,20 @@ export const connect: {
       setupPrompt: AGENT_SETUP_PROMPT,
       note: "Windsurf uses “serverUrl”, not “url” - a snippet copied from another client will fail silently.",
     },
+    // Two MCP Apps hosts are deliberately absent from this picker.
+    //
+    // Microsoft 365 Copilot, despite having a guide at
+    // /connect-gmail-to-microsoft-365-copilot: it is provisioned by a tenant
+    // admin from the Microsoft 365 admin center or Copilot Studio and needs
+    // Global or AI Administrator, so it cannot be self-served from a marketing
+    // page. Listing it beside one-click targets would promise the visitor
+    // something they cannot do.
+    //
+    // Postman and MCPJam, which had entries here and were removed: both render
+    // MCP Apps, but they are tools for inspecting a server rather than clients
+    // anyone reads mail in, and this picker answers "add it to the client in
+    // front of you". Anyone pointing an inspector at the endpoint already knows
+    // how; "Any MCP client" below covers them.
     {
       id: "other",
       name: "Any MCP client",

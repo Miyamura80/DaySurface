@@ -1,7 +1,7 @@
 /**
  * The site-wide agent indexes: llms.txt, llms-full.txt and agents.md.
  */
-import { site, hero, features, faq, compatibility, comparison, connectPage, agentGuide, supportEmail } from "../config/landing";
+import { site, hero, features, faq, compatibility, comparison, connectPage, agentGuide, supportEmail, clientGuides, guideMdPath } from "../config/landing";
 import { effortMeta, installMatrix } from "../lib/install";
 import { trimSlash, whenToUseSection } from "./_shared";
 
@@ -33,6 +33,16 @@ ${agentGuide.whenToUse.map((s) => `- ${s}`).join("\n")}
 - [agents.md](${o}/agents.md): Agent-oriented capability and skills summary.
 - [compare.md](${o}/compare.md): ${site.name} vs other Gmail MCP servers (GongRzhe, Composio, Zapier/Pipedream, Google Workspace MCP), capability matrix spelled out in words.
 - [api.md](${o}/api.md): The HTTP API and where to fetch its OpenAPI spec.
+
+## Guides
+${clientGuides
+  .map(
+    (g) =>
+      `- [connect-gmail-to-${g.slug}.md](${o}${guideMdPath(g.slug)}): Step-by-step setup for ${g.clientName} - settings path, OAuth sign-in and what it can do once connected.`,
+  )
+  .join("\n")}
+- [ai-email-triage.md](${o}/ai-email-triage.md): What an agent can and cannot take off a human in an inbox. Carries no time-saved figures - nothing is measured, so nothing is claimed.
+- [gmail-webhooks.md](${o}/gmail-webhooks.md): Gmail has no native webhooks; what Pub/Sub push gives you, the gaps it leaves, and how signed callbacks work here.
 
 Every HTML page with a markdown twin also answers \`Accept: text/markdown\` on its
 own URL, and advertises the twin as \`<link rel="alternate" type="text/markdown">\`.

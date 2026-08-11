@@ -36,3 +36,25 @@ export const connectAliases = [
 
 /** The canonical connect route, plus every alias that resolves to it. */
 export const connectRoutes = ["connect", ...connectAliases] as const;
+
+/**
+ * The path for one client's setup guide, and its markdown twin.
+ *
+ * Both were hand-concatenated in nine places across five files - the route, the
+ * two feeds, `llms.txt` and the markdown builder - which is how the site ends up
+ * with one caller quietly disagreeing with the rest about a trailing slash. That
+ * exact bug class was just fixed in the docs' absolute links; this stops it
+ * being reintroduced here.
+ *
+ * No trailing slash: Astro builds `<path>/index.html` and canonicalises to the
+ * slashed form itself, and `sitemap.xml.ts` appends the slash at feed-build
+ * time. Emitting it here as well would double it.
+ */
+export function guidePath(slug: string): string {
+  return `/connect-gmail-to-${slug}`;
+}
+
+/** The `.md` twin of {@link guidePath}, served to `Accept: text/markdown`. */
+export function guideMdPath(slug: string): string {
+  return `${guidePath(slug)}.md`;
+}

@@ -16,6 +16,7 @@
  *   manifests.ts - skills.sh, auth.md, pricing.md
  *   support.ts   - support.md
  *   webhooks.ts  - gmail-webhooks.md
+ *   guides.ts    - connect-gmail-to-<client>.md, ai-email-triage.md
  */
 export * from "./connect";
 export * from "./llms";
@@ -23,3 +24,4 @@ export * from "./compare";
 export * from "./manifests";
 export * from "./support";
 export * from "./webhooks";
+export * from "./guides";
