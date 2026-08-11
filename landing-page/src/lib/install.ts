@@ -152,7 +152,7 @@ export interface InstallClient {
  * Note that means this branch is unverified rather than tested: nothing in
  * `make ci` executes it while the bucket is empty.
  */
-function effortOf(t: InstallTarget): InstallEffort {
+export function effortOf(t: InstallTarget): InstallEffort {
   if (t.method === "deeplink") return t.prefills === false ? "dialog-only" : "one-click";
   if (t.method === "manual") return "manual";
   if (t.setupKind === "command") return "command";

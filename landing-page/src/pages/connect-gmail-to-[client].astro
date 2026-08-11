@@ -39,6 +39,24 @@ const canonical = `${origin}${guidePath(guide.slug)}/`;
 // Other clients to cross-link at the foot, so each guide feeds the others.
 const others = clientGuides.filter((g) => g.slug !== guide.slug);
 
+// A guide with no picker target cannot use the generic CTA: it would promise a
+// one-click link that does not exist and send the reader to a picker their
+// client is absent from. M365 Copilot is provisioned by a tenant admin, so the
+// honest close is to say so. Driven off the same field that records the
+// absence, so a future admin-provisioned client gets this for free.
+const selfServe = guide.targetId !== null;
+const cta = selfServe
+  ? {
+      heading: `Add it to ${guide.clientName}`,
+      body: `The install picker has the one-click link for ${guide.clientName} and the click-path for every other MCP client.`,
+      label: "Open the install picker",
+    }
+  : {
+      heading: "This one needs your admin",
+      body: `${guide.clientName} is provisioned centrally, so there is no button here that finishes the job. Send the steps above to whoever administers your tenant - or, if you want ${site.name} on your own account today, add it to a client you control instead.`,
+      label: "See the clients you can add yourself",
+    };
+
 const jsonLd = [
   {
     "@context": "https://schema.org",
@@ -130,12 +148,7 @@ const jsonLd = [
     </div>
   </section>
 
-  <PageCta
-    class="mt-16"
-    heading={`Add it to ${guide.clientName}`}
-    body={`The install picker has the one-click link for ${guide.clientName} and the click-path for every other MCP client.`}
-    ctaLabel="Open the install picker"
-  />
+  <PageCta class="mt-16" heading={cta.heading} body={cta.body} ctaLabel={cta.label} />
 
   <section class="mt-16">
     <h2 class="text-2xl font-bold tracking-tight">Questions</h2>
