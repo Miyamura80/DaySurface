@@ -43,6 +43,7 @@ from models.webhooks import (
     WebhookUnsubscribeResult,
 )
 from services import service
+from src.utils.ssrf import pin_url_to_validated_ip
 
 # Header names on delivered POSTs (kept here so the delivery module imports one).
 SIGNATURE_HEADER = "X-Webhook-Signature"
@@ -153,51 +154,18 @@ def _validate_webhook_url(url: str) -> None:
 def resolve_and_pin_webhook(url: str) -> tuple[str, dict[str, str], dict[str, str]]:
     """Validate + pin a subscriber URL for delivery. Returns ``(url, headers, ext)``.
 
-    Resolves the host, rejects any non-public destination (loopback allowed only
-    in dev), then rewrites the URL to target one validated IP while preserving
-    the hostname in the ``Host`` header and (for https) TLS SNI - closing the
-    resolve-then-reconnect DNS-rebinding window. IP-literal hosts pass through
-    unchanged. Fails **closed**: an unresolvable host is rejected. Called at
-    delivery time so a DNS record flipped to an internal address after
-    subscription is caught when the payload is actually sent. Mirrors
-    ``services/image_proxy.py:_validate_and_pin`` with a dev-loopback carve-out.
+    Applies the webhook scheme policy (https except a dev loopback) and then the
+    shared SSRF resolve-and-pin guard with the webhook address policy (loopback
+    allowed only in dev). Called at delivery time so a DNS record flipped to an
+    internal address after subscription is caught when the payload is actually
+    sent; fails closed on an unresolvable host.
     """
-    parsed, host, dev = _parse_webhook_url(url)
-    try:
-        port = parsed.port
-    except ValueError as exc:
-        raise ValueError(f"Invalid port in webhook url {url!r}") from exc
-    default_port = 80 if parsed.scheme == "http" else 443
-    try:
-        infos = socket.getaddrinfo(host, port or default_port, proto=socket.IPPROTO_TCP)
-    except OSError as exc:
-        raise ValueError(f"Webhook url host {host!r} does not resolve") from exc
-    if not infos:
-        raise ValueError(f"Webhook url host {host!r} does not resolve")
-
-    addresses: list[str] = []
-    for info in infos:
-        ip = ipaddress.ip_address(str(info[4][0]).split("%")[0])  # strip scope id
-        _reject_if_ssrf(ip, dev)
-        addresses.append(str(ip))
-
-    try:
-        ipaddress.ip_address(host)
-        return url, {}, {}  # IP literal (validated above): nothing to pin
-    except ValueError:
-        pass
-
-    ip_str = addresses[0]
-    ip_netloc = f"[{ip_str}]" if ":" in ip_str else ip_str
-    if port:
-        ip_netloc += f":{port}"
-    pinned = parsed._replace(netloc=ip_netloc).geturl()
-    host_header = host if not port else f"{host}:{port}"
-    headers = {"Host": host_header}
-    # httpcore uses sni_hostname for both the TLS handshake and cert hostname
-    # verification, so cert checks still run against the real host.
-    extensions = {"sni_hostname": host} if parsed.scheme == "https" else {}
-    return pinned, headers, extensions
+    _parsed, _host, dev = _parse_webhook_url(url)
+    return pin_url_to_validated_ip(
+        url,
+        validate_ip=lambda ip: _reject_if_ssrf(ip, dev),
+        error_cls=ValueError,
+    )
 
 
 # ---------------------------------------------------------------------------

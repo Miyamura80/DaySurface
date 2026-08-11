@@ -307,6 +307,23 @@ class TestDelivery(TestTemplate):
                 assert d.status == "succeeded"
                 assert d.attempts == 1
 
+    def test_redirect_response_is_a_failure_not_a_silent_success(self):
+        # We don't follow redirects (a Location would reconnect unpinned), so a
+        # 3xx means the payload never landed - it must retry, not be marked sent.
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(302, headers={"location": "https://elsewhere/"})
+
+        with _patch_db(), _plaintext_encryption():
+            self._seed()
+            with _mock_http(handler):
+                counts = drain_due_deliveries()
+            assert counts["sent"] == 0
+            assert counts["retry"] == 1
+            with db_engine.use_db_session() as session:
+                d = session.query(WebhookDelivery).one()
+                assert d.status == "pending"
+                assert "302" in (d.last_error or "")
+
     def test_failure_schedules_retry_with_backoff(self):
         def handler(_request: httpx.Request) -> httpx.Response:
             return httpx.Response(500)
@@ -399,7 +416,7 @@ class TestWebhookSSRF(TestTemplate):
 
     def test_pins_public_host_to_ip_preserving_host_and_sni(self):
         with patch(
-            "services.webhooks_svc.socket.getaddrinfo",
+            "src.utils.ssrf.socket.getaddrinfo",
             return_value=_addrinfo("93.184.216.34"),
         ):
             pinned, headers, ext = resolve_and_pin_webhook("https://example.com/hook")
@@ -411,7 +428,7 @@ class TestWebhookSSRF(TestTemplate):
         # DNS rebind: the name resolved fine at subscribe, now points at metadata.
         with (
             patch(
-                "services.webhooks_svc.socket.getaddrinfo",
+                "src.utils.ssrf.socket.getaddrinfo",
                 return_value=_addrinfo("169.254.169.254"),
             ),
             pytest.raises(ValueError, match="private|reserved|loopback"),
@@ -421,10 +438,10 @@ class TestWebhookSSRF(TestTemplate):
     def test_fails_closed_when_host_does_not_resolve(self):
         with (
             patch(
-                "services.webhooks_svc.socket.getaddrinfo",
+                "src.utils.ssrf.socket.getaddrinfo",
                 side_effect=OSError("no dns"),
             ),
-            pytest.raises(ValueError, match="does not resolve"),
+            pytest.raises(ValueError, match="cannot resolve"),
         ):
             resolve_and_pin_webhook("https://gone.example/hook")
 
@@ -450,7 +467,7 @@ class TestWebhookSSRF(TestTemplate):
             with (
                 _mock_http(handler),
                 patch(
-                    "services.webhooks_svc.socket.getaddrinfo",
+                    "src.utils.ssrf.socket.getaddrinfo",
                     return_value=_addrinfo("10.0.0.5"),
                 ),
             ):

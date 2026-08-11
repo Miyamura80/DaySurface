@@ -139,7 +139,17 @@ def _post(
         resp = client.post(
             pinned_url, content=body, headers=headers, extensions=extensions
         )
-    resp.raise_for_status()
+    # Only a 2xx counts as delivered. raise_for_status() ignores 3xx, but we
+    # don't follow redirects (a Location would reconnect unpinned), so a
+    # subscriber that answers 3xx never received the payload - treat it as a
+    # failure to retry, not a silent success.
+    if not resp.is_success:
+        resp.raise_for_status()  # 4xx/5xx -> rich HTTPStatusError
+        raise httpx.HTTPStatusError(
+            f"webhook endpoint returned unexpected redirect {resp.status_code}",
+            request=resp.request,
+            response=resp,
+        )
 
 
 def _record_failure(delivery: WebhookDelivery, error: str) -> str:

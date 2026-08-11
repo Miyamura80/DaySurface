@@ -19,6 +19,7 @@ from unittest import mock
 import pytest
 
 import services.image_proxy as image_proxy
+import src.utils.ssrf as ssrf
 from services.image_proxy import ImageFetchError, fetch_remote_image
 from tests.test_template import TestTemplate
 
@@ -75,7 +76,7 @@ def _patched_fetch(
 ) -> tuple[Any, _FakeClient]:
     client = _FakeClient(responses)
     with (
-        mock.patch.object(image_proxy.socket, "getaddrinfo", return_value=addrinfo),
+        mock.patch.object(ssrf.socket, "getaddrinfo", return_value=addrinfo),
         mock.patch.object(image_proxy.httpx, "Client", return_value=client),
     ):
         result = fetch_remote_image(url)
@@ -99,7 +100,7 @@ class TestImageProxy(TestTemplate):
     def test_rejects_host_resolving_to_private_address(self):
         with (
             mock.patch.object(
-                image_proxy.socket, "getaddrinfo", return_value=_PRIVATE_ADDRINFO
+                ssrf.socket, "getaddrinfo", return_value=_PRIVATE_ADDRINFO
             ),
             pytest.raises(ImageFetchError, match="non-public"),
         ):
@@ -116,7 +117,7 @@ class TestImageProxy(TestTemplate):
         client = _FakeClient([_FakeResponse()])
         with (
             mock.patch.object(
-                image_proxy.socket, "getaddrinfo", return_value=_PUBLIC_ADDRINFO
+                ssrf.socket, "getaddrinfo", return_value=_PUBLIC_ADDRINFO
             ),
             mock.patch.object(
                 image_proxy.httpx, "Client", return_value=client
@@ -227,7 +228,7 @@ class TestImageProxy(TestTemplate):
         # per-hop re-validation must catch the second one.
         with (
             mock.patch.object(
-                image_proxy.socket,
+                ssrf.socket,
                 "getaddrinfo",
                 side_effect=[_PUBLIC_ADDRINFO, _PRIVATE_ADDRINFO],
             ),

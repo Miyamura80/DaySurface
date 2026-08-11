@@ -152,6 +152,9 @@ extend_exclude = ["scripts/sync_agent_config.py", "scripts/gen_brand_assets.py",
 package_module_name_map = { "PyJWT" = "jwt", "google-api-python-client" = "googleapiclient", "google-auth" = "google", "openfeature-sdk" = "openfeature", "pillow" = "PIL", "pyyaml" = "yaml", "python-dotenv" = "dotenv" }
 
 [tool.vulture]
+# Public helper imported across packages (services/image_proxy.py,
+# services/webhooks_svc.py); vulture doesn't resolve the cross-module use.
+ignore_names = ["pin_url_to_validated_ip"]
 exclude = [
     ".venv-test/",
     ".venv/",

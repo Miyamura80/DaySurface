@@ -35,14 +35,13 @@ from __future__ import annotations
 
 import base64
 import ipaddress
-import socket
 import time
 from typing import Any
-from urllib.parse import urlparse
 
 import httpx
 
 from models.gmail import GmailFetchImageResult
+from src.utils.ssrf import pin_url_to_validated_ip
 
 _MAX_IMAGE_BYTES = 2 * 1024 * 1024  # cap per image; emails shouldn't need more
 _MAX_REDIRECTS = 3
@@ -60,54 +59,18 @@ class ImageFetchError(ValueError):
 def _validate_and_pin(url: str) -> tuple[str, dict[str, str], dict[str, str]]:
     """Validate ``url`` and return (pinned_url, headers, extensions).
 
-    Resolves the host, requires every DNS answer to be a global address, then
-    rewrites the URL to target one validated IP while preserving the original
-    hostname in the Host header and (for https) TLS SNI - closing the
-    resolve-then-reconnect DNS-rebinding window. IP-literal hosts are
-    validated and passed through unchanged.
+    Requires every DNS answer to be a globally routable address, then pins the
+    connection to it (see :func:`pin_url_to_validated_ip`). No dev carve-out:
+    remote images are always fetched from public hosts.
     """
-    parsed = urlparse(url)
-    if parsed.scheme not in ("http", "https"):
-        raise ImageFetchError(f"unsupported URL scheme: {parsed.scheme!r}")
-    host = parsed.hostname
-    if not host:
-        raise ImageFetchError("URL has no host")
-    try:
-        port = parsed.port  # raises ValueError on e.g. "https://h:abc/"
-    except ValueError as exc:
-        raise ImageFetchError(f"invalid port in URL {url!r}") from exc
-    default_port = 80 if parsed.scheme == "http" else 443
-    try:
-        infos = socket.getaddrinfo(host, port or default_port, proto=socket.IPPROTO_TCP)
-    except (socket.gaierror, OSError) as exc:
-        raise ImageFetchError(f"cannot resolve host {host!r}") from exc
-    if not infos:
-        raise ImageFetchError(f"cannot resolve host {host!r}")
-    addresses: list[str] = []
-    for info in infos:
-        addr = ipaddress.ip_address(info[4][0])
-        if not addr.is_global:
-            raise ImageFetchError(f"host {host!r} resolves to non-public address")
-        addresses.append(str(addr))
 
-    try:
-        ipaddress.ip_address(host)
-        # Host is already an IP literal (validated above): nothing to pin.
-        return url, {}, {}
-    except ValueError:
-        pass
+    def _require_global(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> None:
+        if not ip.is_global:
+            raise ImageFetchError("host resolves to non-public address")
 
-    ip = addresses[0]
-    ip_netloc = f"[{ip}]" if ":" in ip else ip
-    if port:
-        ip_netloc += f":{port}"
-    pinned = parsed._replace(netloc=ip_netloc).geturl()
-    host_header = host if not port else f"{host}:{port}"
-    headers = {"Host": host_header}
-    # httpcore uses sni_hostname for both the TLS handshake and certificate
-    # hostname verification, so cert checks still run against the real host.
-    extensions = {"sni_hostname": host} if parsed.scheme == "https" else {}
-    return pinned, headers, extensions
+    return pin_url_to_validated_ip(
+        url, validate_ip=_require_global, error_cls=ImageFetchError
+    )
 
 
 def _read_image_response(resp: Any, url: str, deadline: float) -> GmailFetchImageResult:
