@@ -15,11 +15,11 @@ and unchanged; this route consumes the ``iter_doctor`` generator instead.
 
 from collections.abc import Iterator
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sse_starlette.sse import EventSourceResponse, ServerSentEvent
 
 from api_server.auth import AuthenticatedUser
-from api_server.auth.scopes import ADMIN_READ, require_scopes
+from api_server.auth.scopes import ADMIN_READ, ADMIN_WRITE, check_scopes, require_scopes
 from api_server.billing.limits import ensure_daily_limit
 from models.doctor import DoctorStreamDone, DoctorStreamInput
 from services.doctor_svc import iter_doctor
@@ -53,12 +53,20 @@ def stream_doctor(
 ) -> EventSourceResponse:
     """Run the doctor checks, emitting each result over SSE as it finishes.
 
-    Mirrors the auth + quota gating of ``POST /api/v1/services/doctor``: admin
-    scope (``doctor`` shells out on the host, and ``fix=True`` runs mutating
-    fixers, so ordinary ``services:execute`` integration keys must not reach it)
-    plus one daily-limit slot per stream. ``sse-starlette`` iterates the sync
-    generator in a threadpool, so the blocking subprocess checks never stall the
-    event loop.
+    Scope mirrors the unary services: ``doctor`` shells out on the host, so the
+    read stream needs ``admin:read``; ``fix=True`` runs the same mutating fixers
+    as ``doctor_fix`` (``uv sync`` / ``prek install`` / ``.env`` writes), so it
+    additionally needs ``admin:write`` - checked here rather than in the
+    dependency because ``require_scopes`` can't see the parsed body. Unlike the
+    unary ``doctor_fix`` route there is no ``Idempotency-Key``: an SSE stream
+    can't be replayed. One daily-limit slot is claimed per stream;
+    ``sse-starlette`` iterates the sync generator in a threadpool, so the
+    blocking subprocess checks never stall the event loop.
     """
+    if body.fix and not check_scopes([ADMIN_WRITE], user.scopes):
+        raise HTTPException(
+            status_code=403,
+            detail="admin:write scope required to run doctor fixers.",
+        )
     ensure_daily_limit(user.user_id)
     return EventSourceResponse(_doctor_events(body))

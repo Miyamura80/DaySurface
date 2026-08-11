@@ -15,6 +15,13 @@ class ServiceEntry:
     output_model: type
     func: Callable[..., Any]
     mutating: bool = False
+    # Admin/dev-only services declare the scope required to reach them over a
+    # networked transport (e.g. "admin:read" / "admin:write"). None means an
+    # ordinary service callable with "services:execute". This is the single
+    # source of truth for the admin boundary: the HTTP transport enforces it as
+    # a required scope, and the MCP transport hides these tools from the LLM
+    # surface. A new admin tool is gated everywhere the moment it sets this.
+    admin_scope: str | None = None
 
 
 class ConnectRequiredError(Exception):
@@ -54,6 +61,7 @@ def service(
     input_model: type,
     output_model: type,
     mutating: bool = False,
+    admin_scope: str | None = None,
 ):
     """Decorator that registers a function as a service.
 
@@ -64,6 +72,13 @@ def service(
     (``mcp_server/_tool_factory.py``): a mutating service is never silently
     re-executed - the fallback reuses the already-completed ``tool.call()``
     result or propagates the enhancer error. CLI behavior is unchanged.
+
+    Set ``admin_scope`` (e.g. ``"admin:read"`` / ``"admin:write"``) for
+    admin/dev-only services - config introspection/tampering, host diagnostics
+    that shell out. It is the single source of truth for the admin boundary:
+    the HTTP transport requires that scope on the auto-generated route (ordinary
+    ``services:execute`` keys get 403), and the MCP transport hides the tool
+    from the LLM surface. CLI callers are unaffected.
     """
 
     def decorator(func):
@@ -75,6 +90,7 @@ def service(
                 output_model=output_model,
                 func=func,
                 mutating=mutating,
+                admin_scope=admin_scope,
             )
         )
         return func

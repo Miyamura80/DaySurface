@@ -133,16 +133,21 @@ mcp: FastMCP = FastMCP(
 )
 
 _populated: bool = False
-_EXCLUDED_DEFAULT_MCP_SERVICES = frozenset(
-    {
-        "config_get",
-        "config_set",
-        "config_show",
-        "doctor",
-        "doctor_fix",
-        "greet",
-    }
-)
+# Non-admin services kept off the default LLM tool surface for reasons other
+# than the admin boundary (demo/noise). Admin/dev services are excluded
+# automatically via their ``admin_scope`` marker - see _excluded_from_default_mcp.
+_MCP_HIDDEN_SERVICES = frozenset({"greet"})
+
+
+def _excluded_from_default_mcp(entry: ServiceEntry) -> bool:
+    """True for CLI-only services hidden from the default MCP tool surface.
+
+    Admin/dev services (those declaring an ``admin_scope`` - the same single
+    source of truth that gates them behind admin on HTTP) are always hidden, so
+    a new admin tool can never accidentally ship on the LLM surface. Plus the
+    demo/noise services in ``_MCP_HIDDEN_SERVICES``.
+    """
+    return entry.admin_scope is not None or entry.name in _MCP_HIDDEN_SERVICES
 
 
 def build_mcp_server() -> FastMCP:
@@ -162,7 +167,7 @@ def build_mcp_server() -> FastMCP:
     discover_app_tools()
 
     for entry in get_registry():
-        if entry.name in _EXCLUDED_DEFAULT_MCP_SERVICES:
+        if _excluded_from_default_mcp(entry):
             log.debug("Skipping default MCP registration for service {!r}", entry.name)
             continue
         make_tool(mcp, entry)
@@ -184,9 +189,7 @@ def llm_tool_surface() -> list[ServiceEntry]:
     so the committed landing-page snapshot is stable across environments.
     """
     build_mcp_server()
-    surface = (
-        e for e in get_registry() if e.name not in _EXCLUDED_DEFAULT_MCP_SERVICES
-    )
+    surface = (e for e in get_registry() if not _excluded_from_default_mcp(e))
     return sorted(surface, key=lambda e: e.name)
 
 

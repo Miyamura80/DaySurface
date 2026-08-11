@@ -42,6 +42,7 @@ def _coerce_value(value: str) -> bool | int | float | str | None:
     description="Show the full project configuration",
     input_model=ConfigShowInput,
     output_model=ConfigShowResult,
+    admin_scope="admin:read",
 )
 def config_show(input: ConfigShowInput) -> ConfigShowResult:
     return ConfigShowResult(config=global_config.to_dict())
@@ -52,6 +53,7 @@ def config_show(input: ConfigShowInput) -> ConfigShowResult:
     description="Get a single configuration value by dot-separated key",
     input_model=ConfigGetInput,
     output_model=ConfigGetResult,
+    admin_scope="admin:read",
 )
 def config_get(input: ConfigGetInput) -> ConfigGetResult:
     obj = global_config
@@ -78,6 +80,7 @@ def config_get(input: ConfigGetInput) -> ConfigGetResult:
     input_model=ConfigSetInput,
     output_model=ConfigSetResult,
     mutating=True,
+    admin_scope="admin:write",
 )
 def config_set(input: ConfigSetInput) -> ConfigSetResult:
     override_path = _ROOT_DIR / ".global_config.yaml"

@@ -3,37 +3,24 @@
 from fastapi import APIRouter, Depends, Request
 
 from api_server.auth import AuthenticatedUser
-from api_server.auth.scopes import (
-    ADMIN_READ,
-    ADMIN_WRITE,
-    SERVICES_EXECUTE,
-    require_scopes,
-)
+from api_server.auth.scopes import SERVICES_EXECUTE, require_scopes
 from api_server.billing.limits import ensure_daily_limit
 from api_server.idempotency import execute_idempotent
 from services import ServiceEntry, discover_services, get_registry
 
 router = APIRouter(prefix="/api/v1/services", tags=["services"])
 
-# Admin/dev-only services that must NOT be reachable by ordinary third-party
-# ``services:execute`` keys: they read the server's config, tamper with the
-# process-wide override file, or shell out on the host. Gating them behind the
-# admin scopes keeps first-party interactive identities working (JWT / AuthKit
-# users carry ``["*"]``, which satisfies any scope) while blocking scoped
-# integration keys. Mirrors mcp_server._EXCLUDED_DEFAULT_MCP_SERVICES, which
-# hides the same tools from the LLM surface.
-_ADMIN_SERVICE_SCOPES: dict[str, str] = {
-    "config_show": ADMIN_READ,
-    "config_get": ADMIN_READ,
-    "doctor": ADMIN_READ,
-    "config_set": ADMIN_WRITE,
-    "doctor_fix": ADMIN_WRITE,
-}
-
 
 def _required_scope(entry: ServiceEntry) -> str:
-    """Scope required to call *entry* over HTTP (admin for dev/introspection)."""
-    return _ADMIN_SERVICE_SCOPES.get(entry.name, SERVICES_EXECUTE)
+    """Scope required to call *entry* over HTTP.
+
+    Admin/dev-only services declare their required scope via
+    ``@service(admin_scope=...)`` (the single source of truth shared with the
+    MCP transport); everything else needs ``services:execute``. First-party
+    interactive identities carry ``["*"]`` and satisfy any scope, so only scoped
+    third-party integration keys are blocked from the admin services.
+    """
+    return entry.admin_scope or SERVICES_EXECUTE
 
 
 def _register_service_routes() -> None:

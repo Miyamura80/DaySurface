@@ -227,12 +227,19 @@ class TestAPIServer(TestTemplate):
             resp = client.post("/api/v1/stream/doctor", json={"fix": False})
             assert resp.status_code == 403
 
-    def test_admin_services_reject_execute_scope(self):
-        """config_set / config_show / doctor_fix require admin, not just execute.
+    def test_stream_doctor_fix_requires_write_scope(self):
+        """fix=True runs mutating host fixers, so admin:read alone is rejected.
 
-        Guards the fix for the audit finding where any services:execute key
-        could dump config, tamper the process-wide override, or run fixers.
+        Guards against admin:read escalating past the admin:write gate on
+        doctor_fix. The 403 fires before any fixer runs.
         """
+        with _scoped_user("admin:read") as client:
+            resp = client.post("/api/v1/stream/doctor", json={"fix": True})
+            assert resp.status_code == 403
+
+    def test_admin_services_reject_execute_scope(self):
+        """config_* / doctor* require admin: a services:execute key must not
+        dump config, tamper the process-wide override, or run fixers."""
         with _scoped_user("services:read", "services:execute") as client:
             for route, payload in (
                 ("/api/v1/services/config_show", {}),

@@ -8,8 +8,8 @@ Hand-maintained derived data drifts silently: adding one `@service` falsifies
 every one of those numbers at once, and nothing in the build notices.
 
 This script closes that gap. It checks two things against
-``mcp_server.server.llm_tool_surface()`` (the registry minus
-``_EXCLUDED_DEFAULT_MCP_SERVICES``, i.e. exactly what an MCP client sees):
+``mcp_server.server.llm_tool_surface()`` (the registry minus the services
+hidden by ``_excluded_from_default_mcp``, i.e. exactly what an MCP client sees):
 
 1. Every tool name in the ``mcp/tools.mdx`` reference tables is a real tool, and
    every real tool appears there - no ghosts, no omissions.

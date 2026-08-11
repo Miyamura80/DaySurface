@@ -304,6 +304,7 @@ def _to_result(results: list[CheckResultModel]) -> DoctorResult:
     description="Run health checks on the project environment",
     input_model=DoctorInput,
     output_model=DoctorResult,
+    admin_scope="admin:read",
 )
 def doctor(input: DoctorInput) -> DoctorResult:
     """Pure read: run every check and report. Fixing lives in ``doctor_fix``."""
@@ -316,6 +317,7 @@ def doctor(input: DoctorInput) -> DoctorResult:
     input_model=DoctorFixInput,
     output_model=DoctorResult,
     mutating=True,
+    admin_scope="admin:write",
 )
 def doctor_fix(input: DoctorFixInput) -> DoctorResult:
     """Mutating variant: check, apply fixers (uv sync, .env scaffold, prek
