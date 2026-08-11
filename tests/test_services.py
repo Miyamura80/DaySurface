@@ -46,18 +46,24 @@ class TestConfigService(TestTemplate):
         # in a different settings source than the YAML config and must stay out
         # of any transport-reachable dump. Guards against the secret-disclosure
         # regression where config_show returned the full env-inclusive dump.
+        # Recursive walk so a secret nested at any depth is caught, not just
+        # top-level keys, and enforce the invariant for *every* declared secret
+        # field name rather than a hand-picked subset.
+        from common.global_config import _SECRET_FIELD_NAMES  # noqa: PLC0415
+
         result = config_show(ConfigShowInput())
-        for secret_field in (
-            "OPENAI_API_KEY",
-            "ANTHROPIC_API_KEY",
-            "BACKEND_DB_URI",
-            "GOOGLE_TOKEN_ENC_KEY",
-            "SESSION_SECRET_KEY",
-            "STRIPE_SECRET_KEY",
-            "WORKOS_API_KEY",
-            "X402_PRIVATE_KEY",
-        ):
-            assert secret_field not in result.config
+
+        def _keys(obj):
+            if isinstance(obj, dict):
+                for k, v in obj.items():
+                    yield k
+                    yield from _keys(v)
+            elif isinstance(obj, list):
+                for v in obj:
+                    yield from _keys(v)
+
+        present = set(_keys(result.config))
+        assert not (present & _SECRET_FIELD_NAMES), present & _SECRET_FIELD_NAMES
 
     def test_config_get_rejects_env_secrets(self):
         # A secret key is unreachable through config_get - it raises KeyError

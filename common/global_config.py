@@ -392,13 +392,17 @@ class Config(BaseSettings):
         field is added later. This is the safe view for the ``config_show`` /
         ``config_get`` services, reachable over the authenticated HTTP transport.
 
+        As defense in depth, any key that collides with a declared secret field
+        name is redacted, so a secret hand-placed in a YAML file cannot leak here
+        even though env secrets never reach this layer to begin with.
+
         Note: this is the YAML *layer*, not the effective config. Pydantic
         defaults for fields absent from every YAML file, and non-secret env-var
         overrides (e.g. ``LLM_CONFIG__CACHE_ENABLED``), are intentionally not
         reflected. Callers needing effective runtime values must not use this.
         A fresh copy is returned so callers cannot mutate the cached view.
         """
-        return deepcopy(_yaml_config_cache)
+        return _redact_secret_keys(deepcopy(_yaml_config_cache))
 
     def _identify_provider(self, model_name: str) -> str:
         """Identify the LLM provider from a model name string."""
@@ -435,6 +439,32 @@ class Config(BaseSettings):
                 )
             return key
         raise ValueError(f"No API key configured for model: {model_identifier}")
+
+
+# Declared secret field names (the env-sourced credentials on Config). Used to
+# redact the YAML view defensively: env secrets never appear in the YAML layer
+# by construction, but this ensures a secret mistakenly placed in a YAML file
+# (e.g. a hand-edited .global_config.yaml) can never leak through config_show /
+# config_get either. Matched by exact key name, so lowercase nested config keys
+# are unaffected.
+_SECRET_MARKERS = ("KEY", "SECRET", "TOKEN", "PASSWORD", "PRIVATE", "_URI")
+_SECRET_FIELD_NAMES: frozenset[str] = frozenset(
+    name for name in Config.model_fields if any(m in name for m in _SECRET_MARKERS)
+)
+
+
+def _redact_secret_keys(value: Any) -> Any:
+    """Recursively replace any dict key matching a secret field name with a marker."""
+    if isinstance(value, dict):
+        return {
+            k: (
+                "***redacted***" if k in _SECRET_FIELD_NAMES else _redact_secret_keys(v)
+            )
+            for k, v in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_secret_keys(v) for v in value]
+    return value
 
 
 # Load .env files before creating the config instance

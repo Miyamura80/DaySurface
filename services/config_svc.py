@@ -40,7 +40,10 @@ def _coerce_value(value: str) -> bool | int | float | str | None:
 
 @service(
     name="config_show",
-    description="Show the full project configuration",
+    description=(
+        "Show the project's YAML-layer configuration (secrets and env-var "
+        "overrides excluded)"
+    ),
     input_model=ConfigShowInput,
     output_model=ConfigShowResult,
 )
@@ -53,7 +56,10 @@ def config_show(input: ConfigShowInput) -> ConfigShowResult:
 
 @service(
     name="config_get",
-    description="Get a single configuration value by dot-separated key",
+    description=(
+        "Get a YAML-layer config value by dot-separated key (secrets and env-var "
+        "overrides excluded; keys set only via env or code defaults are absent)"
+    ),
     input_model=ConfigGetInput,
     output_model=ConfigGetResult,
 )
