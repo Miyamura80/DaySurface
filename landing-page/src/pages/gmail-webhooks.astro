@@ -17,7 +17,7 @@ import FaqAccordion from "../components/FaqAccordion.astro";
 import KeepReading from "../components/KeepReading.astro";
 import NumberedList from "../components/NumberedList.astro";
 import PageCta from "../components/PageCta.astro";
-import { site, webhooks } from "../config/landing";
+import { site, webhooks, clientGuides, guidePath } from "../config/landing";
 import { breadcrumbLd, faqPageLd } from "../lib/jsonld";
 
 const origin = (Astro.site ?? new URL(site.url)).origin;
@@ -146,10 +146,18 @@ const jsonLd = [
     <FaqAccordion items={webhooks.faq} class="mt-6" />
   </section>
 
+  <!-- The client guides are linked from here, not just from each other: this is
+       the only one of the editorial pages Google already knows about, so it is
+       the one that can pass discovery on to the rest. -->
   <KeepReading
     class="mt-16"
     links={[
       { label: "Webhook setup reference", href: "/docs/gmail-webhooks" },
+      { label: "AI email triage", href: "/ai-email-triage" },
+      ...clientGuides.map((g) => ({
+        label: `Connect Gmail to ${g.clientName}`,
+        href: guidePath(g.slug),
+      })),
       { label: "Documentation", href: "/docs" },
       { label: `How ${site.name} compares`, href: "/compare" },
     ]}

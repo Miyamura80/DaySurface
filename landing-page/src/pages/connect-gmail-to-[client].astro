@@ -1,0 +1,171 @@
+---
+/*
+ * /connect-gmail-to-<client> - one standalone setup guide per chat client.
+ *
+ * "Connect Gmail to Claude" and "connect Gmail to ChatGPT" are the highest-intent
+ * queries this product can answer. Until now they resolved to the homepage, which
+ * pitches before it answers, or to /docs/mcp/setup, which assumes the reader has
+ * already picked a server. This route answers the question the search asks, in
+ * the first screen, one URL per client so each can carry its client's name.
+ *
+ * One template renders every client, the way /vs/[slug] renders every competitor:
+ * the two guides can then drift in content but never in structure, JSON-LD or
+ * breadcrumb shape.
+ *
+ * Deliberately NOT merged with /connect. That page answers "is there an account
+ * to create?" for all clients at once and canonicalises a dozen aliases onto
+ * itself. Giving these the same framing would put two same-origin URLs on one
+ * query - see the header of config/landing/webhooks.ts.
+ */
+import type { GetStaticPaths } from "astro";
+import EditorialPage from "../layouts/EditorialPage.astro";
+import FaqAccordion from "../components/FaqAccordion.astro";
+import KeepReading from "../components/KeepReading.astro";
+import NumberedList from "../components/NumberedList.astro";
+import PageCta from "../components/PageCta.astro";
+import { site, clientGuides, connect, guidePath } from "../config/landing";
+import { breadcrumbLd, faqPageLd } from "../lib/jsonld";
+
+export const getStaticPaths = (() =>
+  clientGuides.map((guide) => ({
+    params: { client: guide.slug },
+    props: { guide },
+  }))) satisfies GetStaticPaths;
+
+const { guide } = Astro.props;
+const origin = (Astro.site ?? new URL(site.url)).origin;
+const canonical = `${origin}${guidePath(guide.slug)}/`;
+
+// Other clients to cross-link at the foot, so each guide feeds the others.
+const others = clientGuides.filter((g) => g.slug !== guide.slug);
+
+// A guide with no picker target cannot use the generic CTA: it would promise a
+// one-click link that does not exist and send the reader to a picker their
+// client is absent from. M365 Copilot is provisioned by a tenant admin, so the
+// honest close is to say so. Driven off the same field that records the
+// absence, so a future admin-provisioned client gets this for free.
+const selfServe = guide.targetId !== null;
+const cta = selfServe
+  ? {
+      heading: `Add it to ${guide.clientName}`,
+      body: `The install picker has the one-click link for ${guide.clientName} and the click-path for every other MCP client.`,
+      label: "Open the install picker",
+    }
+  : {
+      heading: "This one needs your admin",
+      body: `${guide.clientName} is provisioned centrally, so there is no button here that finishes the job. Send the steps above to whoever administers your tenant - or, if you want ${site.name} on your own account today, add it to a client you control instead.`,
+      label: "See the clients you can add yourself",
+    };
+
+const jsonLd = [
+  {
+    "@context": "https://schema.org",
+    "@type": "HowTo",
+    name: guide.heading,
+    description: guide.description,
+    url: canonical,
+    inLanguage: "en",
+    // No `totalTime` or `estimatedCost`: both would be invented. Only the steps
+    // are asserted, because only the steps are known to be true.
+    step: guide.steps.map((s, i) => ({
+      "@type": "HowToStep",
+      position: i + 1,
+      name: s.title,
+      text: s.body,
+      url: `${canonical}#step-${i + 1}`,
+    })),
+    publisher: { "@type": "Organization", name: site.name, url: site.url },
+  },
+  faqPageLd(guide.faq),
+  breadcrumbLd([
+    { name: "Home", item: site.url },
+    { name: guide.heading, item: canonical },
+  ]),
+];
+---
+
+<EditorialPage
+  title={guide.title}
+  description={guide.description}
+  markdownPath={`${guidePath(guide.slug)}.md`}
+  jsonLd={jsonLd}
+  heading={guide.heading}
+  subhead={guide.subhead}
+  lede={guide.lede}
+  logo={guide.logo}
+>
+  <!-- The endpoint, above the steps. Someone who already knows their client's
+       settings screen needs this and nothing else on the page. -->
+  <section class="mt-12 border-2 border-border bg-surface-1 p-6">
+    <h2 class="text-sm font-semibold text-fg-muted">The server URL</h2>
+    <p class="mt-3 overflow-x-auto font-mono text-sm text-accent sm:text-base">
+      {connect.mcpUrl}
+    </p>
+    <p class="mt-3 text-sm text-fg-subtle">
+      Transport is streamable HTTP. Auth is OAuth in the browser - there is no key
+      to paste and no account to create.
+    </p>
+  </section>
+
+  {
+    guide.prerequisites.length > 0 && (
+      <section class="mt-12">
+        <h2 class="text-2xl font-bold tracking-tight">Before you start</h2>
+        <ul class="mt-4 space-y-2">
+          {guide.prerequisites.map((item) => (
+            <li class="flex gap-3 text-pretty leading-relaxed text-fg-muted">
+              <span class="text-accent" aria-hidden="true">
+                &bull;
+              </span>
+              {item}
+            </li>
+          ))}
+        </ul>
+      </section>
+    )
+  }
+
+  <section class="mt-16">
+    <h2 class="text-2xl font-bold tracking-tight">
+      Add {site.name} to {guide.clientName}
+    </h2>
+    <NumberedList items={guide.steps} ordered idPrefix="step" class="mt-6" />
+  </section>
+
+  <section class="mt-16">
+    <h2 class="text-2xl font-bold tracking-tight">
+      What {guide.clientName} can do once it is connected
+    </h2>
+    <div class="mt-6 grid gap-4 sm:grid-cols-2">
+      {
+        guide.capabilities.map((cap) => (
+          <div class="border-2 border-border bg-surface-1 p-5">
+            <h3 class="font-semibold">{cap.title}</h3>
+            <p class="mt-2 text-pretty text-sm leading-relaxed text-fg-muted">{cap.body}</p>
+          </div>
+        ))
+      }
+    </div>
+  </section>
+
+  <PageCta class="mt-16" heading={cta.heading} body={cta.body} ctaLabel={cta.label} />
+
+  <section class="mt-16">
+    <h2 class="text-2xl font-bold tracking-tight">Questions</h2>
+    <FaqAccordion items={guide.faq} class="mt-6" />
+  </section>
+
+  <KeepReading
+    class="mt-16"
+    links={[
+      ...others.map((o) => ({
+        label: `Connect Gmail to ${o.clientName}`,
+        href: guidePath(o.slug),
+      })),
+      { label: "AI email triage", href: "/ai-email-triage" },
+      { label: "Gmail webhooks", href: "/gmail-webhooks" },
+      { label: "Setup reference", href: "/docs/mcp/setup" },
+      { label: "Gmail MCP alternatives", href: "/compare" },
+    ]}
+  />
+</EditorialPage>

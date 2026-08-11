@@ -1,0 +1,128 @@
+---
+/*
+ * /ai-email-triage - the triage argument, on a URL that can actually be found.
+ *
+ * Commissioned as "saving hours per week with mail". That phrasing is a benefit
+ * rather than a query, so the page targets "ai email triage" and its neighbours
+ * and makes the hours case in the body instead of the title.
+ *
+ * The page carries no numbers by design - see the header of config/landing/
+ * triage.ts. There is no measurement behind a time-saved claim today, so the
+ * argument is mechanical: which steps the software removes, and an explicit
+ * refusal to estimate the rest. If that ever changes, the number goes in the
+ * config with its source, not into the markup here.
+ */
+import EditorialPage from "../layouts/EditorialPage.astro";
+import FaqAccordion from "../components/FaqAccordion.astro";
+import KeepReading from "../components/KeepReading.astro";
+import NumberedList from "../components/NumberedList.astro";
+import PageCta from "../components/PageCta.astro";
+import { site, triage, clientGuides, guidePath } from "../config/landing";
+import { breadcrumbLd, faqPageLd } from "../lib/jsonld";
+
+const origin = (Astro.site ?? new URL(site.url)).origin;
+const canonical = `${origin}/ai-email-triage/`;
+
+const pageTitle = "AI email triage - rank your inbox inside the chat";
+const pageDescription =
+  "What an AI agent can actually take off you in an inbox: a ranked inbox you " +
+  "act on in place, drafts you approve before they send, and thread search that " +
+  "runs over your real mail. No time-saved figures we cannot back up.";
+
+const jsonLd = [
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    headline: pageTitle,
+    description: pageDescription,
+    url: canonical,
+    inLanguage: "en",
+    isPartOf: { "@type": "WebSite", name: site.name, url: site.url },
+    publisher: { "@type": "Organization", name: site.name, url: site.url },
+    about: [
+      { "@type": "Thing", name: "Email triage" },
+      { "@type": "Thing", name: "AI email assistant" },
+      { "@type": "Thing", name: "Inbox management" },
+    ],
+  },
+  faqPageLd(triage.faq),
+  breadcrumbLd([
+    { name: "Home", item: site.url },
+    { name: triage.heading, item: canonical },
+  ]),
+];
+---
+
+<EditorialPage
+  title={pageTitle}
+  description={pageDescription}
+  markdownPath="/ai-email-triage.md"
+  jsonLd={jsonLd}
+  heading={triage.heading}
+  subhead={triage.subhead}
+  lede={triage.lede}
+>
+  <!-- The substance: manual step on the left, what replaces it on the right.
+       Every row maps to a tool the server actually exposes. -->
+  <section class="mt-16">
+    <h2 class="text-2xl font-bold tracking-tight">{triage.loopHeading}</h2>
+    <p class="mt-4 text-pretty leading-relaxed text-fg-muted">{triage.loopIntro}</p>
+    <div class="mt-6 overflow-x-auto">
+      <table class="w-full border-collapse text-sm">
+        <thead>
+          <tr class="border-b-2 border-border text-left">
+            <th class="w-1/2 py-3 pr-4 font-semibold">Doing it by hand</th>
+            <th class="py-3 font-semibold text-accent">With {site.name}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {
+            triage.steps.map((row) => (
+              <tr class="border-b border-border/60">
+                <td class="py-3 pr-4 align-top text-fg-muted">{row.manual}</td>
+                <td class="py-3 align-top text-fg">{row.instead}</td>
+              </tr>
+            ))
+          }
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="mt-16">
+    <h2 class="text-2xl font-bold tracking-tight">{triage.gapsHeading}</h2>
+    <NumberedList items={triage.gaps} class="mt-6" />
+  </section>
+
+  <!-- Kept on the page rather than buried in the FAQ. A page arguing that
+       something saves time, which then declines to quantify it, is more
+       credible for saying so out loud than for staying quiet. -->
+  <section class="mt-16 border-2 border-border bg-surface-1 p-6 sm:p-8">
+    <h2 class="text-2xl font-bold tracking-tight">{triage.honestyHeading}</h2>
+    <p class="mt-4 text-pretty leading-relaxed text-fg-muted">{triage.honesty}</p>
+  </section>
+
+  <PageCta
+    class="mt-16"
+    heading="Try it on your own inbox"
+    body="Add the server to the assistant you already use, sign in with Google, and ask it what needs you today. No account to create."
+    ctaLabel={`Add ${site.name} to your client`}
+  />
+
+  <section class="mt-16">
+    <h2 class="text-2xl font-bold tracking-tight">{triage.faqHeading}</h2>
+    <FaqAccordion items={triage.faq} class="mt-6" />
+  </section>
+
+  <KeepReading
+    class="mt-16"
+    links={[
+      ...clientGuides.map((g) => ({
+        label: `Connect Gmail to ${g.clientName}`,
+        href: guidePath(g.slug),
+      })),
+      { label: "Gmail MCP alternatives", href: "/compare" },
+      { label: "Gmail webhooks", href: "/gmail-webhooks" },
+    ]}
+  />
+</EditorialPage>

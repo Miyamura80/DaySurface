@@ -5,7 +5,7 @@
  * elements. Both survive a markdown converter poorly, and the answers are the
  * part an answer engine most wants to quote, so they are spelled out here.
  */
-import { site, webhooks } from "../config/landing";
+import { site, webhooks, clientGuides, guideMdPath } from "../config/landing";
 import { faqSection, trimSlash } from "./_shared";
 
 export function buildGmailWebhooksMd(origin: string): string {
@@ -47,6 +47,8 @@ ${faqSection(webhooks.faq)}
 ## More
 
 - Configuration reference, GCP setup and runner modes: ${site.docsUrl}/gmail-webhooks
+- Per-client setup guides: ${clientGuides.map((g) => `${o}${guideMdPath(g.slug)}`).join(", ")}
+- What an agent can take off you in an inbox: ${o}/ai-email-triage.md
 - Get connected: ${o}/connect.md
 - Full description for LLMs: ${o}/llms-full.txt
 `;
