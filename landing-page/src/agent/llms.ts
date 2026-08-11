@@ -3,7 +3,7 @@
  */
 import { site, hero, features, faq, compatibility, comparison, connectPage, agentGuide, supportEmail, clientGuides, guideMdPath } from "../config/landing";
 import { effortMeta, installMatrix } from "../lib/install";
-import { trimSlash, whenToUseSection } from "./_shared";
+import { faqSection, trimSlash, whenToUseSection } from "./_shared";
 
 /** Concise llms.txt index (see https://llmstxt.org). */
 export function buildLlmsTxt(origin: string): string {
@@ -96,25 +96,29 @@ export function buildLlmsFullTxt(origin: string): string {
         case "command":
           how = `Run this in a terminal:\n\n${c.setup_prompt}`;
           break;
-        // `manual` shares this arm rather than inventing prose of its own. A
-        // manual target has no prompt, so it always falls to `numbered(steps)`
-        // - which is the whole answer for it. A bespoke sentence here would
-        // only render when a manual target shipped without steps, i.e. when its
-        // config was incomplete, and would ship a useless instruction to agents
-        // as though it were guidance.
         case "prompt":
-        case "manual":
           // Inline the actual text - an agent reading this cannot go and fetch
           // "the setup prompt from the site".
           how = c.setup_prompt
             ? `Paste this into the agent:\n\n${c.setup_prompt}`
             : numbered(c.steps);
           break;
+        case "manual":
+          // Labelled like `dialog-only`, using the `stepsLabel` effortMeta
+          // already defines for this bucket, rather than a sentence invented
+          // here. An unlabelled numbered list leaves an agent guessing what the
+          // items are. A manual target with no steps is a broken config, not a
+          // rendering case - say so rather than emitting an empty block that
+          // reads as "nothing to do".
+          how = c.steps?.length
+            ? `${meta.stepsLabel}:\n${numbered(c.steps)}`
+            : `Added by hand in ${c.name}'s own settings. No click-path is configured for this client - see ${o}/connect.`;
+          break;
       }
       return `### ${c.name}\n${how}${c.note ? `\n${c.note}` : ""}`;
     })
     .join("\n\n");
-  const faqBlock = faq.items.map((i) => `### ${i.q}\n${i.a}`).join("\n\n");
+  const faqBlock = faqSection(faq.items);
   const clients = compatibility.hosts.map((h) => h.name).join(", ");
 
   const pillarsBlock = comparison.pillars
