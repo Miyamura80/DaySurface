@@ -29,21 +29,31 @@ from urllib.parse import urlparse
 _IpAddress = ipaddress.IPv4Address | ipaddress.IPv6Address
 
 
-def _pinned_authority(parsed: Any, ip_str: str, port: int | None) -> str:
-    """Build the pinned netloc: IP (bracketed for IPv6), explicit port, userinfo.
+_Auth = tuple[str, str] | None
 
-    Preserves an explicit port (including ``:0``) and any ``user:pass@``
-    credentials so pinning never silently changes the port or strips basic auth.
+
+def _authority(hostpart: str, port: int | None) -> str:
+    """Build a credential-free netloc: host/IP (bracketed for IPv6) + explicit port.
+
+    Preserves an explicit port including ``:0`` so pinning never silently changes
+    the destination port. Userinfo is intentionally excluded - see ``_extract_auth``.
     """
-    netloc = f"[{ip_str}]" if ":" in ip_str else ip_str
+    netloc = f"[{hostpart}]" if ":" in hostpart else hostpart
     if port is not None:
         netloc += f":{port}"
-    if parsed.username is not None:
-        userinfo = parsed.username
-        if parsed.password is not None:
-            userinfo += f":{parsed.password}"
-        netloc = f"{userinfo}@{netloc}"
     return netloc
+
+
+def _extract_auth(parsed: Any) -> _Auth:
+    """Return ``(user, password)`` basic-auth credentials from a URL, or ``None``.
+
+    Credentials are carried out-of-band (for httpx's ``auth=``) rather than left
+    in the URL, so pinning preserves authentication without embedding secrets in
+    the request URL - which would otherwise leak into error messages and logs.
+    """
+    if parsed.username is None:
+        return None
+    return (parsed.username, parsed.password or "")
 
 
 def pin_url_to_validated_ip(
@@ -51,15 +61,17 @@ def pin_url_to_validated_ip(
     *,
     validate_ip: Callable[[_IpAddress], None],
     error_cls: type[Exception],
-) -> tuple[str, dict[str, str], dict[str, str]]:
+) -> tuple[str, dict[str, str], dict[str, str], _Auth]:
     """Resolve ``url``'s host, validate every answer, and pin to one address.
 
-    Returns ``(pinned_url, headers, extensions)``: the URL rewritten to target a
-    validated IP with the original hostname preserved in the ``Host`` header and
-    (for https) TLS SNI, so the socket connects to the exact IP that was checked
-    - closing the resolve-then-reconnect DNS-rebinding window. IP-literal hosts
-    are validated and passed through unchanged (nothing to pin). Fails **closed**:
-    an unresolvable host raises ``error_cls``.
+    Returns ``(pinned_url, headers, extensions, auth)``: the URL rewritten to
+    target a validated IP with the original hostname preserved in the ``Host``
+    header and (for https) TLS SNI, so the socket connects to the exact IP that
+    was checked - closing the resolve-then-reconnect DNS-rebinding window. Any
+    ``user:pass@`` credentials are returned as ``auth`` (for httpx's ``auth=``)
+    and stripped from ``pinned_url`` so they never leak into error logs.
+    IP-literal hosts are validated and passed through (with credentials stripped).
+    Fails **closed**: an unresolvable host raises ``error_cls``.
 
     ``validate_ip`` is called for *every* resolved address and must raise
     ``error_cls`` to reject; the connection is pinned to the first address.
@@ -88,13 +100,18 @@ def pin_url_to_validated_ip(
         validate_ip(ip)
         addresses.append(str(ip))
 
+    auth = _extract_auth(parsed)
+
     try:
         ipaddress.ip_address(host)
-        return url, {}, {}  # host is an IP literal (validated above): nothing to pin
+        # Host is an IP literal (validated above): nothing to pin, but still
+        # strip any userinfo from the URL so credentials don't leak downstream.
+        clean = parsed._replace(netloc=_authority(host, port)).geturl()
+        return clean, {}, {}, auth
     except ValueError:
         pass
 
-    ip_netloc = _pinned_authority(parsed, addresses[0], port)
+    ip_netloc = _authority(addresses[0], port)
     pinned = parsed._replace(netloc=ip_netloc).geturl()
     host_header = host if port is None else f"{host}:{port}"
     headers = {"Host": host_header}
@@ -103,4 +120,4 @@ def pin_url_to_validated_ip(
     extensions: dict[str, Any] = (
         {"sni_hostname": host} if parsed.scheme == "https" else {}
     )
-    return pinned, headers, extensions
+    return pinned, headers, extensions, auth

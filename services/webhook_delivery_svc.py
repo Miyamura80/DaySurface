@@ -131,13 +131,20 @@ def _post(
     # somewhere it shouldn't - caught by _process as a delivery failure.
     # Redirects are disabled (a 3xx to an internal host would reconnect
     # unpinned) and env proxies ignored so nothing can re-route the request.
-    pinned_url, pin_headers, extensions = resolve_and_pin_webhook(url)
+    # auth carries any basic-auth credentials out-of-band so they aren't
+    # embedded in pinned_url (which would leak into raise_for_status errors and
+    # WebhookDelivery.last_error on failure).
+    pinned_url, pin_headers, extensions, auth = resolve_and_pin_webhook(url)
     headers.update(pin_headers)
     with httpx.Client(
         timeout=_HTTP_TIMEOUT_S, follow_redirects=False, trust_env=False
     ) as client:
         resp = client.post(
-            pinned_url, content=body, headers=headers, extensions=extensions
+            pinned_url,
+            content=body,
+            headers=headers,
+            extensions=extensions,
+            auth=auth,  # ty: ignore[invalid-argument-type]  # httpx accepts None = no auth
         )
     # Only a 2xx counts as delivered. HTTPX's raise_for_status() raises for
     # every non-2xx, including the unfollowed 3xx redirects we never chase (a

@@ -151,8 +151,10 @@ def _validate_webhook_url(url: str) -> None:
         _reject_if_ssrf(ipaddress.ip_address(str(info[4][0]).split("%")[0]), dev)
 
 
-def resolve_and_pin_webhook(url: str) -> tuple[str, dict[str, str], dict[str, str]]:
-    """Validate + pin a subscriber URL for delivery. Returns ``(url, headers, ext)``.
+def resolve_and_pin_webhook(
+    url: str,
+) -> tuple[str, dict[str, str], dict[str, str], tuple[str, str] | None]:
+    """Validate + pin a subscriber URL for delivery. Returns ``(url, headers, ext, auth)``.
 
     Applies the webhook scheme policy (https except a dev loopback) and then the
     shared SSRF resolve-and-pin guard with the webhook address policy (loopback

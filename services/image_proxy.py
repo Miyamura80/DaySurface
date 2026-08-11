@@ -56,8 +56,10 @@ class ImageFetchError(ValueError):
     """Raised when a remote image URL is rejected or cannot be fetched."""
 
 
-def _validate_and_pin(url: str) -> tuple[str, dict[str, str], dict[str, str]]:
-    """Validate ``url`` and return (pinned_url, headers, extensions).
+def _validate_and_pin(
+    url: str,
+) -> tuple[str, dict[str, str], dict[str, str], tuple[str, str] | None]:
+    """Validate ``url`` and return (pinned_url, headers, extensions, auth).
 
     Requires every DNS answer to be a globally routable address, then pins the
     connection to it (see :func:`pin_url_to_validated_ip`). No dev carve-out:
@@ -120,10 +122,10 @@ def fetch_remote_image(url: str) -> GmailFetchImageResult:
         for _ in range(_MAX_REDIRECTS + 1):
             if time.monotonic() > deadline:
                 raise ImageFetchError("image fetch deadline exceeded")
-            target, headers, extensions = _validate_and_pin(current)
+            target, headers, extensions, auth = _validate_and_pin(current)
             try:
                 with client.stream(
-                    "GET", target, headers=headers, extensions=extensions
+                    "GET", target, headers=headers, extensions=extensions, auth=auth
                 ) as resp:
                     if resp.is_redirect:
                         # is_redirect implies a Location header exists. Join

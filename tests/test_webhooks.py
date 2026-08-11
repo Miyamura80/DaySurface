@@ -419,22 +419,27 @@ class TestWebhookSSRF(TestTemplate):
             "src.utils.ssrf.socket.getaddrinfo",
             return_value=_addrinfo("93.184.216.34"),
         ):
-            pinned, headers, ext = resolve_and_pin_webhook("https://example.com/hook")
+            pinned, headers, ext, auth = resolve_and_pin_webhook(
+                "https://example.com/hook"
+            )
         assert pinned == "https://93.184.216.34/hook"
         assert headers["Host"] == "example.com"
         assert ext["sni_hostname"] == "example.com"
+        assert auth is None
 
-    def test_pinning_preserves_basic_auth_userinfo(self):
-        # Credentials in the URL must survive pinning, or a basic-auth endpoint
-        # would receive unauthenticated requests.
+    def test_pinning_carries_basic_auth_out_of_band(self):
+        # Credentials must survive pinning (so basic-auth endpoints stay
+        # authenticated) but as an out-of-band auth tuple, NOT embedded in the
+        # pinned URL - or they would leak into raise_for_status errors and logs.
         with patch(
             "src.utils.ssrf.socket.getaddrinfo",
             return_value=_addrinfo("93.184.216.34"),
         ):
-            pinned, _headers, _ext = resolve_and_pin_webhook(
+            pinned, _headers, _ext, auth = resolve_and_pin_webhook(
                 "https://user:pass@example.com/hook"
             )
-        assert pinned == "https://user:pass@93.184.216.34/hook"
+        assert pinned == "https://93.184.216.34/hook"  # no credentials in the URL
+        assert auth == ("user", "pass")
 
     def test_rejects_host_that_resolves_to_internal_address(self):
         # DNS rebind: the name resolved fine at subscribe, now points at metadata.
