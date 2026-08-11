@@ -93,17 +93,6 @@ export function buildLlmsFullTxt(origin: string): string {
             ? `Paste this into the agent:\n\n${c.setup_prompt}`
             : numbered(c.steps);
           break;
-        case "manual":
-          // Labelled like `dialog-only`, using the `stepsLabel` effortMeta
-          // already defines for this bucket, rather than a sentence invented
-          // here. An unlabelled numbered list leaves an agent guessing what the
-          // items are. A manual target with no steps is a broken config, not a
-          // rendering case - say so rather than emitting an empty block that
-          // reads as "nothing to do".
-          how = c.steps?.length
-            ? `${meta.stepsLabel}:\n${numbered(c.steps)}`
-            : `Added by hand in ${c.name}'s own settings. No click-path is configured for this client - see ${o}/connect.`;
-          break;
       }
       return `### ${c.name}\n${how}${c.note ? `\n${c.note}` : ""}`;
     })
