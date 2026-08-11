@@ -1,4 +1,15 @@
 ---
+/*
+ * The homepage FAQ: the shared accordion plus a progressive-enhancement toggle
+ * that folds everything past the fifth question away.
+ *
+ * The list markup lives in `FaqAccordion` because three editorial pages render
+ * it too. The button and the script stay here: those pages show every question
+ * and ship no JS, and hoisting this script into the shared component would put
+ * it on their pages to do nothing. `collapseFrom` is the only seam - it tags the
+ * overflow items with `data-faq-extra`, which is what the script below hides.
+ */
+import FaqAccordion from "./FaqAccordion.astro";
 import { faq } from "../config/landing";
 
 const VISIBLE = 5;
@@ -11,33 +22,7 @@ const extraCount = Math.max(0, faq.items.length - VISIBLE);
       {faq.heading}
     </h2>
 
-    <div class="mt-12 divide-y divide-border border-2 border-border bg-surface-1" data-faq-list>
-      {
-        faq.items.map((item, i) => (
-          <details class="group px-4 sm:px-6" data-faq-extra={i >= VISIBLE ? "true" : undefined}>
-            <summary
-              class="flex min-h-12 cursor-pointer list-none items-center justify-between gap-4 py-4 font-medium"
-            >
-              {item.q}
-              <svg
-                class="size-5 shrink-0 text-fg-muted transition-transform group-open:rotate-45"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                aria-hidden="true"
-              >
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-            </summary>
-            <p class="pb-5 text-pretty leading-relaxed text-fg-muted">
-              {item.a}
-            </p>
-          </details>
-        ))
-      }
-    </div>
+    <FaqAccordion items={faq.items} collapseFrom={VISIBLE} class="mt-12" />
 
     {
       extraCount > 0 && (

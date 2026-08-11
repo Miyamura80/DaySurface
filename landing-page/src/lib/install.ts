@@ -132,6 +132,21 @@ export interface InstallClient {
  * do not exist; connect.ts keeps the method for the next host that ships no URL
  * scheme at all. They group with `prompt`, whose heading and steps handling
  * already fit "you configure this yourself".
+ *
+ * If you add one, expect two things to go wrong, both found the hard way when
+ * three manual targets briefly existed here:
+ *
+ *   1. The shared-prompt collapse in `groupedInstallMatrix` only fires when
+ *      EVERY client in a bucket carries the same prompt. A manual client carries
+ *      none, so dropping one into `prompt` switches the collapse off and
+ *      reprints a ~450-char prompt once per client on /connect and connect.md -
+ *      the two surfaces with byte budgets. `agent-journey.test.ts` catches this.
+ *   2. The `prompt` heading reads "Paste this prompt into the client", which is
+ *      simply wrong above a client that has no prompt. Nothing catches that.
+ *
+ * The fix both times is to give `manual` its own bucket here, in `effortMeta`
+ * and in `EFFORT_ORDER`. That was written and then removed, deliberately: it
+ * was machinery for zero users, and this note costs less than carrying it.
  */
 function effortOf(t: InstallTarget): InstallEffort {
   if (t.method === "deeplink") return t.prefills === false ? "dialog-only" : "one-click";

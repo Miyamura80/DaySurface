@@ -3,7 +3,7 @@
  */
 import { site, hero, features, faq, compatibility, comparison, connectPage, agentGuide, supportEmail } from "../config/landing";
 import { effortMeta, installMatrix } from "../lib/install";
-import { trimSlash, whenToUseSection } from "./_shared";
+import { faqSection, trimSlash, whenToUseSection } from "./_shared";
 
 /** Concise llms.txt index (see https://llmstxt.org). */
 export function buildLlmsTxt(origin: string): string {
@@ -97,7 +97,7 @@ export function buildLlmsFullTxt(origin: string): string {
       return `### ${c.name}\n${how}${c.note ? `\n${c.note}` : ""}`;
     })
     .join("\n\n");
-  const faqBlock = faq.items.map((i) => `### ${i.q}\n${i.a}`).join("\n\n");
+  const faqBlock = faqSection(faq.items);
   const clients = compatibility.hosts.map((h) => h.name).join(", ");
 
   const pillarsBlock = comparison.pillars

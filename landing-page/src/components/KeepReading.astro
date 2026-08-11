@@ -1,0 +1,41 @@
+---
+/*
+ * The "keep reading" chip row at the foot of an editorial page.
+ *
+ * Ten copies of the same 60-character class string existed across three pages
+ * before this. Beyond the duplication, these links are the only thing making the
+ * editorial pages reachable from each other - they were otherwise linked from
+ * nothing but the sitemap - so the markup is worth having in one place where a
+ * change to it lands everywhere at once.
+ */
+interface Link {
+  label: string;
+  href: string;
+}
+
+interface Props {
+  links: Link[];
+  heading?: string;
+  class?: string;
+}
+
+const { links, heading = "Keep reading", class: className } = Astro.props;
+---
+
+<section class:list={["border-t border-border/60 pt-10", className]}>
+  <h2 class="text-sm font-semibold text-fg-muted">{heading}</h2>
+  <ul class="mt-4 flex flex-wrap gap-3">
+    {
+      links.map((link) => (
+        <li>
+          <a
+            href={link.href}
+            class="inline-block border border-border px-4 py-2 text-sm text-fg-muted transition hover:border-accent hover:text-fg"
+          >
+            {link.label}
+          </a>
+        </li>
+      ))
+    }
+  </ul>
+</section>
