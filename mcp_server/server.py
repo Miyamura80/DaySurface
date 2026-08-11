@@ -133,21 +133,20 @@ mcp: FastMCP = FastMCP(
 )
 
 _populated: bool = False
-# Non-admin services kept off the default LLM tool surface for reasons other
-# than the admin boundary (demo/noise). Admin/dev services are excluded
-# automatically via their ``admin_scope`` marker - see _excluded_from_default_mcp.
-_MCP_HIDDEN_SERVICES = frozenset({"greet"})
 
 
 def _excluded_from_default_mcp(entry: ServiceEntry) -> bool:
-    """True for CLI-only services hidden from the default MCP tool surface.
+    """True for services hidden from the default MCP (LLM) tool surface.
 
-    Admin/dev services (those declaring an ``admin_scope`` - the same single
-    source of truth that gates them behind admin on HTTP) are always hidden, so
-    a new admin tool can never accidentally ship on the LLM surface. Plus the
-    demo/noise services in ``_MCP_HIDDEN_SERVICES``.
+    Both reasons are declared once at the ``@service`` definition, so a new tool
+    can never accidentally ship on the LLM surface:
+
+    - ``admin_scope`` set: admin/dev tools, also gated behind admin on HTTP.
+    - ``hide_from_llm`` set: prompt-injection-sensitive mutations the model must
+      not call autonomously (e.g. webhook subscription) plus demo services -
+      still reachable on HTTP and via app-only tools.
     """
-    return entry.admin_scope is not None or entry.name in _MCP_HIDDEN_SERVICES
+    return entry.admin_scope is not None or entry.hide_from_llm
 
 
 def build_mcp_server() -> FastMCP:

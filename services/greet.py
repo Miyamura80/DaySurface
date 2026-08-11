@@ -9,6 +9,7 @@ from services import service
     description="Greet a user by name",
     input_model=GreetInput,
     output_model=GreetResult,
+    hide_from_llm=True,  # demo/noise service, not part of the real tool surface
 )
 def greet(input: GreetInput) -> GreetResult:
     message = f"Hello, {input.name}!"

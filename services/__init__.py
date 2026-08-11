@@ -22,6 +22,12 @@ class ServiceEntry:
     # a required scope, and the MCP transport hides these tools from the LLM
     # surface. A new admin tool is gated everywhere the moment it sets this.
     admin_scope: str | None = None
+    # Keep this service off the default LLM (MCP) tool surface while leaving it
+    # callable on HTTP and via app-only tools. For operations the model must not
+    # invoke autonomously from untrusted content (prompt-injection-sensitive
+    # side effects) but which users still drive through a UI, and for
+    # demo/noise services. Unlike admin_scope this does not change HTTP scope.
+    hide_from_llm: bool = False
 
 
 class ConnectRequiredError(Exception):
@@ -62,6 +68,7 @@ def service(
     output_model: type,
     mutating: bool = False,
     admin_scope: str | None = None,
+    hide_from_llm: bool = False,
 ):
     """Decorator that registers a function as a service.
 
@@ -79,6 +86,13 @@ def service(
     the HTTP transport requires that scope on the auto-generated route (ordinary
     ``services:execute`` keys get 403), and the MCP transport hides the tool
     from the LLM surface. CLI callers are unaffected.
+
+    Set ``hide_from_llm=True`` to keep a service off the default LLM (MCP) tool
+    surface while leaving it callable on HTTP and via app-only tools - for
+    mutating operations the model must not invoke autonomously from untrusted
+    content (e.g. webhook subscription, a prompt-injection exfil risk) but which
+    users drive through a UI, and for demo services. It does not change HTTP
+    scope, unlike ``admin_scope``.
     """
 
     def decorator(func):
@@ -91,6 +105,7 @@ def service(
                 func=func,
                 mutating=mutating,
                 admin_scope=admin_scope,
+                hide_from_llm=hide_from_llm,
             )
         )
         return func

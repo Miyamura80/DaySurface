@@ -120,19 +120,7 @@
     "description": "List the caller's webhook subscriptions (secrets are never returned)"
   },
   {
-    "name": "webhook_rotate_secret",
-    "description": "Issue a new signing secret for a subscription (invalidates the old one)"
-  },
-  {
     "name": "webhook_settings",
     "description": "Open your settings: Gmail connection status and webhook subscriptions"
-  },
-  {
-    "name": "webhook_subscribe",
-    "description": "Register an HTTPS endpoint to receive signed webhook events"
-  },
-  {
-    "name": "webhook_unsubscribe",
-    "description": "Deactivate a webhook subscription so it stops receiving events"
   }
 ]

@@ -163,6 +163,11 @@ def _validate_webhook_url(url: str) -> None:
     input_model=WebhookSubscribeInput,
     output_model=WebhookSubscribeResult,
     mutating=True,
+    # Off the LLM surface: an injected email could otherwise make the model
+    # register an attacker endpoint and silently exfiltrate mail. Users manage
+    # webhooks via the Settings app (settings.subscribe); HTTP integrators keep
+    # the authenticated route.
+    hide_from_llm=True,
 )
 def webhook_subscribe(input: WebhookSubscribeInput) -> WebhookSubscribeResult:
     """Create a subscription and return its one-time signing secret."""
@@ -229,6 +234,7 @@ def webhook_list(input: WebhookListInput) -> WebhookListResult:
     input_model=WebhookUnsubscribeInput,
     output_model=WebhookUnsubscribeResult,
     mutating=True,
+    hide_from_llm=True,  # user-driven via the Settings app, not the LLM
 )
 def webhook_unsubscribe(
     input: WebhookUnsubscribeInput,
@@ -255,6 +261,7 @@ def webhook_unsubscribe(
     input_model=WebhookRotateSecretInput,
     output_model=WebhookRotateSecretResult,
     mutating=True,
+    hide_from_llm=True,  # returns a secret; user-driven via the Settings app
 )
 def webhook_rotate_secret(
     input: WebhookRotateSecretInput,
