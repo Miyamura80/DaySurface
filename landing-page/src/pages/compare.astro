@@ -4,12 +4,17 @@ import Nav from "../components/Nav.astro";
 import Footer from "../components/Footer.astro";
 import ComparisonTable from "../components/ComparisonTable.astro";
 import PillarCards from "../components/PillarCards.astro";
-import { site, comparison } from "../config/landing";
+import KeepReading from "../components/KeepReading.astro";
+import { site, comparison, clientGuides, guidePath } from "../config/landing";
 
 const origin = (Astro.site ?? new URL(site.url)).origin;
 
-const pageTitle = `Compare DaySurface - alternatives & 'vs' breakdowns`;
-const pageDescription = comparison.subhead;
+// Category-led, not brand-led: the query this page has to win is "gmail mcp
+// alternatives", and a title starting with "Compare DaySurface" spends its most
+// weighted words on a term the searcher did not type. The brand still closes the
+// title so the result is attributable in the SERP.
+const pageTitle = `Gmail MCP alternatives compared - ${site.name}`;
+const pageDescription = comparison.pageDescription;
 
 // schema.org: a comparison WebPage that lists the competitors we cover, plus a
 // breadcrumb. Advertised via /schemamap.xml so answer engines pick it up.
@@ -59,9 +64,9 @@ const jsonLd = [
 
     <header class="mt-6 max-w-3xl">
       <h1 class="text-4xl font-bold tracking-tight sm:text-5xl">
-        {comparison.heading}
+        {comparison.pageHeading}
       </h1>
-      <p class="mt-4 text-lg text-fg-muted">{comparison.subhead}</p>
+      <p class="mt-4 text-lg text-fg-muted">{comparison.pageSubhead}</p>
     </header>
 
     <!-- The three pillars -->
@@ -114,6 +119,23 @@ const jsonLd = [
         Add DaySurface to your client
       </a>
     </div>
+
+    <!-- Someone comparing servers has already decided they want one, so the
+         per-client setup guides are the most useful next click from here. This
+         page is also indexed, which the guides are not yet - it can pass that
+         on. -->
+    <KeepReading
+      class="mt-16"
+      heading="Set it up"
+      links={[
+        ...clientGuides.map((g) => ({
+          label: `Connect Gmail to ${g.clientName}`,
+          href: guidePath(g.slug),
+        })),
+        { label: "AI email triage", href: "/ai-email-triage" },
+        { label: "Gmail webhooks", href: "/gmail-webhooks" },
+      ]}
+    />
   </main>
   <Footer />
 </Base>

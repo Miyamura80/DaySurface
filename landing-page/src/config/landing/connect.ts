@@ -20,18 +20,29 @@ import { site } from "./site";
 export interface Host {
   name: string;
   logo: string | null;
+  /**
+   * Slug of this host's `/connect-gmail-to-<slug>` guide, when one exists.
+   *
+   * Turns the strip's entry into a link. This is the strongest inbound path the
+   * guides have: the strip sits on the homepage, which is the most-linked page
+   * on the site, and it is exactly where a visitor asks "does it work with
+   * mine?" - so the answer should be a click, not a dead end. Hosts with no
+   * guide (Codex, OpenClaw) stay plain text rather than pointing somewhere
+   * generic.
+   */
+  guideSlug?: string;
 }
 
 export const compatibility: { heading: string; hosts: Host[] } = {
   heading: "Works with every MCP client",
   hosts: [
-    { name: "Claude", logo: "/logos/claude.svg" },
+    { name: "Claude", logo: "/logos/claude.svg", guideSlug: "claude" },
     { name: "Codex", logo: "/logos/codex.svg" },
-    { name: "Cursor", logo: "/logos/cursor.svg" },
-    { name: "ChatGPT", logo: "/logos/chatgpt.svg" },
-    { name: "VS Code", logo: "/logos/vscode.svg" },
+    { name: "Cursor", logo: "/logos/cursor.svg", guideSlug: "cursor" },
+    { name: "ChatGPT", logo: "/logos/chatgpt.svg", guideSlug: "chatgpt" },
+    { name: "VS Code", logo: "/logos/vscode.svg", guideSlug: "vscode" },
     { name: "OpenClaw", logo: "/logos/openclaw.svg" },
-    { name: "Goose", logo: "/logos/goose.svg" },
+    { name: "Goose", logo: "/logos/goose.svg", guideSlug: "goose" },
   ],
 };
 
