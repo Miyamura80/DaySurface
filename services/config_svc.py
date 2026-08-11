@@ -1,6 +1,7 @@
 """Config service - pure business logic."""
 
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -39,36 +40,39 @@ def _coerce_value(value: str) -> bool | int | float | str | None:
 
 @service(
     name="config_show",
-    description="Show the full project configuration",
+    description=(
+        "Show the project's YAML-layer configuration (secrets and env-var "
+        "overrides excluded)"
+    ),
     input_model=ConfigShowInput,
     output_model=ConfigShowResult,
 )
 def config_show(input: ConfigShowInput) -> ConfigShowResult:
-    return ConfigShowResult(config=global_config.to_dict())
+    # YAML-only view: never expose environment-sourced secrets (API keys,
+    # BACKEND_DB_URI, GOOGLE_TOKEN_ENC_KEY, SESSION_SECRET_KEY, ...). This
+    # service is reachable over the authenticated HTTP transport.
+    return ConfigShowResult(config=global_config.to_yaml_dict())
 
 
 @service(
     name="config_get",
-    description="Get a single configuration value by dot-separated key",
+    description=(
+        "Get a YAML-layer config value by dot-separated key (secrets and env-var "
+        "overrides excluded; keys set only via env or code defaults are absent)"
+    ),
     input_model=ConfigGetInput,
     output_model=ConfigGetResult,
 )
 def config_get(input: ConfigGetInput) -> ConfigGetResult:
-    obj = global_config
+    # Walk the YAML-only view so environment-sourced secrets are unreachable:
+    # config_get("OPENAI_API_KEY") / config_get("BACKEND_DB_URI") now raise
+    # KeyError instead of returning the secret.
+    obj: Any = global_config.to_yaml_dict()
     for part in input.key.split("."):
-        try:
-            obj = getattr(obj, part)
-        except AttributeError:
-            if isinstance(obj, dict):
-                try:
-                    obj = obj[part]
-                except KeyError:
-                    raise KeyError(f"Key not found: {input.key}") from None
-            else:
-                raise KeyError(f"Key not found: {input.key}") from None
-
-    if hasattr(obj, "model_dump"):
-        return ConfigGetResult(key=input.key, value=obj.model_dump())
+        if isinstance(obj, dict) and part in obj:
+            obj = obj[part]
+        else:
+            raise KeyError(f"Key not found: {input.key}")
     return ConfigGetResult(key=input.key, value=obj)
 
 

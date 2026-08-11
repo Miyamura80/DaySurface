@@ -226,6 +226,8 @@ max_lines = 500
 exclude = [
     "api_server/routes/payments/webhooks.py",
     "api_server/middleware/rate_limit.py",
+    # Central pydantic-settings config: many fields + the YAML source machinery.
+    "common/global_config.py",
     "tests/test_gmail_services.py",
     "tests/test_inbox_curation.py",
     "services/gmail_messages_svc.py",

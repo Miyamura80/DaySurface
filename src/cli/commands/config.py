@@ -33,7 +33,7 @@ def show() -> None:
 
 @app.command(
     epilog=examples_epilog(
-        "daysurface config get llm_config.default_model",
+        "daysurface config get default_llm.default_model",
         "daysurface --format json config get llm_config.cache_enabled",
     )
 )
@@ -66,7 +66,7 @@ def get(
     epilog=examples_epilog(
         "daysurface config set llm_config.cache_enabled true",
         "echo true | daysurface config set llm_config.cache_enabled --stdin",
-        "daysurface --dry-run config set llm_config.default_model gpt-4o",
+        "daysurface --dry-run config set default_llm.default_model gpt-4o",
     ),
 )
 def set_value(
