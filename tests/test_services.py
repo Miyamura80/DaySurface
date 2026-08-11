@@ -65,6 +65,27 @@ class TestConfigService(TestTemplate):
         present = set(_keys(result.config))
         assert not (present & _SECRET_FIELD_NAMES), present & _SECRET_FIELD_NAMES
 
+    def test_config_show_drops_secret_named_yaml_keys(self):
+        # Defense in depth: a secret-named key hand-placed in a YAML file (e.g.
+        # .global_config.yaml) must be dropped from the view, not echoed back.
+        import sys  # noqa: PLC0415
+
+        # The module (not the singleton, which shadows it via common/__init__).
+        gc = sys.modules["common.global_config"]
+        original = gc._yaml_config_cache
+        gc._yaml_config_cache = {
+            **original,
+            "OPENAI_API_KEY": "leaked",
+            "nested": {"SESSION_SECRET_KEY": "leaked", "keep": 1},
+        }
+        try:
+            cfg = config_show(ConfigShowInput()).config
+        finally:
+            gc._yaml_config_cache = original
+        assert "OPENAI_API_KEY" not in cfg
+        assert "SESSION_SECRET_KEY" not in cfg["nested"]
+        assert cfg["nested"]["keep"] == 1  # non-secret siblings survive
+
     def test_config_get_rejects_env_secrets(self):
         # A secret key is unreachable through config_get - it raises KeyError
         # rather than returning the value.

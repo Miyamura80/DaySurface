@@ -441,26 +441,51 @@ class Config(BaseSettings):
         raise ValueError(f"No API key configured for model: {model_identifier}")
 
 
-# Declared secret field names (the env-sourced credentials on Config). Used to
-# redact the YAML view defensively: env secrets never appear in the YAML layer
-# by construction, but this ensures a secret mistakenly placed in a YAML file
-# (e.g. a hand-edited .global_config.yaml) can never leak through config_show /
-# config_get either. Matched by exact key name, so lowercase nested config keys
-# are unaffected.
-_SECRET_MARKERS = ("KEY", "SECRET", "TOKEN", "PASSWORD", "PRIVATE", "_URI")
+# The credential-bearing (env-sourced) fields on Config, enumerated explicitly
+# rather than by keyword heuristic (which both over-matched non-secret flags
+# like STRIPE_ALLOW_LIVE_KEY_IN_DEV and missed names like REDIS_URL). Used to
+# defensively drop any key that collides with one of these names from the YAML
+# view: env secrets never appear in the YAML layer by construction, but this
+# ensures a secret mistakenly placed in a YAML file (e.g. a hand-edited
+# .global_config.yaml) can never leak through config_show / config_get either.
+# Non-secret env fields (DEV_ENV, FRONTEND_URL, WORKOS_CLIENT_ID, ...) are
+# intentionally omitted. Matched by exact key name, so lowercase nested config
+# keys are unaffected.
 _SECRET_FIELD_NAMES: frozenset[str] = frozenset(
-    name for name in Config.model_fields if any(m in name for m in _SECRET_MARKERS)
+    {
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "GROQ_API_KEY",
+        "PERPLEXITY_API_KEY",
+        "GEMINI_API_KEY",
+        "X402_PRIVATE_KEY",
+        "BACKEND_DB_URI",
+        "REDIS_URL",
+        "WORKOS_API_KEY",
+        "WEB_BOT_AUTH_PRIVATE_KEY",
+        "SESSION_SECRET_KEY",
+        "STRIPE_SECRET_KEY",
+        "STRIPE_TEST_SECRET_KEY",
+        "STRIPE_WEBHOOK_SECRET",
+        "STRIPE_TEST_WEBHOOK_SECRET",
+        "GOOGLE_CLIENT_SECRET",
+        "GOOGLE_TOKEN_ENC_KEY",
+        "WEBHOOK_RUNNER_TOKEN",
+    }
 )
 
 
 def _redact_secret_keys(value: Any) -> Any:
-    """Recursively replace any dict key matching a secret field name with a marker."""
+    """Recursively drop any dict key matching a secret field name.
+
+    Removing the key (rather than masking its value) keeps the guarantee simple:
+    a secret-named key never appears in the returned view at all.
+    """
     if isinstance(value, dict):
         return {
-            k: (
-                "***redacted***" if k in _SECRET_FIELD_NAMES else _redact_secret_keys(v)
-            )
+            k: _redact_secret_keys(v)
             for k, v in value.items()
+            if k not in _SECRET_FIELD_NAMES
         }
     if isinstance(value, list):
         return [_redact_secret_keys(v) for v in value]
