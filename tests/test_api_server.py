@@ -58,6 +58,25 @@ def _override_auth():
     return AuthenticatedUser(user_id="test-user", email="t@t.com", auth_method="jwt")
 
 
+@contextmanager
+def _scoped_user(*scopes: str):
+    """Authenticate as an api_key user with exactly *scopes*, yielding a client.
+
+    Restores any prior auth override on exit so scoped tests don't leak.
+    """
+    original = app.dependency_overrides.get(get_authenticated_user)
+    app.dependency_overrides[get_authenticated_user] = lambda: AuthenticatedUser(
+        user_id="scoped-user", auth_method="api_key", scopes=list(scopes)
+    )
+    try:
+        yield TestClient(app)
+    finally:
+        if original is not None:
+            app.dependency_overrides[get_authenticated_user] = original
+        else:
+            app.dependency_overrides.pop(get_authenticated_user, None)
+
+
 def _override_db():
     session = _SessionLocal()
     try:
@@ -198,47 +217,38 @@ class TestAPIServer(TestTemplate):
         done = json.loads(dones[0]["data"])
         assert isinstance(done["has_failures"], bool)
 
-    def test_stream_doctor_requires_execute_scope(self):
-        """A read-only key may not open the doctor stream."""
-        original = app.dependency_overrides.get(get_authenticated_user)
-        try:
-            app.dependency_overrides[get_authenticated_user] = lambda: (
-                AuthenticatedUser(
-                    user_id="scoped-user",
-                    auth_method="api_key",
-                    scopes=["services:read"],
-                )
-            )
-            client = TestClient(app)
+    def test_stream_doctor_requires_admin_scope(self):
+        """An ordinary services:execute key may not open the doctor stream.
+
+        doctor shells out on the host (and fix=True runs mutating fixers), so it
+        is admin-gated - a scoped integration key without admin is rejected.
+        """
+        with _scoped_user("services:read", "services:execute") as client:
             resp = client.post("/api/v1/stream/doctor", json={"fix": False})
             assert resp.status_code == 403
-        finally:
-            if original is not None:
-                app.dependency_overrides[get_authenticated_user] = original
-            else:
-                app.dependency_overrides.pop(get_authenticated_user, None)
+
+    def test_admin_services_reject_execute_scope(self):
+        """config_set / config_show / doctor_fix require admin, not just execute.
+
+        Guards the fix for the audit finding where any services:execute key
+        could dump config, tamper the process-wide override, or run fixers.
+        """
+        with _scoped_user("services:read", "services:execute") as client:
+            for route, payload in (
+                ("/api/v1/services/config_show", {}),
+                ("/api/v1/services/config_get", {"key": "server.port"}),
+                ("/api/v1/services/config_set", {"key": "x", "value": "1"}),
+                ("/api/v1/services/doctor", {}),
+                ("/api/v1/services/doctor_fix", {}),
+            ):
+                resp = client.post(route, json=payload)
+                assert resp.status_code == 403, f"{route} should require admin scope"
 
     def test_403_on_insufficient_scopes(self):
         """A key with read-only scopes should be rejected from service execution."""
-        # Override auth to return a user with limited scopes
-        original = app.dependency_overrides.get(get_authenticated_user)
-        try:
-            app.dependency_overrides[get_authenticated_user] = lambda: (
-                AuthenticatedUser(
-                    user_id="scoped-user",
-                    auth_method="api_key",
-                    scopes=["services:read"],
-                )
-            )
-            client = TestClient(app)
+        with _scoped_user("services:read") as client:
             resp = client.post("/api/v1/services/greet", json={"name": "World"})
             assert resp.status_code == 403
-        finally:
-            # Restore original override to prevent leaking into other tests
-            if original is not None:
-                app.dependency_overrides[get_authenticated_user] = original
-            else:
-                app.dependency_overrides.pop(get_authenticated_user, None)
 
 
 class ServiceRouteIdempotencyBase(TestTemplate):

@@ -19,7 +19,7 @@ from fastapi import APIRouter, Depends
 from sse_starlette.sse import EventSourceResponse, ServerSentEvent
 
 from api_server.auth import AuthenticatedUser
-from api_server.auth.scopes import SERVICES_EXECUTE, require_scopes
+from api_server.auth.scopes import ADMIN_READ, require_scopes
 from api_server.billing.limits import ensure_daily_limit
 from models.doctor import DoctorStreamDone, DoctorStreamInput
 from services.doctor_svc import iter_doctor
@@ -49,14 +49,16 @@ def _doctor_events(body: DoctorStreamInput) -> Iterator[ServerSentEvent]:
 @router.post("/doctor", summary="Stream project health checks as they complete")
 def stream_doctor(
     body: DoctorStreamInput,
-    user: AuthenticatedUser = Depends(require_scopes(SERVICES_EXECUTE)),
+    user: AuthenticatedUser = Depends(require_scopes(ADMIN_READ)),
 ) -> EventSourceResponse:
     """Run the doctor checks, emitting each result over SSE as it finishes.
 
-    Mirrors the auth + quota gating of ``POST /api/v1/services/doctor``: one
-    daily-limit slot is claimed per stream. ``sse-starlette`` iterates the
-    sync generator in a threadpool, so the blocking subprocess checks never
-    stall the event loop.
+    Mirrors the auth + quota gating of ``POST /api/v1/services/doctor``: admin
+    scope (``doctor`` shells out on the host, and ``fix=True`` runs mutating
+    fixers, so ordinary ``services:execute`` integration keys must not reach it)
+    plus one daily-limit slot per stream. ``sse-starlette`` iterates the sync
+    generator in a threadpool, so the blocking subprocess checks never stall the
+    event loop.
     """
     ensure_daily_limit(user.user_id)
     return EventSourceResponse(_doctor_events(body))
