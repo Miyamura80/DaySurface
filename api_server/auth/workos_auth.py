@@ -40,8 +40,18 @@ def verify_workos_token(token: str) -> WorkOSUser | None:
     if not client_id:
         return None
 
-    # Test-mode bypass: only allowed in non-production environments
-    if token.startswith("{") and global_config.is_dev:
+    # Test-mode bypass: an unsigned ``{"sub": ...}`` token authenticates as any
+    # user with no signature. It requires an EXPLICIT opt-in (ALLOW_TEST_TOKENS,
+    # default False) AND a dev environment. Gating on the environment alone was
+    # fail-open: DEV_ENV defaults to "dev", so any deployment that forgot to set
+    # DEV_ENV=prod accepted forged identities. The two conditions are
+    # independent: ALLOW_TEST_TOKENS keeps it off by default even in dev, and
+    # is_dev keeps it off in prod even if the flag is mis-set.
+    if (
+        token.startswith("{")
+        and global_config.ALLOW_TEST_TOKENS
+        and global_config.is_dev
+    ):
         try:
             payload = json.loads(token)
             return WorkOSUser(

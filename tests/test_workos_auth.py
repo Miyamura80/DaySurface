@@ -20,17 +20,18 @@ def _generate_rsa_keypair():
 
 class TestWorkOSAuth(TestTemplate):
     def test_test_mode_bypass(self):
-        """JSON test-mode token should be accepted in local dev.
+        """JSON test-mode token is accepted only with the explicit opt-in + dev.
 
         Patches the real config rather than substituting a MagicMock: the gate
         reads ``global_config.is_dev``, and a mock auto-creates that attribute
-        as truthy, so ``DEV_ENV`` would be decorative and the companion test
-        below would pass no matter what the predicate did.
+        as truthy, so the environment would be decorative and the companion
+        tests below would pass no matter what the predicate did.
         """
         token = json.dumps({"sub": "user-abc", "email": "a@b.com"})
         with (
             patch.object(global_config, "WORKOS_CLIENT_ID", "client_test123"),
             patch.object(global_config, "DEV_ENV", "dev"),
+            patch.object(global_config, "ALLOW_TEST_TOKENS", True),
         ):
             user = verify_workos_token(token)
         assert user is not None
@@ -49,8 +50,23 @@ class TestWorkOSAuth(TestTemplate):
             with (
                 patch.object(global_config, "WORKOS_CLIENT_ID", "client_test123"),
                 patch.object(global_config, "DEV_ENV", dev_env),
+                patch.object(global_config, "ALLOW_TEST_TOKENS", True),
             ):
                 assert verify_workos_token(token) is None, dev_env
+
+    def test_test_mode_bypass_off_by_default_even_in_dev(self):
+        """Without ALLOW_TEST_TOKENS the unsigned token is rejected, even in dev.
+
+        Guards the fail-open fix: DEV_ENV defaults to "dev", so the bypass must
+        not fire on the environment gate alone - it needs the explicit opt-in.
+        """
+        token = json.dumps({"sub": "attacker", "email": "e@v.il"})
+        with (
+            patch.object(global_config, "WORKOS_CLIENT_ID", "client_test123"),
+            patch.object(global_config, "DEV_ENV", "dev"),
+            patch.object(global_config, "ALLOW_TEST_TOKENS", False),
+        ):
+            assert verify_workos_token(token) is None
 
     @patch("api_server.auth.workos_auth.global_config")
     def test_no_client_id_returns_none(self, mock_config):
