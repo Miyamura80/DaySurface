@@ -29,6 +29,23 @@ from urllib.parse import urlparse
 _IpAddress = ipaddress.IPv4Address | ipaddress.IPv6Address
 
 
+def _pinned_authority(parsed: Any, ip_str: str, port: int | None) -> str:
+    """Build the pinned netloc: IP (bracketed for IPv6), explicit port, userinfo.
+
+    Preserves an explicit port (including ``:0``) and any ``user:pass@``
+    credentials so pinning never silently changes the port or strips basic auth.
+    """
+    netloc = f"[{ip_str}]" if ":" in ip_str else ip_str
+    if port is not None:
+        netloc += f":{port}"
+    if parsed.username is not None:
+        userinfo = parsed.username
+        if parsed.password is not None:
+            userinfo += f":{parsed.password}"
+        netloc = f"{userinfo}@{netloc}"
+    return netloc
+
+
 def pin_url_to_validated_ip(
     url: str,
     *,
@@ -77,12 +94,9 @@ def pin_url_to_validated_ip(
     except ValueError:
         pass
 
-    ip_str = addresses[0]
-    ip_netloc = f"[{ip_str}]" if ":" in ip_str else ip_str
-    if port:
-        ip_netloc += f":{port}"
+    ip_netloc = _pinned_authority(parsed, addresses[0], port)
     pinned = parsed._replace(netloc=ip_netloc).geturl()
-    host_header = host if not port else f"{host}:{port}"
+    host_header = host if port is None else f"{host}:{port}"
     headers = {"Host": host_header}
     # httpcore uses sni_hostname for both the TLS handshake and certificate
     # hostname verification, so cert checks still run against the real host.

@@ -424,6 +424,18 @@ class TestWebhookSSRF(TestTemplate):
         assert headers["Host"] == "example.com"
         assert ext["sni_hostname"] == "example.com"
 
+    def test_pinning_preserves_basic_auth_userinfo(self):
+        # Credentials in the URL must survive pinning, or a basic-auth endpoint
+        # would receive unauthenticated requests.
+        with patch(
+            "src.utils.ssrf.socket.getaddrinfo",
+            return_value=_addrinfo("93.184.216.34"),
+        ):
+            pinned, _headers, _ext = resolve_and_pin_webhook(
+                "https://user:pass@example.com/hook"
+            )
+        assert pinned == "https://user:pass@93.184.216.34/hook"
+
     def test_rejects_host_that_resolves_to_internal_address(self):
         # DNS rebind: the name resolved fine at subscribe, now points at metadata.
         with (
