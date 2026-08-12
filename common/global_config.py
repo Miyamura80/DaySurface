@@ -241,6 +241,11 @@ class Config(BaseSettings):
     # publishes the matching public key as a JWK Set; unset -> the route 404s.
     WEB_BOT_AUTH_PRIVATE_KEY: str | None = None
     SESSION_SECRET_KEY: str = "change-me-in-production"
+    # Explicit opt-in for the unsigned ``{"sub": ...}`` test-mode auth token
+    # (see api_server/auth/workos_auth.py). Defaults OFF so the bypass is never
+    # live just because DEV_ENV is left at its "dev" default; a dev must both set
+    # this AND keep DEV_ENV in {local,dev}. Never set in a networked deployment.
+    ALLOW_TEST_TOKENS: bool = False
 
     # Stripe & billing
     STRIPE_SECRET_KEY: str | None = None

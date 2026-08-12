@@ -52,6 +52,7 @@ class TestUnifiedAuth(TestTemplate):
         # reads `global_config.is_dev`, which a MagicMock would fake as truthy.
         mock_config.WORKOS_CLIENT_ID = "test-client"
         mock_config.is_dev = global_config.is_dev
+        mock_config.ALLOW_TEST_TOKENS = True
         app, _sl = _setup_app()
         client = TestClient(app)
         token = json.dumps({"sub": "jwt-user", "email": "j@t.com"})
