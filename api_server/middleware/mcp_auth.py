@@ -26,6 +26,7 @@ from api_server.auth.unified_auth import AuthenticatedUser
 from api_server.auth.workos_auth import verify_workos_token
 from common import global_config
 from db.engine import use_db_session
+from src.payments.request_context import reset_payment_header, set_payment_header
 from src.utils.current_user import reset_current_user, set_current_user
 
 _MCP_PATH = "/mcp"
@@ -59,11 +60,23 @@ class MCPAuthMiddleware:
             await _send_unauthorized(send)
             return
 
+        # Lift the X-PAYMENT header off the scope so the paywall can read it at
+        # the tool chokepoint (MCP tool calls have no Request object).
         token = set_current_user(user)
+        payment_token = set_payment_header(_payment_header_value(scope))
         try:
             await self.app(scope, receive, send)
         finally:
+            reset_payment_header(payment_token)
             reset_current_user(token)
+
+
+def _payment_header_value(scope: Scope) -> str | None:
+    """Return the ``X-PAYMENT`` header from the ASGI scope, if present."""
+    for key, value in scope["headers"]:
+        if key == b"x-payment":
+            return value.decode("latin-1")
+    return None
 
 
 async def _authenticate_async(scope: Scope) -> AuthenticatedUser | None:

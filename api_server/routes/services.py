@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Request
 from api_server.auth import AuthenticatedUser
 from api_server.auth.scopes import SERVICES_EXECUTE, require_scopes
 from api_server.billing.limits import ensure_daily_limit
+from api_server.billing.paywall import enforce_payment
 from api_server.idempotency import execute_idempotent
 from services import ServiceEntry, discover_services, get_registry
 
@@ -44,9 +45,20 @@ def _make_route(entry: ServiceEntry) -> None:
             body = body.model_copy(update={"user_id": _user.user_id})
 
         def _compute():
-            # Quota is checked inside the compute so idempotent replays don't
-            # double-count usage; the first execution still enforces the limit.
-            ensure_daily_limit(_user.user_id)
+            # Priced services are gated by the x402 paywall (verify + settle the
+            # X-PAYMENT header) and bypass the free quota; free services are
+            # quota-limited. Both run inside the compute so idempotent replays
+            # don't double-charge or double-count - the first execution enforces.
+            if entry.price is not None:
+                enforce_payment(
+                    user_id=_user.user_id,
+                    route=entry.name,
+                    price=entry.price,
+                    asset=entry.asset,
+                    payment_header=request.headers.get("X-PAYMENT"),
+                )
+            else:
+                ensure_daily_limit(_user.user_id)
             return func(body)
 
         if not entry.mutating:

@@ -64,6 +64,58 @@ def _check_quota() -> None:
     ensure_daily_limit(user.user_id)
 
 
+def _meter(entry: ServiceEntry) -> None:
+    """Meter an authenticated MCP tool call: paywall if priced, else quota.
+
+    Priced services require a valid ``X-PAYMENT`` header (bound to a ContextVar
+    by the /mcp middleware) that is verified and settled before the tool runs;
+    a missing/invalid payment surfaces as a structured ``McpError`` carrying the
+    x402 challenge. Free services stay on the daily quota. Skips silently when
+    no authenticated user is bound (CLI / stdio), which is never paywalled.
+    """
+    if entry.price is None:
+        _check_quota()
+        return
+
+    user = current_user()
+    if user is None:
+        return
+
+    # Circular import: api_server.* loads only at call time (see _check_quota).
+    from fastapi import HTTPException  # noqa: PLC0415
+    from mcp.shared.exceptions import McpError  # noqa: PLC0415
+    from mcp.types import ErrorData  # noqa: PLC0415
+
+    from api_server.billing.paywall import (  # noqa: PLC0415
+        PaymentRequiredError,
+        enforce_payment,
+    )
+    from src.payments.request_context import current_payment_header  # noqa: PLC0415
+
+    try:
+        enforce_payment(
+            user_id=user.user_id,
+            route=entry.name,
+            price=entry.price,
+            asset=entry.asset,
+            payment_header=current_payment_header(),
+        )
+    except PaymentRequiredError as exc:
+        # -32402: an app-defined analogue of HTTP 402 for the MCP transport. The
+        # x402 `accepts` challenge rides in `data` so the client can pay + retry.
+        raise McpError(
+            ErrorData(code=-32402, message="Payment required", data=exc.challenge)
+        ) from exc
+    except HTTPException as exc:
+        raise McpError(
+            ErrorData(
+                code=-32402,
+                message="Payment error",
+                data=exc.detail if isinstance(exc.detail, dict) else str(exc.detail),
+            )
+        ) from exc
+
+
 def _current_session(mcp: FastMCP) -> ServerSession | None:
     """Return the live ServerSession, or None outside an MCP request.
 
@@ -100,7 +152,7 @@ def _make_headless_tool(mcp: FastMCP, entry: ServiceEntry) -> None:
             elif not kwargs.get("user_id"):
                 kwargs.setdefault("user_id", "")
         input_obj = input_model(**kwargs)
-        _check_quota()
+        _meter(entry)
         try:
             return func(input_obj)
         except ConnectRequiredError as exc:
@@ -129,7 +181,7 @@ def _make_enhanced_tool(
             elif not kwargs.get("user_id"):
                 kwargs.setdefault("user_id", "")
         input_obj = input_model(**kwargs)
-        _check_quota()
+        _meter(entry)
         tool = EnhancedTool(ctx=ctx, input=input_obj, service_fn=func)
         try:
             result = await enhancer_entry.fn(tool)
