@@ -88,3 +88,24 @@ class TestScopes(TestTemplate):
         assert "read_only" in SCOPE_TEMPLATES
         assert "standard" in SCOPE_TEMPLATES
         assert "admin" in SCOPE_TEMPLATES
+
+    # --- admin scope boundary (Finding B) ---
+
+    def test_admin_scopes_defined(self):
+        """ADMIN_* remain defined - they are enforced on the config/doctor
+        REST routes (see tests/test_api_server.py), not dead constants."""
+        assert "admin:read" in ALL_SCOPES
+        assert "admin:write" in ALL_SCOPES
+
+    def test_standard_template_excludes_admin(self):
+        """A standard key must never carry an admin scope."""
+        resolved = validate_scopes(["standard"])
+        assert "admin:read" not in resolved
+        assert "admin:write" not in resolved
+        assert check_scopes(["admin:write"], resolved) is False
+        assert check_scopes(["admin:read"], resolved) is False
+
+    def test_admin_template_grants_admin(self):
+        """The admin template resolves to '*', which satisfies admin:* checks."""
+        resolved = validate_scopes(["admin"])
+        assert check_scopes(["admin:read", "admin:write"], resolved) is True

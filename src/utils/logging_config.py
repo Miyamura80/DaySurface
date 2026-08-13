@@ -212,6 +212,22 @@ def _build_format_string(record: dict) -> str:
     return " | ".join(format_parts) + "\n"  # Added newline here
 
 
+def _diagnose_enabled() -> bool:
+    """Whether loguru's ``diagnose``/``backtrace`` should be on for this env.
+
+    ``diagnose`` renders the repr of every stack-frame local inline in
+    exception tracebacks, which would dump a ``refresh_token`` / ``client_secret``
+    / ``client_id`` held in a frame straight into the logs. It must therefore be
+    enabled only in development. ``global_config.is_dev`` is the single owner of
+    that predicate and fails secure (unset / ``staging`` / ``prod`` / a typo all
+    read as production), so this returns ``False`` everywhere except local/dev.
+
+    Factored out of ``setup_logging`` so the gating decision can be unit-tested
+    without intercepting the ``logger.add`` call.
+    """
+    return global_config.is_dev
+
+
 def _should_log_level(level: str, overrides: dict | None = None) -> bool:
     """Determine if this log level should be shown based on config and overrides"""
     level = level.lower()
@@ -285,14 +301,27 @@ def setup_logging(  # noqa: C901
             # Check if this level should be logged using overrides
             return _should_log_level(record["level"].name, overrides)
 
-        # Add our standardized handler with dynamic format and filter
+        # Add our standardized handler with dynamic format and filter.
+        #
+        # diagnose renders the repr of every stack-frame local inline in
+        # exception tracebacks; a frame holding a refresh_token / client_secret
+        # / client_id would then be dumped straight into the logs. Gate it on
+        # the dev environment so it is False in production and staging and only
+        # True in local/dev. global_config.is_dev fails secure (anything that is
+        # not local/dev is treated as production), so this can never relax open.
+        #
+        # backtrace only expands the call stack (function names / lines), not
+        # local values, so it is lower-risk; we gate it the same way anyway to
+        # keep production tracebacks compact and to avoid any future value
+        # rendering it might grow.
+        diagnose_enabled = _diagnose_enabled()
         logger.add(
             sys.stderr,
             format=lambda record: _build_format_string(record),
             colorize=True,
             enqueue=True,
-            backtrace=True,
-            diagnose=True,
+            backtrace=diagnose_enabled,
+            diagnose=diagnose_enabled,
             catch=True,
             filter=log_filter,
         )

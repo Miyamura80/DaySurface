@@ -1,6 +1,9 @@
+from unittest.mock import patch
+
 import pytest
 
-from src.utils.logging_config import scrub_sensitive_data
+from common import global_config
+from src.utils.logging_config import _diagnose_enabled, scrub_sensitive_data
 from tests.test_template import TestTemplate
 
 
@@ -124,6 +127,32 @@ class TestLoggingSecurity(TestTemplate):
         assert isinstance(message, str)
         assert "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" not in message
         assert "[REDACTED_BEARER_TOKEN]" in message
+
+    def test_diagnose_disabled_in_production(self):
+        """ASVS V7.1.2: loguru diagnose must be OFF in production.
+
+        diagnose renders frame-local reprs (refresh_token, client_secret,
+        client_id) inline in tracebacks, so it must never be on outside dev.
+        """
+        with patch.object(global_config, "DEV_ENV", "prod"):
+            assert global_config.is_dev is False
+            assert _diagnose_enabled() is False
+
+    def test_diagnose_disabled_in_staging(self):
+        """Staging is treated as production; diagnose stays off (fails secure)."""
+        with patch.object(global_config, "DEV_ENV", "staging"):
+            assert _diagnose_enabled() is False
+
+    def test_diagnose_disabled_when_dev_env_unset(self):
+        """An unset/blank DEV_ENV must fail secure to diagnose OFF."""
+        with patch.object(global_config, "DEV_ENV", ""):
+            assert _diagnose_enabled() is False
+
+    def test_diagnose_enabled_in_dev(self):
+        """Only the explicit dev/local values turn diagnose on."""
+        for dev_value in ("dev", "local"):
+            with patch.object(global_config, "DEV_ENV", dev_value):
+                assert _diagnose_enabled() is True
 
     def test_generic_api_key_redaction(self):
         """Test that generic api_key patterns are redacted."""

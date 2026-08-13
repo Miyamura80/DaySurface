@@ -133,7 +133,13 @@ mcp: FastMCP = FastMCP(
 )
 
 _populated: bool = False
-_EXCLUDED_DEFAULT_MCP_SERVICES = frozenset(
+# Administrative / CLI-only services that are NOT auto-exposed as MCP tools.
+# This is the single source of truth for that classification: the REST transport
+# (api_server/routes/services.py) also consumes it - it keeps these services
+# reachable but gates the administrative ones (config/doctor) behind admin
+# scopes, exempting only the `greet` demo. Keep this public so REST can import
+# it instead of duplicating the list.
+EXCLUDED_DEFAULT_MCP_SERVICES = frozenset(
     {
         "config_get",
         "config_set",
@@ -162,7 +168,7 @@ def build_mcp_server() -> FastMCP:
     discover_app_tools()
 
     for entry in get_registry():
-        if entry.name in _EXCLUDED_DEFAULT_MCP_SERVICES:
+        if entry.name in EXCLUDED_DEFAULT_MCP_SERVICES:
             log.debug("Skipping default MCP registration for service {!r}", entry.name)
             continue
         make_tool(mcp, entry)
@@ -184,9 +190,7 @@ def llm_tool_surface() -> list[ServiceEntry]:
     so the committed landing-page snapshot is stable across environments.
     """
     build_mcp_server()
-    surface = (
-        e for e in get_registry() if e.name not in _EXCLUDED_DEFAULT_MCP_SERVICES
-    )
+    surface = (e for e in get_registry() if e.name not in EXCLUDED_DEFAULT_MCP_SERVICES)
     return sorted(surface, key=lambda e: e.name)
 
 
