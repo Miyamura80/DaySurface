@@ -182,6 +182,7 @@ exclude = [
     "tests/test_security_headers.py",
     "tests/test_billing.py",
     "tests/test_idempotency.py",
+    "tests/test_paywall.py",
     "tests/test_enhancer_fallback.py",
     "tests/test_image_proxy.py",
     "tests/test_scopes.py",

@@ -4,6 +4,7 @@ import importlib
 import pkgutil
 from collections.abc import Callable
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 
@@ -15,6 +16,13 @@ class ServiceEntry:
     output_model: type
     func: Callable[..., Any]
     mutating: bool = False
+    # Sell-side (x402) pricing. ``price`` is the per-call amount as a positive
+    # decimal string in units of ``asset`` (e.g. "0.001" USDC); ``None`` means
+    # the service is free and stays on the daily-quota path. A priced service is
+    # gated by the x402 paywall on the HTTP and MCP transports instead. Validated
+    # at registration by :func:`service`.
+    price: str | None = None
+    asset: str = "USDC"
 
 
 class ConnectRequiredError(Exception):
@@ -47,6 +55,32 @@ _registry: list[ServiceEntry] = []
 _discovered: bool = False
 
 
+def _validate_price(name: str, price: str) -> None:
+    """Reject a service registered with an empty or non-positive price.
+
+    A malformed price would otherwise mark the service paid and let the paywall
+    fall back to the x402 config's default amount, silently charging the wrong
+    figure. Fail loudly at import time instead.
+    """
+    try:
+        value = Decimal(price)
+    except (InvalidOperation, TypeError, ValueError) as exc:
+        raise ValueError(
+            f"@service({name!r}) price must be a decimal string, got {price!r}"
+        ) from exc
+    # Decimal accepts "NaN"/"Infinity" without raising; reject them before the
+    # comparison below (NaN <= 0 itself raises InvalidOperation) so a priced
+    # service can never advertise a non-finite x402 amount.
+    if not value.is_finite():
+        raise ValueError(
+            f"@service({name!r}) price must be a finite amount, got {price!r}"
+        )
+    if value <= 0:
+        raise ValueError(
+            f"@service({name!r}) price must be a positive amount, got {price!r}"
+        )
+
+
 def service(
     *,
     name: str,
@@ -54,6 +88,8 @@ def service(
     input_model: type,
     output_model: type,
     mutating: bool = False,
+    price: str | None = None,
+    asset: str = "USDC",
 ):
     """Decorator that registers a function as a service.
 
@@ -64,7 +100,18 @@ def service(
     (``mcp_server/_tool_factory.py``): a mutating service is never silently
     re-executed - the fallback reuses the already-completed ``tool.call()``
     result or propagates the enhancer error. CLI behavior is unchanged.
+
+    Set ``price`` (a decimal string like "0.001", in units of ``asset``) to
+    sell the tool via the x402 paywall: HTTP and MCP calls must carry a valid
+    ``X-PAYMENT`` header, which the server verifies and settles before running
+    the service. Priced services bypass the free daily quota. Leaving ``price``
+    as ``None`` keeps the service free and quota-limited. The paywall only
+    activates when x402 is enabled in config, so a priced service still runs
+    free (quota-limited) on a deployment that hasn't turned x402 on - the
+    template keeps working with no wallet configured. CLI is never gated.
     """
+    if price is not None:
+        _validate_price(name, price)
 
     def decorator(func):
         _registry.append(
@@ -75,6 +122,8 @@ def service(
                 output_model=output_model,
                 func=func,
                 mutating=mutating,
+                price=price,
+                asset=asset,
             )
         )
         return func

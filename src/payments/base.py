@@ -7,6 +7,7 @@ from src.payments.types import (
     PaymentProtocolName,
     PaymentRequirement,
     PaymentResult,
+    PaymentStatus,
 )
 
 
@@ -53,7 +54,24 @@ class PaymentProtocol(ABC):
         payload: PaymentPayload,
         requirement: PaymentRequirement,
     ) -> PaymentResult:
-        """Verify and settle an incoming payment against a requirement."""
+        """Verify an incoming payment against a requirement (no settlement)."""
+
+    async def settle_payment(
+        self,
+        payload: PaymentPayload,
+        requirement: PaymentRequirement,
+    ) -> PaymentResult:
+        """Verify *and* capture funds for an incoming payment.
+
+        Default implementation reports the protocol cannot settle, so the
+        paywall fails closed for protocols that only verify. Override in
+        protocols that support on-chain (or off-chain) capture.
+        """
+        return PaymentResult(
+            status=PaymentStatus.FAILED,
+            protocol=self.name,
+            error=f"{self.name} does not support settlement",
+        )
 
     def shutdown(self) -> None:  # noqa: B027
         """Optional cleanup. Override if the protocol holds connections."""

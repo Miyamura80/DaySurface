@@ -9,6 +9,10 @@
 </p>
 
 <p align="center">
+<sub>Optional <b>x402 sell-side paywall</b>: price any tool with <code>@service(price=...)</code> and agents pay per call in stablecoins (Cloudflare Wallets / x402 ecosystem). Dormant until enabled.</sub>
+</p>
+
+<p align="center">
   <a href="#mcp-ui">MCP UI</a> •
   <a href="#connect-your-client">Connect</a> •
   <a href="#architecture">Architecture</a> •
