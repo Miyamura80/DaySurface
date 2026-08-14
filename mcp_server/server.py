@@ -150,6 +150,29 @@ EXCLUDED_DEFAULT_MCP_SERVICES = frozenset(
     }
 )
 
+# Mutating webhook-management services kept OFF the default LLM (MCP) tool
+# surface, but - unlike EXCLUDED_DEFAULT_MCP_SERVICES - NOT admin-gated on HTTP.
+# The assistant is fed untrusted email content, so an injected instruction could
+# otherwise make the model subscribe an attacker endpoint (webhook_subscribe
+# also returns the signing secret) or rotate/remove a subscription - a silent
+# mail-exfil primitive. Users drive these through the Settings app
+# (`settings.subscribe`, an app-only tool); programmatic HTTP integrators keep
+# the authenticated route with an ordinary `services:execute` key. This is
+# MCP-only: it does not appear in `_admin_only_services()`, so the REST scope is
+# unchanged. `webhook_list` (read-only) stays on the LLM surface.
+LLM_HIDDEN_SERVICES = frozenset(
+    {
+        "webhook_subscribe",
+        "webhook_unsubscribe",
+        "webhook_rotate_secret",
+    }
+)
+
+# Everything kept off the default LLM tool surface: the admin/CLI-only services
+# plus the prompt-injection-sensitive webhook mutations. REST admin-gating reads
+# only EXCLUDED_DEFAULT_MCP_SERVICES, so this wider set never widens HTTP scope.
+_NOT_ON_DEFAULT_LLM_SURFACE = EXCLUDED_DEFAULT_MCP_SERVICES | LLM_HIDDEN_SERVICES
+
 
 def build_mcp_server() -> FastMCP:
     """Populate the FastMCP singleton and return it. Idempotent."""
@@ -168,7 +191,7 @@ def build_mcp_server() -> FastMCP:
     discover_app_tools()
 
     for entry in get_registry():
-        if entry.name in EXCLUDED_DEFAULT_MCP_SERVICES:
+        if entry.name in _NOT_ON_DEFAULT_LLM_SURFACE:
             log.debug("Skipping default MCP registration for service {!r}", entry.name)
             continue
         make_tool(mcp, entry)
@@ -190,7 +213,7 @@ def llm_tool_surface() -> list[ServiceEntry]:
     so the committed landing-page snapshot is stable across environments.
     """
     build_mcp_server()
-    surface = (e for e in get_registry() if e.name not in EXCLUDED_DEFAULT_MCP_SERVICES)
+    surface = (e for e in get_registry() if e.name not in _NOT_ON_DEFAULT_LLM_SURFACE)
     return sorted(surface, key=lambda e: e.name)
 
 

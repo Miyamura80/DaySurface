@@ -39,6 +39,25 @@ class TestMCPServer(TestTemplate):
         for tool_name in ("config_get", "config_set", "config_show", "doctor", "greet"):
             assert tool_name not in tools
 
+    def test_mutating_webhook_tools_hidden_from_llm_but_still_registered(self):
+        # Audit #3: an injected email must not be able to make the model
+        # register/rotate/remove a webhook (a silent mail-exfil primitive -
+        # webhook_subscribe even returns the signing secret). These are kept off
+        # the LLM tool surface (users drive them via the Settings app) but stay
+        # registered so the HTTP transport keeps them with an ordinary
+        # services:execute key - they are NOT admin-gated.
+        tools = mcp._tool_manager._tools
+        service_names = {entry.name for entry in get_registry()}
+        for name in (
+            "webhook_subscribe",
+            "webhook_unsubscribe",
+            "webhook_rotate_secret",
+        ):
+            assert name not in tools, f"{name} must not be an LLM tool"
+            assert name in service_names, f"{name} must remain a registered service"
+        # The read-only listing stays available to the model.
+        assert "webhook_list" in tools
+
     def test_enhanced_tools_publish_output_schema(self):
         for tool_name in ("gmail_compose", "gmail_curate_inbox", "gmail_get_thread"):
             tool = mcp._tool_manager._tools.get(tool_name)
