@@ -12,7 +12,10 @@ from __future__ import annotations
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from unittest.mock import patch
+from urllib.parse import parse_qs
 
+import httpx
+from loguru import logger as log
 from sqlalchemy import create_engine, event
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import sessionmaker
@@ -31,7 +34,11 @@ from models.gmail import (
 )
 from models.webhooks import WebhookSubscribeInput
 from services import discover_services, get_registry
-from services.gmail_svc import gmail_disconnect, gmail_status
+from services.gmail_svc import (
+    _revoke_with_google,
+    gmail_disconnect,
+    gmail_status,
+)
 from services.webhooks_svc import (
     enqueue_event,
     purge_user_events,
@@ -248,6 +255,63 @@ class TestPurgeOnDisconnect(TestTemplate):
             session.commit()
 
             assert gmail_status(GmailStatusInput(user_id="u1")).connected is False
+
+    def test_revoke_failure_never_leaks_the_refresh_token(self):
+        # ASVS V7.1.1: Google's revoke endpoint returns non-2xx routinely (an
+        # already-expired token 400s), raising httpx.HTTPStatusError - whose
+        # str()/repr() embed the full request URL. The decrypted refresh token
+        # must therefore ride in the POST body, never the query string, and the
+        # warning path must not log the exception object. The log scrubber does
+        # NOT match Google's 1//0g... token shape, so if it ever hit the URL or
+        # the log it would land unredacted - this test would catch that.
+        token_plain = "1//0gFAKE-refresh-token-value-abcdef1234567890"
+        row = GoogleToken(
+            user_id="u1",
+            email="u1@x.com",
+            refresh_token_enc=token_plain.encode("utf-8"),
+            key_id="plaintext",
+        )
+
+        captured: dict[str, object] = {}
+
+        def fake_post(url, *, data=None, params=None, timeout=None):  # noqa: ANN202
+            # Reconstruct the request httpx would actually build to prove the
+            # token lands in the body, not the URL.
+            request = httpx.Request("POST", url, data=data)
+            captured["url"] = url
+            captured["data"] = data
+            captured["params"] = params
+            captured["request_url"] = str(request.url)
+            captured["request_body"] = request.content.decode("utf-8")
+            return httpx.Response(400, request=request, text="invalid_token")
+
+        sink_lines: list[str] = []
+        sink_id = log.add(lambda m: sink_lines.append(str(m)), level="DEBUG")
+        try:
+            with (
+                _plaintext_encryption(),
+                patch("services.gmail_svc.httpx.post", side_effect=fake_post),
+            ):
+                # Contract: best-effort, never raises even on a 400.
+                _revoke_with_google(row)
+        finally:
+            log.remove(sink_id)
+
+        # Token was sent as form body data, not as a URL query param.
+        assert captured["data"] == {"token": token_plain}
+        assert captured["params"] is None
+        # ...and never reached the request URL.
+        request_url = str(captured["request_url"])
+        assert token_plain not in str(captured["url"])
+        assert token_plain not in request_url
+        assert "token" not in httpx.URL(request_url).params
+        # The body genuinely carries it (percent-encoded).
+        assert parse_qs(str(captured["request_body"]))["token"] == [token_plain]
+
+        # The failure was logged (warning path fired) but the token is absent.
+        joined = "\n".join(sink_lines)
+        assert "revoke failed" in joined
+        assert token_plain not in joined
 
     def test_disconnect_survives_webhook_purge_failure(self):
         # The token revoke is already committed before the purge runs, so a

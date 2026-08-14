@@ -304,9 +304,14 @@ def _revoke_with_google(row: GoogleToken) -> None:
         if row.refresh_token_enc is None:
             raise ValueError("token already erased")  # noqa: TRY301
         refresh_token = enc.decrypt(row.refresh_token_enc)
+        # Send the token in the form-encoded POST body, NOT as a URL query
+        # param. Google's revoke endpoint accepts application/x-www-form-urlencoded
+        # with token=<value>. Keeping it out of request.url means the decrypted
+        # refresh token can never ride along in an httpx.HTTPStatusError, whose
+        # str()/repr() embed the full request URL.
         response = httpx.post(
             GOOGLE_REVOKE_ENDPOINT,
-            params={"token": refresh_token},
+            data={"token": refresh_token},
             timeout=10.0,
         )
         # httpx does not raise on 4xx/5xx. Without this a rejected revoke would
@@ -314,13 +319,24 @@ def _revoke_with_google(row: GoogleToken) -> None:
         # dropped the grant; raising routes it through the warning path below.
         response.raise_for_status()
     except (httpx.HTTPError, ValueError) as exc:
-        log.warning("Google token revoke failed; revoking locally anyway: {}", exc)
+        # NEVER log the exception object here: httpx.HTTPStatusError stringifies
+        # with the full request URL, so logging exc could leak a secret if a
+        # token ever reached the query string. Log only the exception type and,
+        # for HTTP status errors, the response status code.
+        detail = type(exc).__name__
+        if isinstance(exc, httpx.HTTPStatusError):
+            detail = f"{detail} (status {exc.response.status_code})"
+        log.warning("Google token revoke failed; revoking locally anyway: {}", detail)
     except Exception as exc:  # noqa: BLE001
         # Defensive boundary: decrypt() or require_encryption() may raise
         # provider-specific errors (cryptography.fernet.InvalidToken,
         # RuntimeError when key missing in prod). We MUST still mark the
-        # row revoked locally so the user can recover.
-        log.warning("Google revoke errored ({}): proceeding with local revoke", exc)
+        # row revoked locally so the user can recover. Log only the type name,
+        # never the exception object, to avoid any chance of leaking secrets.
+        log.warning(
+            "Google revoke errored ({}): proceeding with local revoke",
+            type(exc).__name__,
+        )
 
 
 @service(

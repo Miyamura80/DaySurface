@@ -121,10 +121,17 @@ def _candidate_ips(host: str) -> list[ipaddress.IPv4Address | ipaddress.IPv6Addr
 def _validate_webhook_url(url: str) -> None:
     """Reject non-https and SSRF-prone subscriber URLs.
 
-    Blocks private / link-local / reserved / multicast destinations so a tenant
-    cannot point the delivery worker at cloud metadata endpoints or internal
-    services. Loopback + cleartext http are permitted only in dev for local
-    testing.
+    Uses an ``is_global`` *allowlist*, not an enumerated blocklist: a
+    destination passes only if every address it resolves to is globally
+    routable. That closes gaps an explicit blocklist leaves open - CGNAT /
+    shared address space (100.64/10), unique-local IPv6 (fc00::/7) and other
+    non-global ranges are all rejected in one predicate - so a tenant cannot
+    point the delivery worker at cloud metadata endpoints or internal services.
+    Loopback + cleartext http are permitted only in dev for local testing.
+
+    This is subscribe-time defence in depth; the delivery path re-resolves and
+    pins the connection (see ``webhook_delivery_svc._post``) to defeat a DNS
+    rebind that flips a validated public host to a private one after this check.
     """
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https"):
@@ -142,13 +149,7 @@ def _validate_webhook_url(url: str) -> None:
         if ip.is_loopback:
             if not dev:
                 raise ValueError("Webhook url must not target a loopback address")
-        elif (
-            ip.is_private
-            or ip.is_link_local
-            or ip.is_reserved
-            or ip.is_multicast
-            or ip.is_unspecified
-        ):
+        elif not ip.is_global:
             raise ValueError("Webhook url must not target a private/reserved address")
 
 

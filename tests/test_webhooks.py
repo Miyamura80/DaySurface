@@ -11,7 +11,8 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
-from contextlib import contextmanager
+import socket
+from contextlib import ExitStack, contextmanager
 from datetime import UTC, datetime
 from unittest.mock import patch
 
@@ -76,16 +77,33 @@ def _plaintext_encryption():
         yield
 
 
+# A public IP the SSRF allowlist accepts, used to mock DNS for hostname seeds so
+# delivery's resolve-then-pin step succeeds without touching the real network.
+_PUBLIC_IP = "93.184.216.34"
+_PUBLIC_ADDRINFO = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (_PUBLIC_IP, 443))]
+
+
 @contextmanager
-def _mock_http(handler):
-    """Patch the delivery module's httpx.Client to use a MockTransport."""
+def _mock_http(handler, *, addrinfo=_PUBLIC_ADDRINFO):
+    """Patch delivery's httpx.Client + DNS so posts hit a MockTransport.
+
+    The client is now built inside ``services._ssrf_guard.build_client`` and the
+    subscriber host is resolved+pinned there, so both the client factory and the
+    resolver are patched on the guard module. ``addrinfo`` controls what the
+    subscriber hostname resolves to (default: a public IP the allowlist passes).
+    """
     transport = httpx.MockTransport(handler)
     real_client = httpx.Client  # capture before patching to avoid recursion
 
     def factory(*_args, **_kwargs):
         return real_client(transport=transport)
 
-    with patch("services.webhook_delivery_svc.httpx.Client", factory):
+    with ExitStack() as stack:
+        stack.enter_context(patch("services._ssrf_guard.httpx.Client", factory))
+        if addrinfo is not None:
+            stack.enter_context(
+                patch("services._ssrf_guard.socket.getaddrinfo", return_value=addrinfo)
+            )
         yield
 
 
@@ -152,6 +170,20 @@ class TestWebhookSubscriptions(TestTemplate):
                 "https://169.254.169.254/latest/meta-data/",  # link-local
                 "https://10.0.0.5/internal",  # private
                 "https://192.168.1.1/admin",  # private
+            ):
+                with pytest.raises(ValueError, match="private|reserved|loopback"):
+                    webhook_subscribe(WebhookSubscribeInput(user_id="u1", url=bad))
+
+    def test_subscribe_rejects_cgnat_and_ula_the_blocklist_missed(self):
+        # The is_global allowlist rejects ranges an enumerated blocklist leaks:
+        # CGNAT / shared address space (100.64/10) and unique-local IPv6
+        # (fc00::/7). Both are non-global; neither is caught by an is_private-
+        # only check on every Python. Error type/message stay the same.
+        with _patch_db(), _plaintext_encryption():
+            for bad in (
+                "https://100.64.0.1/hook",  # CGNAT (RFC 6598 shared space)
+                "https://[fc00::1]/hook",  # IPv6 unique-local
+                "https://[fe80::1]/hook",  # IPv6 link-local
             ):
                 with pytest.raises(ValueError, match="private|reserved|loopback"):
                     webhook_subscribe(WebhookSubscribeInput(user_id="u1", url=bad))
