@@ -235,8 +235,14 @@ class X402Protocol(PaymentProtocol):
                 )
             finally:
                 # The facilitator owns an async HTTP client; close it so we
-                # don't leak connection-pool resources under load.
-                await facilitator.aclose()
+                # don't leak connection-pool resources under load. Closing must
+                # never override the payment result, so a close failure is
+                # logged and swallowed rather than masking a settled payment.
+                try:
+                    await facilitator.aclose()
+                except Exception as close_exc:  # noqa: BLE001
+                    # Defensive: aclose failure is non-fatal to the payment.
+                    log.warning("x402 facilitator close failed: {}", close_exc)
 
         except Exception as exc:  # noqa: BLE001
             # External SDK boundary: any failure (HTTP, signing, broadcast) must
