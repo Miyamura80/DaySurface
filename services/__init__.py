@@ -4,6 +4,7 @@ import importlib
 import pkgutil
 from collections.abc import Callable
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 
@@ -15,17 +16,13 @@ class ServiceEntry:
     output_model: type
     func: Callable[..., Any]
     mutating: bool = False
-    # Sell-side (x402) pricing. ``price`` is the per-call amount as a decimal
-    # string in units of ``asset`` (e.g. "0.001" USDC); ``None`` means the
-    # service is free and stays on the daily-quota path. A priced service is
-    # gated by the x402 paywall on the HTTP and MCP transports instead.
+    # Sell-side (x402) pricing. ``price`` is the per-call amount as a positive
+    # decimal string in units of ``asset`` (e.g. "0.001" USDC); ``None`` means
+    # the service is free and stays on the daily-quota path. A priced service is
+    # gated by the x402 paywall on the HTTP and MCP transports instead. Validated
+    # at registration by :func:`service`.
     price: str | None = None
     asset: str = "USDC"
-
-    @property
-    def is_paid(self) -> bool:
-        """True when this service is metered by the x402 paywall, not quota."""
-        return self.price is not None
 
 
 class ConnectRequiredError(Exception):
@@ -58,6 +55,25 @@ _registry: list[ServiceEntry] = []
 _discovered: bool = False
 
 
+def _validate_price(name: str, price: str) -> None:
+    """Reject a service registered with an empty or non-positive price.
+
+    A malformed price would otherwise mark the service paid and let the paywall
+    fall back to the x402 config's default amount, silently charging the wrong
+    figure. Fail loudly at import time instead.
+    """
+    try:
+        value = Decimal(price)
+    except (InvalidOperation, TypeError, ValueError) as exc:
+        raise ValueError(
+            f"@service({name!r}) price must be a decimal string, got {price!r}"
+        ) from exc
+    if value <= 0:
+        raise ValueError(
+            f"@service({name!r}) price must be a positive amount, got {price!r}"
+        )
+
+
 def service(
     *,
     name: str,
@@ -87,6 +103,8 @@ def service(
     free (quota-limited) on a deployment that hasn't turned x402 on - the
     template keeps working with no wallet configured. CLI is never gated.
     """
+    if price is not None:
+        _validate_price(name, price)
 
     def decorator(func):
         _registry.append(

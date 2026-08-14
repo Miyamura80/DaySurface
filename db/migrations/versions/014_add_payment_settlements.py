@@ -28,7 +28,7 @@ def upgrade() -> None:
         sa.Column("route", sa.String(length=255), nullable=False),
         sa.Column("protocol", sa.String(length=32), nullable=False),
         sa.Column("amount", sa.String(length=64), nullable=False),
-        sa.Column("asset", sa.String(length=32), nullable=False),
+        sa.Column("asset", sa.String(length=128), nullable=False),
         sa.Column("network", sa.String(length=64), nullable=False),
         sa.Column("status", sa.String(length=16), nullable=False),
         sa.Column("transaction_id", sa.String(length=255), nullable=True),

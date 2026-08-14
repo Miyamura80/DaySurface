@@ -2,9 +2,11 @@
 
 The x402 SDK and facilitator are never contacted: a fake protocol is injected
 into the registry so the tests exercise the paywall's own logic - challenge
-emission, settle-once bookkeeping, and failure handling - deterministically.
+emission, settle-once bookkeeping, replay binding, and failure handling -
+deterministically.
 """
 
+import asyncio
 import base64
 import json
 from contextlib import contextmanager
@@ -18,6 +20,7 @@ from sqlalchemy.pool import StaticPool
 
 import services as services_pkg
 from api_server.billing.paywall import PaymentRequiredError, enforce_payment
+from common import global_config
 from db.base import Base
 from db.models.payment_settlements import PaymentSettlement
 from services import ServiceEntry, service
@@ -28,6 +31,7 @@ from src.payments.types import (
     PaymentResult,
     PaymentStatus,
 )
+from src.payments.x402.protocol import X402Protocol
 from tests.test_template import TestTemplate
 
 
@@ -44,6 +48,12 @@ def _make_engine():
 def _header(payload: dict) -> str:
     """Encode a payment payload the way an x402 client sends X-PAYMENT."""
     return base64.b64encode(json.dumps(payload).encode()).decode()
+
+
+def _detail_code(exc: HTTPException) -> str | None:
+    """Extract the error ``code`` from an HTTPException whose detail is a dict."""
+    detail = exc.detail
+    return detail.get("code") if isinstance(detail, dict) else None
 
 
 class _FakeX402:
@@ -130,7 +140,6 @@ class TestPaywallDecorator(TestTemplate):
             func=lambda b: b,
         )
         assert entry.price is None
-        assert entry.is_paid is False
         assert entry.asset == "USDC"
 
     def test_decorator_sets_price(self):
@@ -152,22 +161,44 @@ class TestPaywallDecorator(TestTemplate):
                 e for e in services_pkg.get_registry() if e.name == "__test_paid_svc"
             )
             assert entry.price == "0.01"
-            assert entry.is_paid is True
         finally:
             del services_pkg._registry[before:]
+
+    @pytest.mark.parametrize("bad_price", ["0", "-1", "", "abc", "1.2.3"])
+    def test_invalid_price_rejected_at_registration(self, bad_price):
+        with pytest.raises(ValueError):
+
+            @service(
+                name="__test_bad_price",
+                description="d",
+                input_model=dict,
+                output_model=dict,
+                price=bad_price,
+            )
+            def _svc(body):
+                return body
 
 
 class TestPaywallDisabled(TestTemplate):
     def test_disabled_protocol_runs_free(self):
-        # No x402 protocol registered -> paywall inactive -> no raise.
-        PaymentRegistry.reset()
-        enforce_payment(
-            user_id="u1",
-            route="paid_svc",
-            price="0.001",
-            asset="USDC",
-            payment_header=None,
-        )
+        # Pin the disabled state deterministically regardless of the ambient
+        # x402 config: an initialized registry with no protocols means the
+        # paywall is inactive, so enforce_payment returns False (caller applies
+        # the free quota) instead of raising.
+        registry = PaymentRegistry.get()
+        registry._protocols.clear()
+        registry._initialized = True
+        try:
+            charged = enforce_payment(
+                user_id="u1",
+                route="paid_svc",
+                price="0.001",
+                asset="USDC",
+                payment_header=None,
+            )
+            assert charged is False
+        finally:
+            PaymentRegistry.reset()
 
 
 class TestPaywallChallenge(_PaywallCase):
@@ -200,20 +231,19 @@ class TestPaywallChallenge(_PaywallCase):
                 payment_header="not-base64!!!",
             )
         assert exc.value.status_code == 402
-        detail = exc.value.detail
-        assert isinstance(detail, dict)
-        assert detail["code"] == "payment_invalid"
+        assert _detail_code(exc.value) == "payment_invalid"
 
 
 class TestPaywallSettlement(_PaywallCase):
     def test_valid_payment_settles_and_records(self):
-        enforce_payment(
+        charged = enforce_payment(
             user_id="u1",
             route="paid_svc",
             price="0.001",
             asset="USDC",
             payment_header=_header({"scheme": "exact", "nonce": "n1"}),
         )
+        assert charged is True
         assert self.fake.settle_calls == 1
         rows = self._rows()
         assert len(rows) == 1
@@ -231,16 +261,65 @@ class TestPaywallSettlement(_PaywallCase):
             asset="USDC",
             payment_header=header,
         )
-        # Same single-use payment replayed: allowed through, but not re-settled.
-        enforce_payment(
+        # Same single-use payment replayed on the SAME request: allowed through,
+        # but not re-settled.
+        charged = enforce_payment(
             user_id="u1",
             route="paid_svc",
             price="0.001",
             asset="USDC",
             payment_header=header,
         )
+        assert charged is True
         assert self.fake.settle_calls == 1
         assert len(self._rows()) == 1
+
+    def test_replay_on_different_route_rejected(self):
+        header = _header({"scheme": "exact", "nonce": "n1"})
+        enforce_payment(
+            user_id="u1",
+            route="cheap_svc",
+            price="0.001",
+            asset="USDC",
+            payment_header=header,
+        )
+        # Reusing the settled payment on a different (pricier) route must not be
+        # honored for free.
+        with pytest.raises(HTTPException) as exc:
+            enforce_payment(
+                user_id="u1",
+                route="pricey_svc",
+                price="0.010",
+                asset="USDC",
+                payment_header=header,
+            )
+        assert exc.value.status_code == 409
+        assert _detail_code(exc.value) == "payment_conflict"
+        assert self.fake.settle_calls == 1
+
+    def test_mutating_replay_rejected(self):
+        header = _header({"scheme": "exact", "nonce": "n1"})
+        enforce_payment(
+            user_id="u1",
+            route="charge_svc",
+            price="0.001",
+            asset="USDC",
+            payment_header=header,
+            mutating=True,
+        )
+        # A settled payment must never re-drive a mutating operation.
+        with pytest.raises(HTTPException) as exc:
+            enforce_payment(
+                user_id="u1",
+                route="charge_svc",
+                price="0.001",
+                asset="USDC",
+                payment_header=header,
+                mutating=True,
+            )
+        assert exc.value.status_code == 409
+        assert _detail_code(exc.value) == "payment_replayed"
+        assert self.fake.settle_calls == 1
 
 
 class TestPaywallRejection(_PaywallCase):
@@ -260,11 +339,50 @@ class TestPaywallRejection(_PaywallCase):
                 payment_header=_header({"scheme": "exact", "nonce": "bad"}),
             )
         assert exc.value.status_code == 402
-        detail = exc.value.detail
-        assert isinstance(detail, dict)
-        assert detail["code"] == "payment_invalid"
+        assert _detail_code(exc.value) == "payment_invalid"
         # Claim released so a corrected retry can re-claim the (new) payment.
         assert self._rows() == []
+
+
+class TestPaywallSettlementFailure(_PaywallCase):
+    settle_result = PaymentResult(
+        status=PaymentStatus.FAILED,
+        protocol=PaymentProtocolName.X402,
+        error="facilitator timeout",
+    )
+
+    def test_settlement_failure_is_502_not_402(self):
+        # A valid payment whose settlement fails on infrastructure is a server
+        # error (502), not a client payment error (402).
+        with pytest.raises(HTTPException) as exc:
+            enforce_payment(
+                user_id="u1",
+                route="paid_svc",
+                price="0.001",
+                asset="USDC",
+                payment_header=_header({"scheme": "exact", "nonce": "n1"}),
+            )
+        assert exc.value.status_code == 502
+        assert _detail_code(exc.value) == "settlement_failed"
+        assert self._rows() == []
+
+
+class TestX402AssetRejection(TestTemplate):
+    def test_unsupported_asset_rejected(self):
+        # The SDK settles only its configured default asset, so building a
+        # requirement for a different token must fail rather than advertise an
+        # unpayable challenge.
+        proto = X402Protocol(global_config.payments.x402)
+        proto._initialized = True
+        proto._wallet_address = "0xserver"
+        with pytest.raises(ValueError):
+            asyncio.run(
+                proto.build_payment_requirement(
+                    amount="0.001",
+                    asset="NOTUSDC",
+                    recipient="",
+                )
+            )
 
 
 class TestPaywallModel(TestTemplate):

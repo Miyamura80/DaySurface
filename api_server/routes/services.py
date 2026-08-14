@@ -46,18 +46,23 @@ def _make_route(entry: ServiceEntry) -> None:
 
         def _compute():
             # Priced services are gated by the x402 paywall (verify + settle the
-            # X-PAYMENT header) and bypass the free quota; free services are
-            # quota-limited. Both run inside the compute so idempotent replays
-            # don't double-charge or double-count - the first execution enforces.
-            if entry.price is not None:
-                enforce_payment(
+            # X-PAYMENT header). When the paywall actually charges the call it
+            # bypasses the free quota; when it's inactive (x402 disabled) it
+            # returns False and we still apply the daily quota, so a priced
+            # service is never unlimited. Both run inside the compute so
+            # idempotent replays don't double-charge or double-count.
+            charged = False
+            price = entry.price
+            if price is not None:
+                charged = enforce_payment(
                     user_id=_user.user_id,
                     route=entry.name,
-                    price=entry.price,
+                    price=price,
                     asset=entry.asset,
                     payment_header=request.headers.get("X-PAYMENT"),
+                    mutating=entry.mutating,
                 )
-            else:
+            if not charged:
                 ensure_daily_limit(_user.user_id)
             return func(body)
 

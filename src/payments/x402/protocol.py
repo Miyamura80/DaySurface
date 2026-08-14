@@ -108,14 +108,28 @@ class X402Protocol(PaymentProtocol):
         recipient: str,
         description: str | None = None,
     ) -> PaymentRequirement:
-        """Build a PaymentRequirement for a 402 response."""
+        """Build a PaymentRequirement for a 402 response.
+
+        Rejects any ``asset`` this deployment cannot actually settle. The SDK
+        conversion (:meth:`_to_sdk_requirements`) only carries scheme/pay_to/
+        price/network, so settlement always uses the configured default asset;
+        advertising a different token in the 402 challenge would hand the client
+        a payment it can never fulfil, so we fail fast instead.
+        """
         if not await self.initialize():
             raise RuntimeError("x402 protocol not initialized")
+
+        resolved_asset = asset or self._config.default_asset
+        if resolved_asset != self._config.default_asset:
+            raise ValueError(
+                f"unsupported asset {resolved_asset!r}: this x402 deployment "
+                f"settles {self._config.default_asset!r} on {self._config.network}"
+            )
 
         return PaymentRequirement(
             protocol=PaymentProtocolName.X402,
             network=self._config.network,
-            asset=asset or self._config.default_asset,
+            asset=resolved_asset,
             amount=amount or self._config.default_amount,
             recipient=recipient or self._wallet_address,
             facilitator_url=self._config.facilitator_url,
@@ -130,56 +144,8 @@ class X402Protocol(PaymentProtocol):
         payload: PaymentPayload,
         requirement: PaymentRequirement,
     ) -> PaymentResult:
-        """Verify an incoming payment using the x402 facilitator.
-
-        Delegates to the SDK's FacilitatorClient for on-chain verification.
-        """
-        if not await self.initialize():
-            return PaymentResult(
-                status=PaymentStatus.FAILED,
-                protocol=PaymentProtocolName.X402,
-                error="x402 protocol not initialized",
-            )
-
-        try:
-            # Lazy by design: keep the x402 SDK off the module import path
-            # (see class docstring); failures surface as PaymentResult below.
-            from x402.http import HTTPFacilitatorClient  # noqa: PLC0415
-
-            facilitator_url = (
-                requirement.facilitator_url or self._config.facilitator_url
-            )
-            facilitator = HTTPFacilitatorClient({"url": facilitator_url})
-
-            x402_payload = self._to_sdk_payload(payload)
-            x402_requirements = self._to_sdk_requirements(requirement)
-
-            response = await facilitator.verify(x402_payload, x402_requirements)
-
-            if response.is_valid:
-                return PaymentResult(
-                    status=PaymentStatus.COMPLETED,
-                    protocol=PaymentProtocolName.X402,
-                    transaction_id=response.payer,
-                    raw_response=response.model_dump(),
-                )
-            else:
-                return PaymentResult(
-                    status=PaymentStatus.REJECTED,
-                    protocol=PaymentProtocolName.X402,
-                    error=response.invalid_reason or response.invalid_message,
-                    raw_response=response.model_dump(),
-                )
-
-        except Exception as exc:  # noqa: BLE001
-            # External SDK boundary: any failure (HTTP, signing, parse) must be
-            # surfaced as a structured PaymentResult, not propagated to the caller.
-            log.error("x402 payment verification failed: {}", exc)
-            return PaymentResult(
-                status=PaymentStatus.FAILED,
-                protocol=PaymentProtocolName.X402,
-                error=str(exc),
-            )
+        """Verify an incoming payment using the x402 facilitator (no settlement)."""
+        return await self._run_facilitator(payload, requirement, settle=False)
 
     async def settle_payment(
         self,
@@ -191,7 +157,28 @@ class X402Protocol(PaymentProtocol):
         The resource-server contract is verify-then-settle: we first ask the
         facilitator whether the signed authorization is valid, and only then
         ask it to broadcast/settle it on-chain. A rejected verification never
-        reaches settlement. Both steps go through the same facilitator.
+        reaches settlement.
+        """
+        return await self._run_facilitator(payload, requirement, settle=True)
+
+    async def _run_facilitator(
+        self,
+        payload: PaymentPayload,
+        requirement: PaymentRequirement,
+        *,
+        settle: bool,
+    ) -> PaymentResult:
+        """Verify (and optionally settle) a payment through the facilitator.
+
+        Shared by :meth:`verify_payment` and :meth:`settle_payment` so the two
+        never drift. Owns the facilitator client's lifecycle (closed in a
+        ``finally``) and classifies outcomes consistently:
+
+        - verification says the payment is invalid -> ``REJECTED`` (client's
+          fault; the paywall maps this to HTTP 402);
+        - verification passes but settlement fails (transaction/simulation/
+          facilitator error) -> ``FAILED`` (infrastructure; maps to HTTP 502);
+        - any SDK/transport exception -> ``FAILED``.
         """
         if not await self.initialize():
             return PaymentResult(
@@ -209,38 +196,56 @@ class X402Protocol(PaymentProtocol):
                 requirement.facilitator_url or self._config.facilitator_url
             )
             facilitator = HTTPFacilitatorClient({"url": facilitator_url})
+            try:
+                x402_payload = self._to_sdk_payload(payload)
+                x402_requirements = self._to_sdk_requirements(requirement)
 
-            x402_payload = self._to_sdk_payload(payload)
-            x402_requirements = self._to_sdk_requirements(requirement)
+                verify = await facilitator.verify(x402_payload, x402_requirements)
+                if not verify.is_valid:
+                    return PaymentResult(
+                        status=PaymentStatus.REJECTED,
+                        protocol=PaymentProtocolName.X402,
+                        error=verify.invalid_reason or verify.invalid_message,
+                        raw_response=verify.model_dump(),
+                    )
 
-            verify = await facilitator.verify(x402_payload, x402_requirements)
-            if not verify.is_valid:
+                if not settle:
+                    return PaymentResult(
+                        status=PaymentStatus.COMPLETED,
+                        protocol=PaymentProtocolName.X402,
+                        transaction_id=verify.payer,
+                        raw_response=verify.model_dump(),
+                    )
+
+                settled = await facilitator.settle(x402_payload, x402_requirements)
+                if settled.success:
+                    return PaymentResult(
+                        status=PaymentStatus.COMPLETED,
+                        protocol=PaymentProtocolName.X402,
+                        transaction_id=settled.transaction or settled.payer,
+                        raw_response=settled.model_dump(),
+                    )
+                # Verification already passed, so a settlement failure is an
+                # execution/facilitator error, not an invalid payment: FAILED.
                 return PaymentResult(
-                    status=PaymentStatus.REJECTED,
+                    status=PaymentStatus.FAILED,
                     protocol=PaymentProtocolName.X402,
-                    error=verify.invalid_reason or verify.invalid_message,
-                    raw_response=verify.model_dump(),
+                    error=settled.error_reason or settled.error_message,
+                    raw_response=settled.model_dump(),
                 )
-
-            settle = await facilitator.settle(x402_payload, x402_requirements)
-            if settle.success:
-                return PaymentResult(
-                    status=PaymentStatus.COMPLETED,
-                    protocol=PaymentProtocolName.X402,
-                    transaction_id=settle.transaction or settle.payer,
-                    raw_response=settle.model_dump(),
-                )
-            return PaymentResult(
-                status=PaymentStatus.REJECTED,
-                protocol=PaymentProtocolName.X402,
-                error=settle.error_reason or settle.error_message,
-                raw_response=settle.model_dump(),
-            )
+            finally:
+                # The facilitator owns an async HTTP client; close it so we
+                # don't leak connection-pool resources under load.
+                await facilitator.aclose()
 
         except Exception as exc:  # noqa: BLE001
             # External SDK boundary: any failure (HTTP, signing, broadcast) must
             # surface as a structured PaymentResult, not propagate to the caller.
-            log.error("x402 payment settlement failed: {}", exc)
+            log.error(
+                "x402 payment {} failed: {}",
+                "settlement" if settle else "verification",
+                exc,
+            )
             return PaymentResult(
                 status=PaymentStatus.FAILED,
                 protocol=PaymentProtocolName.X402,

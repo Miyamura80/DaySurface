@@ -33,7 +33,9 @@ class PaymentSettlement(Base):
     protocol: Mapped[str] = mapped_column(String(32), nullable=False)
     # Priced amount + asset + network captured at settlement time.
     amount: Mapped[str] = mapped_column(String(64), nullable=False)
-    asset: Mapped[str] = mapped_column(String(32), nullable=False)
+    # Wide enough for a full asset identifier (e.g. a token contract address or
+    # a CAIP-19 asset id), not just a short ticker.
+    asset: Mapped[str] = mapped_column(String(128), nullable=False)
     network: Mapped[str] = mapped_column(String(64), nullable=False)
     # "pending" while the facilitator call is in flight; "settled" once funds
     # are captured. A pending row that never settles is released (deleted).

@@ -70,16 +70,48 @@ def _meter(entry: ServiceEntry) -> None:
     Priced services require a valid ``X-PAYMENT`` header (bound to a ContextVar
     by the /mcp middleware) that is verified and settled before the tool runs;
     a missing/invalid payment surfaces as a structured ``McpError`` carrying the
-    x402 challenge. Free services stay on the daily quota. Skips silently when
-    no authenticated user is bound (CLI / stdio), which is never paywalled.
-    """
-    if entry.price is None:
-        _check_quota()
-        return
+    x402 challenge. When the paywall is inactive (x402 disabled) a priced
+    service still falls back to the daily quota, so it is never unlimited. Free
+    services stay on the daily quota. Skips silently when no authenticated user
+    is bound (CLI / stdio), which is never paywalled.
 
+    Synchronous: headless tools call it directly; the async enhanced path must
+    offload it to a thread (see ``_meter_async``) so the facilitator round-trip
+    never blocks the shared event loop.
+    """
     user = current_user()
     if user is None:
         return
+
+    charged = False
+    if entry.price is not None:
+        charged = _enforce_paywall(entry, user)
+    if not charged:
+        _check_quota()
+
+
+async def _meter_async(entry: ServiceEntry) -> None:
+    """Run :func:`_meter` off the event loop for the async (enhanced) path.
+
+    ``_meter`` does blocking DB and (for priced tools) blocking facilitator I/O
+    via a thread bridge; calling it directly inside an async ``tool_fn`` would
+    block the loop for every other /mcp and HTTP request. ``anyio`` copies the
+    current context so ``current_user``/``current_payment_header`` still resolve.
+    """
+    from anyio.to_thread import run_sync  # noqa: PLC0415
+
+    await run_sync(_meter, entry)
+
+
+def _enforce_paywall(entry: ServiceEntry, user) -> bool:
+    """Enforce the x402 paywall for a priced tool; translate to ``McpError``.
+
+    Returns ``enforce_payment``'s ``charged`` flag (False when x402 is disabled,
+    so the caller falls back to quota).
+    """
+    price = entry.price
+    if price is None:
+        return False
 
     # Circular import: api_server.* loads only at call time (see _check_quota).
     from fastapi import HTTPException  # noqa: PLC0415
@@ -93,12 +125,13 @@ def _meter(entry: ServiceEntry) -> None:
     from src.payments.request_context import current_payment_header  # noqa: PLC0415
 
     try:
-        enforce_payment(
+        return enforce_payment(
             user_id=user.user_id,
             route=entry.name,
-            price=entry.price,
+            price=price,
             asset=entry.asset,
             payment_header=current_payment_header(),
+            mutating=entry.mutating,
         )
     except PaymentRequiredError as exc:
         # -32402: an app-defined analogue of HTTP 402 for the MCP transport. The
@@ -181,7 +214,7 @@ def _make_enhanced_tool(
             elif not kwargs.get("user_id"):
                 kwargs.setdefault("user_id", "")
         input_obj = input_model(**kwargs)
-        _meter(entry)
+        await _meter_async(entry)
         tool = EnhancedTool(ctx=ctx, input=input_obj, service_fn=func)
         try:
             result = await enhancer_entry.fn(tool)

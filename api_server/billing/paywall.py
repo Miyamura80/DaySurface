@@ -25,7 +25,7 @@ import binascii
 import hashlib
 import json
 import threading
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException
 from loguru import logger as log
@@ -44,6 +44,10 @@ from src.payments.types import (
 _PROTOCOL = PaymentProtocolName.X402
 # x402 payload envelope version advertised in the 402 challenge.
 _X402_VERSION = 1
+# A pending settlement claim older than this is treated as stale (the worker
+# died between the facilitator call and the result commit) and released so a
+# retry can re-attempt, instead of wedging the payment at 409 forever.
+_PENDING_TIMEOUT = timedelta(minutes=5)
 
 
 class PaymentRequiredError(HTTPException):
@@ -141,23 +145,28 @@ def enforce_payment(
     price: str,
     asset: str,
     payment_header: str | None,
-) -> None:
+    mutating: bool = False,
+) -> bool:
     """Gate a priced service call behind a settled x402 payment.
 
-    Returns ``None`` when the call may proceed (payment settled, replayed, or
-    x402 disabled). Raises :class:`PaymentRequiredError` (402) when a payment is
-    required but absent, or ``HTTPException`` on an invalid/failed payment.
+    Returns ``True`` when a payment was actually enforced (settled now or a
+    valid replay), meaning the caller should skip the free daily quota. Returns
+    ``False`` when the paywall is inactive (x402 disabled) - the caller must
+    then apply ``ensure_daily_limit`` so a priced service is not unlimited on a
+    deployment without x402. Raises :class:`PaymentRequiredError` (402) when a
+    payment is required but absent, or ``HTTPException`` on an
+    invalid/failed/duplicate payment.
     """
     registry = PaymentRegistry.get()
     registry.initialize()
     proto = registry.get_protocol(_PROTOCOL)
 
-    # x402 not enabled at all: the paywall feature is off, so a priced service
-    # runs free (quota still applies on the free path). Keeps the template
-    # usable with no wallet configured.
+    # x402 not enabled at all: the paywall feature is off, so this call is not
+    # charged. Return False so the caller falls back to the free daily quota -
+    # a priced service must not run unlimited just because x402 is disabled.
     if proto is None:
-        log.debug("Paywall inactive (x402 disabled); {} runs free", route)
-        return
+        log.debug("Paywall inactive (x402 disabled); {} runs on free quota", route)
+        return False
 
     # Enabled but not configured (missing operator wallet): a priced service
     # must not run for free on a payments deployment - fail closed.
@@ -170,14 +179,23 @@ def enforce_payment(
             },
         )
 
-    requirement = _run_async(
-        lambda: proto.build_payment_requirement(
-            amount=price,
-            asset=asset,
-            recipient="",
-            description=route,
+    try:
+        requirement = _run_async(
+            lambda: proto.build_payment_requirement(
+                amount=price,
+                asset=asset,
+                recipient="",
+                description=route,
+            )
         )
-    )
+    except ValueError as exc:
+        # Unsupported asset / bad requirement: a server-side misconfiguration,
+        # not a client error. Fail closed rather than advertise an unpayable
+        # challenge.
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "unsupported_asset", "message": str(exc)},
+        ) from exc
 
     if not payment_header:
         raise PaymentRequiredError(_build_challenge(requirement, route))
@@ -195,7 +213,9 @@ def enforce_payment(
         requirement=requirement,
         payload=payload,
         proto=proto,
+        mutating=mutating,
     )
+    return True
 
 
 def _settle_once(
@@ -208,6 +228,7 @@ def _settle_once(
     requirement: PaymentRequirement,
     payload: PaymentPayload,
     proto,
+    mutating: bool,
 ) -> None:
     """Claim, settle, and record a payment exactly once per payment hash."""
     with use_db_session() as session:
@@ -229,7 +250,15 @@ def _settle_once(
             session.commit()
         except IntegrityError:
             session.rollback()
-            _resolve_existing(session, payment_hash)
+            _resolve_existing(
+                session,
+                payment_hash,
+                user_id=user_id,
+                route=route,
+                price=price,
+                asset=asset,
+                mutating=mutating,
+            )
             return
 
         # We hold the claim: settle exactly once through the facilitator.
@@ -280,14 +309,90 @@ def _settle_once(
     )
 
 
-def _resolve_existing(session, payment_hash: str) -> None:
-    """Handle a duplicate payment claim: replay if settled, else conflict."""
+def _resolve_existing(
+    session,
+    payment_hash: str,
+    *,
+    user_id: str,
+    route: str,
+    price: str,
+    asset: str,
+    mutating: bool,
+) -> None:
+    """Handle a duplicate payment claim: replay if settled, else conflict.
+
+    The payment hash is derived from the client-supplied ``X-PAYMENT`` payload
+    alone, so a settled row is only a legitimate replay when it was settled for
+    *this same* request identity. Reusing one settled payment on a different
+    route, amount, asset, or user is an underpayment/authorization gap and is
+    rejected. A settled payment is also never replayed into a *mutating*
+    service, which would duplicate side effects (the MCP path has no
+    Idempotency-Key to dedupe on).
+    """
     existing = session.get(PaymentSettlement, payment_hash)
-    if existing is not None and existing.status == "settled":
-        # Same single-use payment already paid for this call: allow the replay
-        # through without re-charging (mirrors idempotent retries).
+    if existing is None:
+        # The competing transaction rolled back between our failed INSERT and
+        # this read. Treat as a transient conflict; the caller can retry.
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "settlement_conflict",
+                "message": "payment claim conflict; please retry the request",
+            },
+        )
+
+    if existing.status == "settled":
+        same_request = (
+            existing.user_id == user_id
+            and existing.route == route
+            and existing.amount == price
+            and existing.asset == asset
+        )
+        if not same_request:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "payment_conflict",
+                    "message": "this payment was already settled for a "
+                    "different request and cannot be reused",
+                },
+            )
+        if mutating:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "payment_replayed",
+                    "message": "this payment was already used; a mutating "
+                    "operation will not be re-executed",
+                },
+            )
+        # Legitimate idempotent replay of a non-mutating priced call.
         log.debug("x402 payment replay for already-settled hash {}", payment_hash)
         return
+
+    # status == "pending": either genuinely in flight, or a stale claim left by
+    # a worker that died between the facilitator call and the result commit.
+    created = existing.created_at
+    if created is not None:
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=UTC)
+        if datetime.now(UTC) - created > _PENDING_TIMEOUT:
+            log.warning(
+                "Releasing stale pending settlement claim {} (age > {})",
+                payment_hash,
+                _PENDING_TIMEOUT,
+            )
+            session.delete(existing)
+            session.commit()
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "settlement_stale",
+                    "message": "a stale settlement claim was released; "
+                    "please retry the request",
+                },
+            )
+
     raise HTTPException(
         status_code=409,
         detail={

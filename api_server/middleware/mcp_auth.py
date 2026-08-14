@@ -74,7 +74,9 @@ class MCPAuthMiddleware:
 def _payment_header_value(scope: Scope) -> str | None:
     """Return the ``X-PAYMENT`` header from the ASGI scope, if present."""
     for key, value in scope["headers"]:
-        if key == b"x-payment":
+        # ASGI lowercases header names, but normalize defensively (as
+        # `_authenticate` does) so a non-conforming server can't drop payments.
+        if key.lower() == b"x-payment":
             return value.decode("latin-1")
     return None
 
