@@ -68,6 +68,13 @@ def _validate_price(name: str, price: str) -> None:
         raise ValueError(
             f"@service({name!r}) price must be a decimal string, got {price!r}"
         ) from exc
+    # Decimal accepts "NaN"/"Infinity" without raising; reject them before the
+    # comparison below (NaN <= 0 itself raises InvalidOperation) so a priced
+    # service can never advertise a non-finite x402 amount.
+    if not value.is_finite():
+        raise ValueError(
+            f"@service({name!r}) price must be a finite amount, got {price!r}"
+        )
     if value <= 0:
         raise ValueError(
             f"@service({name!r}) price must be a positive amount, got {price!r}"

@@ -164,7 +164,9 @@ class TestPaywallDecorator(TestTemplate):
         finally:
             del services_pkg._registry[before:]
 
-    @pytest.mark.parametrize("bad_price", ["0", "-1", "", "abc", "1.2.3"])
+    @pytest.mark.parametrize(
+        "bad_price", ["0", "-1", "", "abc", "1.2.3", "NaN", "Infinity", "-Infinity"]
+    )
     def test_invalid_price_rejected_at_registration(self, bad_price):
         with pytest.raises(ValueError):
 

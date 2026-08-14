@@ -46,8 +46,10 @@ _PROTOCOL = PaymentProtocolName.X402
 _X402_VERSION = 1
 # A pending settlement claim older than this is treated as stale (the worker
 # died between the facilitator call and the result commit) and released so a
-# retry can re-attempt, instead of wedging the payment at 409 forever.
-_PENDING_TIMEOUT = timedelta(minutes=5)
+# retry can re-attempt, instead of wedging the payment at 409 forever. It MUST
+# comfortably exceed the facilitator round-trip so a slow-but-alive settlement
+# is never mistaken for an orphaned claim and released out from under it.
+_PENDING_TIMEOUT = timedelta(hours=1)
 
 
 class PaymentRequiredError(HTTPException):
@@ -265,17 +267,47 @@ def _settle_once(
         result = _run_async(lambda: proto.settle_payment(payload, requirement))
 
         if result.status == PaymentStatus.COMPLETED:
-            session.query(PaymentSettlement).filter_by(
-                payment_hash=payment_hash
-            ).update(
-                {
-                    "status": "settled",
-                    "transaction_id": result.transaction_id,
-                    "payer": raw_get(result.raw_response, "payer"),
-                    "raw_response": result.raw_response,
-                    "settled_at": datetime.now(UTC),
-                }
+            now = datetime.now(UTC)
+            updated = (
+                session.query(PaymentSettlement)
+                .filter_by(payment_hash=payment_hash)
+                .update(
+                    {
+                        "status": "settled",
+                        "transaction_id": result.transaction_id,
+                        "payer": raw_get(result.raw_response, "payer"),
+                        "raw_response": result.raw_response,
+                        "settled_at": now,
+                    }
+                )
             )
+            if updated == 0:
+                # Our claim row vanished while we settled (e.g. a stale-claim
+                # sweep released it). The payment DID settle on-chain, so we must
+                # not lose the record - re-insert it as settled so replays are
+                # bound correctly and reconciliation can see it.
+                log.error(
+                    "x402 settlement claim {} vanished before recording; "
+                    "re-inserting settled row (tx={})",
+                    payment_hash,
+                    result.transaction_id,
+                )
+                session.add(
+                    PaymentSettlement(
+                        payment_hash=payment_hash,
+                        user_id=user_id,
+                        route=route,
+                        protocol=_PROTOCOL,
+                        amount=price,
+                        asset=asset,
+                        network=requirement.network,
+                        status="settled",
+                        transaction_id=result.transaction_id,
+                        payer=raw_get(result.raw_response, "payer"),
+                        raw_response=result.raw_response,
+                        settled_at=now,
+                    )
+                )
             session.commit()
             log.info(
                 "x402 payment settled: route={} tx={} amount={} {}",
@@ -372,26 +404,35 @@ def _resolve_existing(
 
     # status == "pending": either genuinely in flight, or a stale claim left by
     # a worker that died between the facilitator call and the result commit.
-    created = existing.created_at
-    if created is not None:
-        if created.tzinfo is None:
-            created = created.replace(tzinfo=UTC)
-        if datetime.now(UTC) - created > _PENDING_TIMEOUT:
-            log.warning(
-                "Releasing stale pending settlement claim {} (age > {})",
-                payment_hash,
-                _PENDING_TIMEOUT,
-            )
-            session.delete(existing)
-            session.commit()
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "code": "settlement_stale",
-                    "message": "a stale settlement claim was released; "
-                    "please retry the request",
-                },
-            )
+    # Release only via an atomic conditional delete keyed on (still pending AND
+    # older than the timeout). Because the timeout comfortably exceeds any
+    # facilitator round-trip, a slow-but-alive settlement is never old enough to
+    # match, so this cannot delete a live claim out from under another request.
+    cutoff = datetime.now(UTC) - _PENDING_TIMEOUT
+    released = (
+        session.query(PaymentSettlement)
+        .filter(
+            PaymentSettlement.payment_hash == payment_hash,
+            PaymentSettlement.status == "pending",
+            PaymentSettlement.created_at < cutoff,
+        )
+        .delete()
+    )
+    session.commit()
+    if released:
+        log.warning(
+            "Released stale pending settlement claim {} (older than {})",
+            payment_hash,
+            _PENDING_TIMEOUT,
+        )
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "settlement_stale",
+                "message": "a stale settlement claim was released; "
+                "please retry the request",
+            },
+        )
 
     raise HTTPException(
         status_code=409,
