@@ -204,9 +204,11 @@ def build_mcp_server() -> FastMCP:
 def llm_tool_surface() -> list[ServiceEntry]:
     """Service entries this server exposes to the LLM as MCP tools.
 
-    The registry minus the CLI-only defaults that ``build_mcp_server`` skips.
-    App-only tools (registered directly via ``@mcp.tool`` and hidden from the
-    LLM) are not in the service registry, so they are excluded automatically.
+    The registry minus ``_NOT_ON_DEFAULT_LLM_SURFACE`` - the admin/CLI-only
+    defaults plus the prompt-injection-sensitive webhook mutations - i.e. exactly
+    the set ``build_mcp_server`` skips. App-only tools (registered directly via
+    ``@mcp.tool`` and hidden from the LLM) are not in the service registry, so
+    they are excluded automatically.
 
     This is the LLM-facing tool surface advertised pre-connection in the
     SEP-2127 server card (``/.well-known/mcp/server-card.json``). Sorted by name
