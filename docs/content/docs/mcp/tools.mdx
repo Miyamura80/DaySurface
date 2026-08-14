@@ -1,9 +1,9 @@
 ---
 title: Tools
-description: The 34 Gmail, PDF, and webhook tools your assistant gets once connected
+description: The 31 Gmail, PDF, and webhook tools your assistant gets once connected
 ---
 
-Once connected, your assistant has 34 tools, all backed by the official Gmail
+Once connected, your assistant has 31 tools, all backed by the official Gmail
 API. Tools marked **UI** render an interactive MCP App in clients that support
 it (an inbox dashboard, a draft composer, a signing surface) and fall back to
 plain structured output everywhere else.
@@ -84,13 +84,16 @@ behalf.
 See [Gmail Webhook Setup](/docs/gmail-webhooks) for the event payloads and
 signature scheme.
 
+Creating, rotating, and removing webhook subscriptions is done by the user in
+the **Settings** app (open it with `webhook_settings`), not by the assistant on
+its own - so a message can never talk the assistant into pointing your mail at
+someone else's endpoint. Those actions remain available to programmatic clients
+over the HTTP API.
+
 | Tool | Description |
 |------|-------------|
 | `webhook_settings` **UI** | Open settings: Gmail connection status and webhook subscriptions. |
-| `webhook_subscribe` | Register an HTTPS endpoint to receive signed webhook events. |
 | `webhook_list` | List the caller's subscriptions. Secrets are never returned. |
-| `webhook_rotate_secret` | Issue a new signing secret, invalidating the old one. |
-| `webhook_unsubscribe` | Deactivate a subscription so it stops receiving events. |
 | `gmail_watch_start` | Subscribe the account's inbox to Gmail push notifications. |
 | `gmail_watch_stop` | Cancel the account's push-notification watch. |
 
