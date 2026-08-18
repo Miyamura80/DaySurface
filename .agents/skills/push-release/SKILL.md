@@ -86,7 +86,7 @@ git push origin main --follow-tags
 
 ## Version is single-sourced
 
-The version lives in **one place**: `pyproject.toml` -> `version = "x.y.z"`. All three interfaces read it at runtime via `importlib.metadata.version()`. Never hand-edit version strings in source files.
+The version is **authored in one place**: `pyproject.toml` -> `version = "x.y.z"`. All three interfaces read it at runtime via `importlib.metadata.version()`. The MCP Registry manifest `server.json` carries two copies of the same version (top-level and `packages[0]`); `make bump_version` rewrites both alongside `pyproject.toml`, so the registry publish that fires on the same tag never ships a stale version. Never hand-edit version strings in source files.
 
 ## PyPI trusted publishing (one-time setup)
 
