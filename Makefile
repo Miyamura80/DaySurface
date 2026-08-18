@@ -374,9 +374,10 @@ bump_version: check_jq ## Bump version (BUMP=patch|minor|major), commit, and tag
 	esac; \
 	new="$$major.$$minor.$$patch_v"; \
 	echo "$(YELLOW)Bumping version: $$current -> $$new$(RESET)"; \
+	{ jq --arg v "$$new" '.version = $$v | .packages[0].version = $$v' server.json > server.json.tmp && \
+		mv server.json.tmp server.json; } || \
+		{ rm -f server.json.tmp; echo "$(RED)server.json update failed; nothing was changed.$(RESET)"; exit 1; }; \
 	sed -i.bak "s/^version = \".*\"/version = \"$$new\"/" pyproject.toml && rm -f pyproject.toml.bak && \
-	jq --arg v "$$new" '.version = $$v | .packages[0].version = $$v' server.json > server.json.tmp && \
-	mv server.json.tmp server.json && \
 	git add pyproject.toml server.json && \
 	git commit -m "Release v$$new" && \
 	git tag -a "v$$new" -m "Release v$$new" && \
