@@ -50,19 +50,14 @@ _openapi_servers = (
     [{"url": global_config.API_PUBLIC_URL}] if global_config.API_PUBLIC_URL else None
 )
 
-# Document the versioning + deprecation contract in the spec itself so codegen
-# and agents discover it without reading prose docs. Endpoints are URL-versioned
-# under `/api/v1`; deprecated operations additionally emit RFC 9745
-# `Deprecation` and RFC 8594 `Sunset` response headers (see api_server/deprecation.py).
+# Document the versioning contract in the spec itself so codegen and agents
+# discover it without reading prose docs. Endpoints are URL-versioned under
+# `/api/v1`.
 _API_DESCRIPTION = (
     "One codebase exposed over CLI, MCP, and HTTP.\n\n"
     "**Versioning:** endpoints are URL-versioned under `/api/v1`. Breaking "
     "changes ship under a new path prefix; the prior version keeps serving "
     "until its sunset date.\n\n"
-    "**Deprecation policy:** a deprecated endpoint returns a `Deprecation` "
-    "header (RFC 9745), a `Sunset` header (RFC 8594) once a removal date is "
-    'set, and a `Link; rel="deprecation"` header pointing to the policy page. '
-    "See https://daysurface.com/docs/api/deprecation.\n\n"
     "**Pagination:** list endpoints are cursor-based. Follow `next_cursor` "
     "until `has_more` is false."
 )

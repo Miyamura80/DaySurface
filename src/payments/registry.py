@@ -80,10 +80,6 @@ class PaymentRegistry:
         """Return names of all registered protocols."""
         return list(self._protocols.keys())
 
-    def is_any_enabled(self) -> bool:
-        """Whether at least one protocol is registered."""
-        return len(self._protocols) > 0
-
     @classmethod
     def reset(cls) -> None:
         """Reset the singleton for testing."""

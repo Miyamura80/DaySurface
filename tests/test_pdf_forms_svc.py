@@ -13,6 +13,7 @@ import pytest
 from common import global_config
 from models.pdf_forms import (
     AddTextOp,
+    PdfDocStatus,
     PdfEditInput,
     SetFieldOp,
 )
@@ -226,7 +227,7 @@ class TestPdfEdit(PdfServiceTestBase):
     def test_edit_rejected_when_awaiting_signature(self):
         opened = self._open(make_acroform_pdf())
         repo.update_document(
-            opened.doc_id, "u1", new_status=repo.PDF_STATUS_AWAITING_SIGNATURE
+            opened.doc_id, "u1", new_status=PdfDocStatus.AWAITING_SIGNATURE
         )
         with pytest.raises(PdfDocumentLockedError):
             self._edit(opened.doc_id, [SetFieldOp(name="full_name", value="x")])
@@ -234,9 +235,9 @@ class TestPdfEdit(PdfServiceTestBase):
     def test_edit_rejected_when_signed(self):
         opened = self._open(make_acroform_pdf())
         repo.update_document(
-            opened.doc_id, "u1", new_status=repo.PDF_STATUS_AWAITING_SIGNATURE
+            opened.doc_id, "u1", new_status=PdfDocStatus.AWAITING_SIGNATURE
         )
-        repo.update_document(opened.doc_id, "u1", new_status=repo.PDF_STATUS_SIGNED)
+        repo.update_document(opened.doc_id, "u1", new_status=PdfDocStatus.SIGNED)
         with pytest.raises(PdfDocumentLockedError) as exc:
             self._edit(opened.doc_id, [SetFieldOp(name="full_name", value="x")])
         assert "immutable" in str(exc.value)

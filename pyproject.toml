@@ -163,26 +163,69 @@ exclude = [
     "node_modules/",
     "scripts/gen_brand_assets.py",
     ".agents/skills/goose-gui-e2e/scripts/",
+    # Test fixtures/helpers are reached via pytest collection, not imports.
     "tests/",
-    "utils/llm/",
-    "common/",
-    "src/utils/logging_config.py",
-    "src/utils/cli_help.py",
-    "src/utils/stdin.py",
-    "src/utils/context.py",
-    "src/utils/current_user.py",
-    "src/utils/interactive.py",
-    "src/utils/progress.py",
-    "src/utils/output.py",
-    "src/utils/errors.py",
-    "src/utils/theme.py",
-    "src/cli/",
-    "services/",
+    # Alembic reads revision/down_revision/upgrade/downgrade by convention.
+    "db/migrations/",
+    # Pydantic wire contracts + SQLAlchemy schema + pydantic-settings config:
+    # fields are written by validation/ORM and read generically (serialization,
+    # queries, YAML/env loading), so every field looks "unused" statically.
     "models/",
-    "mcp_server/",
-    "db/",
-    "api_server/",
-    "src/payments/",
+    "db/models/",
+    "common/",
+    # Written but never wired up in production; pending a wire-or-delete
+    # decision (only its own tests call setup_logging today). context.py's
+    # session_id contextvar exists solely to feed it.
+    "src/utils/logging_config.py",
+    "src/utils/context.py",
+]
+# Functions registered by these decorators are invoked by the framework, not
+# by name; vulture cannot see those calls.
+ignore_decorators = [
+    "@service",                                # services registry -> CLI/MCP/API
+    "@enhance",                                # mcp_server/enhancers registry
+    "@*.tool",                                 # FastMCP tool registration
+    "@*.resource",                             # FastMCP ui:// app resources
+    "@*.command",                              # Typer commands
+    "@*.callback",                             # Typer app callbacks
+    "@*.get",                                  # FastAPI/router routes...
+    "@*.post",
+    "@*.put",
+    "@*.delete",
+    "@*.api_route",
+    "@field_validator",                        # pydantic hooks
+    "@model_validator",
+    "@computed_field",
+]
+# Names used dynamically or belonging to structural contracts. Keep each entry
+# justified; an unexplained entry here is how dead code hides.
+ignore_names = [
+    "dispatch",             # BaseHTTPMiddleware override, called by Starlette
+    "main_cli",             # console-script entry point ([project.scripts])
+    "help",                 # app.info.help assignment, read by Typer
+    "model_config",         # pydantic model configuration attribute
+    "send_text",            # EnhancedTool API surface (mcp_server/enhancers/base.py)
+    "send_audio",           # EnhancedTool API surface
+    "Token",                # contextvars.Token used in string type annotations
+    "is_debug",             # verbosity accessor; --debug sets Verbosity.DEBUG
+    "__annotations__",      # _tool_factory rewrites wrapper metadata for FastMCP
+    "__signature__",        # _tool_factory rewrites wrapper metadata for FastMCP
+    "https_only",           # SessionCookiePolicy TypedDict contract (server.py)
+    "same_site",            # SessionCookiePolicy TypedDict contract
+    "allowed",              # LimitStatus dataclass contract (billing/limits.py)
+    "current_usage",        # LimitStatus dataclass contract
+    "_storage",             # rate_limit keeps the handle alongside _limiter
+    "_private_key",         # x402 signer credential, held for the facilitator
+    "_has_started",         # upstream StreamableHTTPSessionManager attr poke
+    "focused",              # _FocusedEmailResult wire field (app_tools)
+    "marked_read",          # Gmail *Result wire fields defined in services/
+    "archived",
+    "marked_done",
+    "unmarked_done",
+    "MPP",                  # payment-protocol enum members (wire values)
+    "ACP",
+    "PENDING",
+    "font_dict",            # pypdf visitor_text callback signature (positional)
 ]
 
 [tool.file_length]

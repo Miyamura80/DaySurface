@@ -2,12 +2,6 @@
 
 from contextvars import ContextVar
 from enum import StrEnum
-from functools import wraps
-from typing import Any
-
-from rich.console import Console
-
-console = Console(stderr=True)
 
 
 class Verbosity(StrEnum):
@@ -44,19 +38,3 @@ def is_debug() -> bool:
 
 def is_dry_run() -> bool:
     return dry_run.get()
-
-
-def dry_run_guard(description: str):
-    """Decorator that short-circuits a command when --dry-run is active."""
-
-    def decorator(func: Any):
-        @wraps(func)
-        def wrapper(*args: Any, **kwargs: Any):
-            if is_dry_run():
-                console.print(f"[yellow][DRY RUN][/yellow] Would {description}")
-                return None
-            return func(*args, **kwargs)
-
-        return wrapper
-
-    return decorator

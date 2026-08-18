@@ -33,8 +33,7 @@ class _ModelOutputPayload(BaseModel):
     )  # Corrected usage: List to list
     usage: _UsagePayload | None = None
 
-    class Config:
-        extra = "allow"  # Allow other fields in the dict not defined in model # noqa
+    model_config = {"extra": "allow"}  # Allow other fields not defined in model
 
 
 """

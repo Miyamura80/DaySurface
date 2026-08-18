@@ -80,7 +80,6 @@ class TestPaymentRegistry(TestTemplate):
         registry = PaymentRegistry.get()
         registry.initialize()
         assert registry.list_enabled() == []
-        assert registry.is_any_enabled() is False
 
     def test_reset_clears_singleton(self):
         r1 = PaymentRegistry.get()
@@ -108,7 +107,6 @@ class TestPaymentRegistry(TestTemplate):
         finally:
             object.__setattr__(global_config, "payments", original)
 
-        assert registry.is_any_enabled() is True
         assert "x402" in registry.list_enabled()
         proto = registry.get_protocol("x402")
         assert proto is not None

@@ -25,8 +25,6 @@ from models.pdf_forms import PdfDocStatus
 # Short aliases: the status type itself lives in models/pdf_forms.py so every
 # layer (models, services, app tools) shares one definition.
 PDF_STATUS_OPEN = PdfDocStatus.OPEN
-PDF_STATUS_AWAITING_SIGNATURE = PdfDocStatus.AWAITING_SIGNATURE
-PDF_STATUS_SIGNED = PdfDocStatus.SIGNED
 
 # The full state machine. ``awaiting_signature -> open`` is the user-cancel
 # path; ``signed`` is terminal (no re-sign, no revocation in v1).

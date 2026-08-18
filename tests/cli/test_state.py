@@ -4,7 +4,6 @@ from src.cli.state import (
     OutputFormat,
     Verbosity,
     dry_run,
-    dry_run_guard,
     is_debug,
     is_dry_run,
     is_quiet,
@@ -66,28 +65,9 @@ class TestDryRun(TestTemplate):
         finally:
             dry_run.reset(token)
 
-    def test_dry_run_guard_skips_when_active(self):
+    def test_set_and_read(self):
         token = dry_run.set(True)
         try:
-            called = False
-
-            @dry_run_guard("do something")
-            def action():
-                nonlocal called
-                called = True
-
-            action()
-            assert not called
+            assert is_dry_run()
         finally:
             dry_run.reset(token)
-
-    def test_dry_run_guard_runs_when_inactive(self):
-        called = False
-
-        @dry_run_guard("do something")
-        def action():
-            nonlocal called
-            called = True
-
-        action()
-        assert called

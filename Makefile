@@ -222,7 +222,6 @@ install_tools: check_uv ## Install linting/formatting tools
 	@uv tool install ruff --force
 	@uv tool install import-linter --force
 	@uv tool install ty --force
-	@uv tool install vulture --force
 	@echo "$(GREEN)✅Tools installed.$(RESET)"
 
 fmt: install_tools check_jq ## Format code with ruff and jq
@@ -260,9 +259,9 @@ duplicate_code: check_uv ## Detect duplicate code blocks
 	@uv run python -m pylint --disable=all --enable=R0801 src common utils
 	@echo "$(GREEN)✅Duplicate code check completed.$(RESET)"
 
-vulture: install_tools ## Find dead code with vulture
+vulture: check_uv ## Find dead code with vulture
 	@echo "$(YELLOW)🔍Running Vulture...$(RESET)"
-	@uv tool run vulture .
+	@uv run vulture .
 	@echo "$(GREEN)✅Vulture completed.$(RESET)"
 
 import_lint: install_tools ## Enforce module boundaries with import-linter

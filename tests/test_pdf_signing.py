@@ -10,7 +10,7 @@ import io
 import pytest
 from pydantic import ValidationError
 
-from models.pdf_forms import SignaturePlacement
+from models.pdf_forms import PdfDocStatus, SignaturePlacement
 from services import pdf_documents_repo as repo
 from services import pdf_signing
 from services.pdf_forms_svc import PdfSignatureRequestError
@@ -43,7 +43,7 @@ class TestPdfRequestSignature(PdfSigningTestBase):
         assert result.status == "awaiting_user_signature"
         assert "cannot sign" in result.guidance.lower() or "user" in result.guidance
         doc = repo.load_document(opened.doc_id, "u1")
-        assert doc.status == repo.PDF_STATUS_AWAITING_SIGNATURE
+        assert doc.status == PdfDocStatus.AWAITING_SIGNATURE
         assert (doc.placement or {}).get("field_name") == "signature"
         assert (doc.audit or [])[-1]["event"] == "signature_requested"
 
@@ -107,7 +107,7 @@ class TestPerformSigning(PdfSigningTestBase):
     def test_full_ceremony_produces_valid_seal(self):
         doc_id = self._open_awaiting()
         doc, audit = self._sign(doc_id)
-        assert doc.status == repo.PDF_STATUS_SIGNED
+        assert doc.status == PdfDocStatus.SIGNED
         # Visible stamp + printed metadata are in the (uncompressed) bytes.
         assert b"Eito Miyamura" in doc.current_bytes
         assert b"Signed by Eito Miyamura" in doc.current_bytes
@@ -158,8 +158,7 @@ class TestPerformSigning(PdfSigningTestBase):
             self._sign(doc_id, typed_name="   ")
         # Failed attempt must not consume the awaiting state.
         assert (
-            repo.load_document(doc_id, "u1").status
-            == repo.PDF_STATUS_AWAITING_SIGNATURE
+            repo.load_document(doc_id, "u1").status == PdfDocStatus.AWAITING_SIGNATURE
         )
 
     def test_missing_consent_rejected(self):
@@ -195,8 +194,7 @@ class TestPerformSigning(PdfSigningTestBase):
             self._sign(doc_id, typed_name="宮村英人")
         assert "cannot render" in str(exc.value)
         assert (
-            repo.load_document(doc_id, "u1").status
-            == repo.PDF_STATUS_AWAITING_SIGNATURE
+            repo.load_document(doc_id, "u1").status == PdfDocStatus.AWAITING_SIGNATURE
         )
 
     def test_signed_output_reports_seal_on_reinspection(self):
@@ -243,7 +241,7 @@ class TestPerformSigning(PdfSigningTestBase):
             channel="app",
             back_to_open=False,
         )
-        assert doc.status == repo.PDF_STATUS_AWAITING_SIGNATURE
+        assert doc.status == PdfDocStatus.AWAITING_SIGNATURE
         assert (doc.audit or [])[-1]["reason"] == "host_confirmation_declined"
 
     def test_dev_cert_is_cached(self):

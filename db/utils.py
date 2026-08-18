@@ -1,19 +1,9 @@
 """Database helper utilities."""
 
-import uuid
-
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from db.models.profiles import Profile
-
-
-def user_uuid_from_str(value: str) -> uuid.UUID:
-    """Parse *value* as a UUID; fall back to a deterministic uuid5."""
-    try:
-        return uuid.UUID(value)
-    except ValueError:
-        return uuid.uuid5(uuid.NAMESPACE_URL, value)
 
 
 def ensure_profile_exists(

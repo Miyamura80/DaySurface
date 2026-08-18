@@ -17,6 +17,7 @@ from mcp_server.enhancers.pdf_forms import (
 from models.pdf_forms import (
     GmailDraftDestination,
     PdfDelivery,
+    PdfDocStatus,
     PdfExportedAttachment,
     PdfExportInput,
     PdfRequestSignatureInput,
@@ -77,7 +78,7 @@ class TestPdfSignerAppTools(PdfSigningTestBase):
         assert result.status == "signed"
         assert result.signed_by == "Eito Miyamura"
         doc = repo.load_document(doc_id, "u1")
-        assert doc.status == repo.PDF_STATUS_SIGNED
+        assert doc.status == PdfDocStatus.SIGNED
         assert (doc.audit or [])[-1]["confirmed_via_elicitation"] is True
         # The elicitation message names the document and the typed name.
         message = ctx.elicit.await_args.kwargs["message"]
@@ -98,7 +99,7 @@ class TestPdfSignerAppTools(PdfSigningTestBase):
         )
         assert result.status == "declined"
         doc = repo.load_document(doc_id, "u1")
-        assert doc.status == repo.PDF_STATUS_AWAITING_SIGNATURE
+        assert doc.status == PdfDocStatus.AWAITING_SIGNATURE
         assert (doc.audit or [])[-1]["event"] == "sign_aborted"
 
     def test_sign_without_elicitation_capability_still_signs(self):
@@ -196,7 +197,7 @@ class TestElicitationFallback(PdfSigningTestBase):
         result, _ = self._run_enhancer(opened.doc_id, ctx)
         assert result.status == "signed"
         doc = repo.load_document(opened.doc_id, "u1")
-        assert doc.status == repo.PDF_STATUS_SIGNED
+        assert doc.status == PdfDocStatus.SIGNED
         last = (doc.audit or [])[-1]
         assert last["channel"] == "elicitation"
         assert last["typed_name"] == "Eito Miyamura"

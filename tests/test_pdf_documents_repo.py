@@ -11,6 +11,7 @@ import pytest
 
 from common import global_config
 from db.models.pdf_documents import PdfDocument
+from models.pdf_forms import PdfDocStatus
 from services import pdf_documents_repo as repo
 from tests.pdf_harness import SqlitePdfRepoTestBase
 from tests.test_template import TestTemplate
@@ -106,16 +107,16 @@ class TestPdfDocumentsRepo(SqlitePdfRepoTestBase):
     def test_full_signing_lifecycle(self):
         doc = self._create()
         doc = repo.update_document(
-            doc.doc_id, "u1", new_status=repo.PDF_STATUS_AWAITING_SIGNATURE
+            doc.doc_id, "u1", new_status=PdfDocStatus.AWAITING_SIGNATURE
         )
-        assert doc.status == repo.PDF_STATUS_AWAITING_SIGNATURE
-        doc = repo.update_document(doc.doc_id, "u1", new_status=repo.PDF_STATUS_SIGNED)
-        assert doc.status == repo.PDF_STATUS_SIGNED
+        assert doc.status == PdfDocStatus.AWAITING_SIGNATURE
+        doc = repo.update_document(doc.doc_id, "u1", new_status=PdfDocStatus.SIGNED)
+        assert doc.status == PdfDocStatus.SIGNED
 
     def test_user_cancel_returns_to_open(self):
         doc = self._create()
         repo.update_document(
-            doc.doc_id, "u1", new_status=repo.PDF_STATUS_AWAITING_SIGNATURE
+            doc.doc_id, "u1", new_status=PdfDocStatus.AWAITING_SIGNATURE
         )
         doc = repo.update_document(doc.doc_id, "u1", new_status=repo.PDF_STATUS_OPEN)
         assert doc.status == repo.PDF_STATUS_OPEN
@@ -123,15 +124,15 @@ class TestPdfDocumentsRepo(SqlitePdfRepoTestBase):
     def test_open_to_signed_is_invalid(self):
         doc = self._create()
         with pytest.raises(repo.PdfInvalidTransitionError):
-            repo.update_document(doc.doc_id, "u1", new_status=repo.PDF_STATUS_SIGNED)
+            repo.update_document(doc.doc_id, "u1", new_status=PdfDocStatus.SIGNED)
 
     def test_signed_is_terminal(self):
         doc = self._create()
         repo.update_document(
-            doc.doc_id, "u1", new_status=repo.PDF_STATUS_AWAITING_SIGNATURE
+            doc.doc_id, "u1", new_status=PdfDocStatus.AWAITING_SIGNATURE
         )
-        repo.update_document(doc.doc_id, "u1", new_status=repo.PDF_STATUS_SIGNED)
-        for target in (repo.PDF_STATUS_OPEN, repo.PDF_STATUS_AWAITING_SIGNATURE):
+        repo.update_document(doc.doc_id, "u1", new_status=PdfDocStatus.SIGNED)
+        for target in (repo.PDF_STATUS_OPEN, PdfDocStatus.AWAITING_SIGNATURE):
             with pytest.raises(repo.PdfInvalidTransitionError):
                 repo.update_document(doc.doc_id, "u1", new_status=target)
 
@@ -142,7 +143,7 @@ class TestPdfDocumentsRepo(SqlitePdfRepoTestBase):
                 doc.doc_id,
                 "u1",
                 data=b"%PDF-1.7 should-not-persist",
-                new_status=repo.PDF_STATUS_SIGNED,
+                new_status=PdfDocStatus.SIGNED,
             )
         loaded = repo.load_document(doc.doc_id, "u1")
         assert loaded.current_bytes == _PDF
