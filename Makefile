@@ -375,11 +375,14 @@ bump_version: check_jq ## Bump version (BUMP=patch|minor|major), commit, and tag
 	new="$$major.$$minor.$$patch_v"; \
 	echo "$(YELLOW)Bumping version: $$current -> $$new$(RESET)"; \
 	{ jq --arg v "$$new" '.version = $$v | .packages[0].version = $$v' server.json > server.json.tmp && \
-		mv server.json.tmp server.json; } || \
-		{ rm -f server.json.tmp; echo "$(RED)server.json update failed; nothing was changed.$(RESET)"; exit 1; }; \
-	sed -i.bak "s/^version = \".*\"/version = \"$$new\"/" pyproject.toml && rm -f pyproject.toml.bak && \
+		mv server.json.tmp server.json && \
+		sed -i.bak "s/^version = \".*\"/version = \"$$new\"/" pyproject.toml && rm -f pyproject.toml.bak; } || \
+		{ rm -f server.json.tmp pyproject.toml.bak; git checkout -- server.json pyproject.toml; \
+		echo "$(RED)Version bump failed; changes rolled back.$(RESET)"; exit 1; }; \
 	git add pyproject.toml server.json && \
-	git commit -m "Release v$$new" && \
+	{ git commit -m "Release v$$new" || \
+		{ git reset -q -- pyproject.toml server.json; git checkout -- server.json pyproject.toml; \
+		echo "$(RED)Release commit failed (pre-commit hook?); version files rolled back - rerun after fixing.$(RESET)"; exit 1; }; } && \
 	git tag -a "v$$new" -m "Release v$$new" && \
 	echo "$(GREEN)Tagged v$$new. Push with: git push origin main --follow-tags$(RESET)"
 
