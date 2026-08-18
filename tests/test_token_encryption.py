@@ -1,5 +1,8 @@
 """Tests for the ``common.token_encryption`` module."""
 
+import subprocess
+import sys
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -13,6 +16,8 @@ from common.token_encryption import (
     require_encryption,
 )
 from tests.test_template import TestTemplate
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 class TestFernetEncryption(TestTemplate):
@@ -86,3 +91,48 @@ class TestRequireEncryption(TestTemplate):
         with patch.object(token_encryption.global_config, "GOOGLE_TOKEN_ENC_KEY", key):
             enc = require_encryption()
         assert isinstance(enc, FernetEncryption)
+
+
+class TestTokenEncKeyValidation(TestTemplate):
+    """The config validator must reject a malformed GOOGLE_TOKEN_ENC_KEY at boot.
+
+    Regression for the ``.env.example`` inline-comment leak: an empty value with
+    a same-line ``# comment`` was parsed by python-dotenv as the value itself, so
+    ``GOOGLE_TOKEN_ENC_KEY`` became a comment string that was truthy but not a
+    valid Fernet key - deferring a confusing ``ValueError`` deep inside a later
+    encrypt call. Env vars are the highest-priority settings source, so a
+    subprocess exercises the real config-load path.
+    """
+
+    def _load_config(self, key: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "from common import global_config; "
+                "print(repr(global_config.GOOGLE_TOKEN_ENC_KEY))",
+            ],
+            capture_output=True,
+            text=True,
+            cwd=REPO_ROOT,
+            env={"PATH": "/usr/bin:/bin", "GOOGLE_TOKEN_ENC_KEY": key},
+            check=False,
+        )
+
+    def test_garbage_key_fails_loudly_at_boot(self):
+        result = self._load_config(
+            "# Fernet key (url-safe base64, 32 bytes) for refresh-token encryption"
+        )
+        assert result.returncode != 0, result.stdout
+        assert "GOOGLE_TOKEN_ENC_KEY must be a valid Fernet key" in result.stderr
+
+    def test_blank_key_normalizes_to_none(self):
+        result = self._load_config("   ")
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.strip() == "None", result.stdout
+
+    def test_valid_key_loads(self):
+        key = Fernet.generate_key().decode()
+        result = self._load_config(key)
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.strip() == repr(key), result.stdout
