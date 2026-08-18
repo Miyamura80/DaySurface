@@ -6,7 +6,6 @@ scope mapping), the RFC 9728 Protected Resource Metadata endpoints, the
 ``initialize`` with an OAuth Bearer token.
 """
 
-import json
 import time
 from unittest.mock import patch
 
@@ -23,6 +22,7 @@ from api_server.auth.authkit_auth import (
 )
 from api_server.routes import well_known
 from api_server.server import app
+from tests._harness import read_sse_first_message
 from tests.test_template import TestTemplate
 
 AUTHKIT_DOMAIN = "https://test-env.authkit.app"
@@ -50,16 +50,6 @@ def _patch_jwks(mock_jwks, public_key) -> None:
         key = public_key
 
     mock_jwks.return_value.get_signing_key_from_jwt.return_value = FakeSigningKey()
-
-
-def _read_sse_first_message(response) -> dict:
-    """Parse the first ``data:`` line from an MCP SSE response."""
-    for line in response.iter_lines():
-        if isinstance(line, bytes):
-            line = line.decode()
-        if line.startswith("data:"):
-            return json.loads(line.removeprefix("data:").strip())
-    raise AssertionError("no SSE data frame in response")
 
 
 class TestAuthKitTokenVerification(TestTemplate):
@@ -415,5 +405,5 @@ class TestMCPInitializeWithOAuthToken(TestTemplate):
                 },
             )
         assert resp.status_code == 200, resp.text
-        msg = _read_sse_first_message(resp)
+        msg = read_sse_first_message(resp)
         assert msg["result"]["serverInfo"]["name"] == "daysurface"

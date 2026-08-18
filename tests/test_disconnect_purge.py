@@ -9,22 +9,16 @@ same purge is covered in ``tests/test_inbox_curation.py``.
 
 from __future__ import annotations
 
-from contextlib import contextmanager
 from datetime import UTC, datetime
 from unittest.mock import patch
 from urllib.parse import parse_qs
 
 import httpx
 from loguru import logger as log
-from sqlalchemy import create_engine, event
+from sqlalchemy import event
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
-from common import token_encryption
-from common.token_encryption import PlaintextEncryption
 from db import engine as db_engine
-from db.base import Base
 from db.models.google_tokens import GoogleToken
 from db.models.webhooks import WebhookDelivery, WebhookEvent, WebhookSubscription
 from models.gmail import (
@@ -44,39 +38,8 @@ from services.webhooks_svc import (
     purge_user_events,
     webhook_subscribe,
 )
+from tests._harness import patch_db, plaintext_encryption
 from tests.test_template import TestTemplate
-
-
-@contextmanager
-def _patch_db():
-    """Wire an in-memory SQLite into db.engine for the duration of a test."""
-    orig_engine = db_engine._engine
-    orig_session = db_engine._SessionLocal
-    eng = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(eng)
-    session_factory = sessionmaker(bind=eng, autoflush=False, expire_on_commit=False)
-    db_engine._engine = eng
-    db_engine._SessionLocal = session_factory
-    try:
-        yield session_factory
-    finally:
-        db_engine._engine = orig_engine
-        db_engine._SessionLocal = orig_session
-
-
-@contextmanager
-def _plaintext_encryption():
-    """Force PlaintextEncryption everywhere so no Fernet key is needed."""
-    enc = PlaintextEncryption()
-    with (
-        patch("services.webhooks_svc.require_encryption", return_value=enc),
-        patch.object(token_encryption, "require_encryption", return_value=enc),
-    ):
-        yield
 
 
 class TestPurgeOnDisconnect(TestTemplate):
@@ -129,7 +92,7 @@ class TestPurgeOnDisconnect(TestTemplate):
         assert entry.mutating is True
 
     def test_purge_user_events_removes_events_and_deliveries(self):
-        with _patch_db(), _plaintext_encryption():
+        with patch_db(), plaintext_encryption():
             self._seed_user("u1")
             self._seed_user("u2")
 
@@ -151,7 +114,7 @@ class TestPurgeOnDisconnect(TestTemplate):
         # the emitted SQL must not carry one parameter per event.
         statements: list[tuple[str, int]] = []
 
-        with _patch_db(), _plaintext_encryption():
+        with patch_db(), plaintext_encryption():
             self._seed_user("busy")
             with db_engine.use_db_session() as session:
                 for i in range(9):  # 10 events total for this user
@@ -176,7 +139,7 @@ class TestPurgeOnDisconnect(TestTemplate):
         assert delivery_delete[1] == 1  # the user_id bind, nothing per-event
 
     def test_disconnect_purges_webhook_events_and_erases_token(self):
-        with _patch_db() as factory, _plaintext_encryption():
+        with patch_db() as factory, plaintext_encryption():
             self._seed_token(factory, "u1")
             self._seed_token(factory, "u2")
             self._seed_user("u1")
@@ -202,7 +165,7 @@ class TestPurgeOnDisconnect(TestTemplate):
         # a user can hold banked payloads behind an already-revoked row. A
         # second disconnect must still reach them: revoked=False (nothing live
         # to revoke) but the leftovers are gone.
-        with _patch_db() as factory, _plaintext_encryption():
+        with patch_db() as factory, plaintext_encryption():
             session = factory()
             session.add(
                 GoogleToken(
@@ -228,7 +191,7 @@ class TestPurgeOnDisconnect(TestTemplate):
     def test_erased_row_reads_as_disconnected_everywhere(self):
         # A NULL ciphertext is not a usable connection: status must not report
         # it as connected while the client would fail closed on it.
-        with _patch_db() as factory, _plaintext_encryption():
+        with patch_db() as factory, plaintext_encryption():
             self._seed_token(factory, "u1")
             with patch("services.gmail_svc.httpx.post"):
                 gmail_disconnect(GmailDisconnectInput(user_id="u1"))
@@ -241,7 +204,7 @@ class TestPurgeOnDisconnect(TestTemplate):
         # writable - disconnect sets both columns in one commit - but if one
         # ever appears, status must agree with the client and say "not
         # connected" rather than advertising a connection that cannot work.
-        with _patch_db() as factory, _plaintext_encryption():
+        with patch_db() as factory, plaintext_encryption():
             session = factory()
             session.add(
                 GoogleToken(
@@ -289,7 +252,7 @@ class TestPurgeOnDisconnect(TestTemplate):
         sink_id = log.add(lambda m: sink_lines.append(str(m)), level="DEBUG")
         try:
             with (
-                _plaintext_encryption(),
+                plaintext_encryption(),
                 patch("services.gmail_svc.httpx.post", side_effect=fake_post),
             ):
                 # Contract: best-effort, never raises even on a 400.
@@ -316,7 +279,7 @@ class TestPurgeOnDisconnect(TestTemplate):
     def test_disconnect_survives_webhook_purge_failure(self):
         # The token revoke is already committed before the purge runs, so a
         # purge DB error must not turn a successful disconnect into an error.
-        with _patch_db() as factory, _plaintext_encryption():
+        with patch_db() as factory, plaintext_encryption():
             self._seed_token(factory, "u1")
             self._seed_user("u1")
 

@@ -12,20 +12,15 @@ from __future__ import annotations
 import base64
 import json
 import time
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from datetime import UTC, datetime, timedelta
 from email import message_from_bytes
 from unittest.mock import MagicMock, patch
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from common import global_config
 from common.token_encryption import PlaintextEncryption
-from db import engine as db_engine
-from db.base import Base
 from db.models.google_tokens import GoogleToken
 from mcp_server.app_tools.gmail_composer import (
     _coerce_attachments,
@@ -82,31 +77,12 @@ from services.gmail_svc import (
     _get_gmail_client,
     _parse_message_resource,
 )
+from tests._harness import patch_db
 from tests.test_template import TestTemplate
 
 # ---------------------------------------------------------------------------
 # DB fixture (same pattern as tests/test_google_oauth.py)
 # ---------------------------------------------------------------------------
-
-
-@contextmanager
-def _patch_db():
-    orig_engine = db_engine._engine
-    orig_session = db_engine._SessionLocal
-    eng = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(eng)
-    session_factory = sessionmaker(bind=eng, autoflush=False, expire_on_commit=False)
-    db_engine._engine = eng
-    db_engine._SessionLocal = session_factory
-    try:
-        yield session_factory
-    finally:
-        db_engine._engine = orig_engine
-        db_engine._SessionLocal = orig_session
 
 
 @pytest.fixture(autouse=True)
@@ -373,13 +349,21 @@ def _patch_client(mock_svc: MagicMock):
     ]
 
 
-def _apply(patches):
-    return [p.start() for p in patches]
+@contextmanager
+def _gmail_env(user_id: str = "alice"):
+    """In-memory DB with a seeded token and the Gmail client patched to a mock.
 
-
-def _stop(patches):
-    for p in patches:
-        p.stop()
+    Yields the ``MagicMock`` Gmail service. It is the same object the patched
+    ``_get_gmail_client`` returns, so canned responses can be configured on it
+    inside the block, before (or even after) calling the service under test.
+    """
+    with patch_db() as factory:
+        _seed_token(factory, user_id)
+        mock = _make_mock_service()
+        with ExitStack() as stack:
+            for p in _patch_client(mock):
+                stack.enter_context(p)
+            yield mock
 
 
 class TestGmailListDrafts(TestTemplate):
@@ -424,22 +408,13 @@ class TestGmailListDrafts(TestTemplate):
                 for i, (_req, cb) in enumerate(self._queue):
                     cb(str(i), draft_payloads[i], None)
 
-        with _patch_db() as factory:
-            _seed_token(factory)
-            mock = _make_mock_service()
+        with _gmail_env() as mock:
             mock.users().drafts().list().execute.return_value = {
                 "drafts": [{"id": "d-1"}, {"id": "d-2"}],
             }
             mock.new_batch_http_request.return_value = FakeBatch()
 
-            patches = _patch_client(mock)
-            _apply(patches)
-            try:
-                result = gmail_list_drafts(
-                    GmailListDraftsInput(user_id="alice", limit=10)
-                )
-            finally:
-                _stop(patches)
+            result = gmail_list_drafts(GmailListDraftsInput(user_id="alice", limit=10))
 
         assert len(result.drafts) == 2
         assert result.drafts[0].draft_id == "d-1"
@@ -449,23 +424,14 @@ class TestGmailListDrafts(TestTemplate):
 
 class TestGmailGetDraft(TestTemplate):
     def test_happy_path(self):
-        with _patch_db() as factory:
-            _seed_token(factory)
-            mock = _make_mock_service()
+        with _gmail_env() as mock:
             mock.users().drafts().get().execute.return_value = _draft_resource(
                 draft_id="d-1",
                 to="alice@example.com",
                 subject="Hello",
                 body="The body",
             )
-            patches = _patch_client(mock)
-            _apply(patches)
-            try:
-                draft = gmail_get_draft(
-                    GmailGetDraftInput(user_id="alice", draft_id="d-1")
-                )
-            finally:
-                _stop(patches)
+            draft = gmail_get_draft(GmailGetDraftInput(user_id="alice", draft_id="d-1"))
 
         assert draft.draft_id == "d-1"
         assert draft.to == "alice@example.com"
@@ -488,9 +454,7 @@ class TestGmailUpdateDraft(TestTemplate):
             body="New body",
         )
 
-        with _patch_db() as factory:
-            _seed_token(factory)
-            mock = _make_mock_service()
+        with _gmail_env() as mock:
             # get() is called twice: the pre-read (current state) and the
             # post-update re-fetch (saved state the response echoes).
             mock.users().drafts().get().execute.side_effect = [
@@ -499,16 +463,9 @@ class TestGmailUpdateDraft(TestTemplate):
             ]
             mock.users().drafts().update().execute.return_value = updated_resource
 
-            patches = _patch_client(mock)
-            _apply(patches)
-            try:
-                draft = gmail_update_draft(
-                    GmailUpdateDraftInput(
-                        user_id="alice", draft_id="d-1", body="New body"
-                    )
-                )
-            finally:
-                _stop(patches)
+            draft = gmail_update_draft(
+                GmailUpdateDraftInput(user_id="alice", draft_id="d-1", body="New body")
+            )
 
         # Verify the update call carried over the preserved fields by decoding
         # the raw MIME passed to drafts().update(body=...).
@@ -533,9 +490,7 @@ class TestGmailUpdateDraft(TestTemplate):
 
 class TestGmailCompose(TestTemplate):
     def test_returns_populated_draft(self):
-        with _patch_db() as factory:
-            _seed_token(factory)
-            mock = _make_mock_service()
+        with _gmail_env() as mock:
             mock.users().drafts().create().execute.return_value = {"id": "d-new"}
             # compose re-fetches the saved state at format=full after create.
             mock.users().drafts().get().execute.return_value = _draft_resource(
@@ -544,19 +499,14 @@ class TestGmailCompose(TestTemplate):
                 subject="Subj",
                 body="Body!",
             )
-            patches = _patch_client(mock)
-            _apply(patches)
-            try:
-                draft = gmail_compose(
-                    GmailComposeInput(
-                        user_id="alice",
-                        to="alice@example.com",
-                        subject="Subj",
-                        body="Body!",
-                    )
+            draft = gmail_compose(
+                GmailComposeInput(
+                    user_id="alice",
+                    to="alice@example.com",
+                    subject="Subj",
+                    body="Body!",
                 )
-            finally:
-                _stop(patches)
+            )
 
         assert draft.draft_id == "d-new"
         assert draft.to == "alice@example.com"
@@ -566,22 +516,15 @@ class TestGmailCompose(TestTemplate):
 
 class TestGmailSend(TestTemplate):
     def test_happy_path(self):
-        with _patch_db() as factory:
-            _seed_token(factory)
-            mock = _make_mock_service()
+        with _gmail_env() as mock:
             mock.users().drafts().send().execute.return_value = {
                 "id": "msg-123",
                 "threadId": "thr-7",
                 "labelIds": ["SENT"],
             }
-            patches = _patch_client(mock)
-            _apply(patches)
-            try:
-                before = datetime.now(UTC)
-                result = gmail_send(GmailSendInput(user_id="alice", draft_id="d-1"))
-                after = datetime.now(UTC)
-            finally:
-                _stop(patches)
+            before = datetime.now(UTC)
+            result = gmail_send(GmailSendInput(user_id="alice", draft_id="d-1"))
+            after = datetime.now(UTC)
 
         assert result.message_id == "msg-123"
         assert result.thread_id == "thr-7"
@@ -590,18 +533,11 @@ class TestGmailSend(TestTemplate):
 
 class TestGmailDiscardDraft(TestTemplate):
     def test_happy_path(self):
-        with _patch_db() as factory:
-            _seed_token(factory)
-            mock = _make_mock_service()
+        with _gmail_env() as mock:
             mock.users().drafts().delete().execute.return_value = {}
-            patches = _patch_client(mock)
-            _apply(patches)
-            try:
-                result = gmail_discard_draft(
-                    GmailDiscardDraftInput(user_id="alice", draft_id="d-1")
-                )
-            finally:
-                _stop(patches)
+            result = gmail_discard_draft(
+                GmailDiscardDraftInput(user_id="alice", draft_id="d-1")
+            )
 
         assert result.discarded is True
 
@@ -645,24 +581,15 @@ class TestGmailListInbox(TestTemplate):
         def fake_batch_get_messages(svc, ids, **kwargs):
             return {mid: msg_payloads[mid] for mid in ids if mid in msg_payloads}
 
-        with _patch_db() as factory:
-            _seed_token(factory)
-            mock = _make_mock_service()
+        with _gmail_env() as mock:
             mock.users().messages().list().execute.return_value = {
                 "messages": [{"id": "m-1"}, {"id": "m-2"}],
             }
-            patches = _patch_client(mock)
-            _apply(patches)
             with patch(
                 "services.gmail_messages_svc._batch_get_messages",
                 side_effect=fake_batch_get_messages,
             ):
-                try:
-                    result = gmail_list_inbox(
-                        GmailListInboxInput(user_id="alice", limit=5)
-                    )
-                finally:
-                    _stop(patches)
+                result = gmail_list_inbox(GmailListInboxInput(user_id="alice", limit=5))
 
         assert len(result.messages) == 2
         assert result.messages[0].from_ == "sender1@example.com"
@@ -717,18 +644,11 @@ class TestGmailGetThread(TestTemplate):
             ],
         }
 
-        with _patch_db() as factory:
-            _seed_token(factory)
-            mock = _make_mock_service()
+        with _gmail_env() as mock:
             mock.users().threads().get().execute.return_value = thread_payload
-            patches = _patch_client(mock)
-            _apply(patches)
-            try:
-                thread = gmail_get_thread(
-                    GmailGetThreadInput(user_id="alice", thread_id="t-9")
-                )
-            finally:
-                _stop(patches)
+            thread = gmail_get_thread(
+                GmailGetThreadInput(user_id="alice", thread_id="t-9")
+            )
 
         assert thread.thread_id == "t-9"
         assert len(thread.messages) == 2
@@ -783,19 +703,12 @@ class TestGmailGetThread(TestTemplate):
     def _run_get_thread(
         self, thread_payload: dict, **kwargs
     ) -> tuple[GmailThread, MagicMock]:
-        with _patch_db() as factory:
-            _seed_token(factory)
-            mock = _make_mock_service()
+        with _gmail_env() as mock:
             mock.users().threads().get().execute.return_value = thread_payload
-            patches = _patch_client(mock)
-            _apply(patches)
-            try:
-                thread = gmail_get_thread(
-                    GmailGetThreadInput(user_id="alice", thread_id="t-x", **kwargs)
-                )
-                return thread, mock
-            finally:
-                _stop(patches)
+            thread = gmail_get_thread(
+                GmailGetThreadInput(user_id="alice", thread_id="t-x", **kwargs)
+            )
+            return thread, mock
 
     def test_attachment_data_omitted_by_default(self):
         thread, mock = self._run_get_thread(self._inline_image_thread())
@@ -902,20 +815,13 @@ class TestGmailGetThread(TestTemplate):
             draft_id="d-deep", thread_id="t-deep", body="draft reply"
         )
 
-        with _patch_db() as factory:
-            _seed_token(factory)
-            mock = _make_mock_service()
+        with _gmail_env() as mock:
             mock.users().threads().get().execute.return_value = thread_payload
             mock.users().drafts().list().execute.side_effect = [page1, page2]
             mock.users().drafts().get().execute.return_value = target_draft
-            patches = _patch_client(mock)
-            _apply(patches)
-            try:
-                thread = gmail_get_thread(
-                    GmailGetThreadInput(user_id="alice", thread_id="t-deep")
-                )
-            finally:
-                _stop(patches)
+            thread = gmail_get_thread(
+                GmailGetThreadInput(user_id="alice", thread_id="t-deep")
+            )
 
         assert thread.draft is not None
         assert thread.draft.draft_id == "d-deep"
@@ -980,22 +886,15 @@ class TestDraftThreadMapHelpers(TestTemplate):
 class TestGmailGetAttachment(TestTemplate):
     def test_returns_normalized_base64(self):
         raw = b"\xff\xfe\xfd\xfc\xfb"  # bytes whose b64 uses - and _ chars
-        with _patch_db() as factory:
-            _seed_token(factory)
-            mock = _make_mock_service()
+        with _gmail_env() as mock:
             mock.users().messages().attachments().get().execute.return_value = (
                 _gmail_attachment_blob(raw)
             )
-            patches = _patch_client(mock)
-            _apply(patches)
-            try:
-                result = gmail_get_attachment(
-                    GmailGetAttachmentInput(
-                        user_id="alice", message_id="m-1", attachment_id="att-1"
-                    )
+            result = gmail_get_attachment(
+                GmailGetAttachmentInput(
+                    user_id="alice", message_id="m-1", attachment_id="att-1"
                 )
-            finally:
-                _stop(patches)
+            )
 
         assert result.message_id == "m-1"
         assert result.attachment_id == "att-1"
@@ -1007,50 +906,36 @@ class TestGmailGetAttachment(TestTemplate):
         # A numeric *string* size (Gmail can return numbers as strings) must
         # still be coerced and caught by the cap, not silently bypass it.
         blob["size"] = "10000"  # bytes, over the patched cap below
-        with _patch_db() as factory:
-            _seed_token(factory)
-            mock = _make_mock_service()
+        with _gmail_env() as mock:
             mock.users().messages().attachments().get().execute.return_value = blob
-            patches = _patch_client(mock)
-            _apply(patches)
-            try:
-                with (
-                    patch.object(global_config.gmail, "max_attachment_bytes", 5),
-                    pytest.raises(
-                        GmailAttachmentTooLargeError, match="over the 5-byte limit"
-                    ),
-                ):
-                    gmail_get_attachment(
-                        GmailGetAttachmentInput(
-                            user_id="alice", message_id="m-1", attachment_id="att-1"
-                        )
+            with (
+                patch.object(global_config.gmail, "max_attachment_bytes", 5),
+                pytest.raises(
+                    GmailAttachmentTooLargeError, match="over the 5-byte limit"
+                ),
+            ):
+                gmail_get_attachment(
+                    GmailGetAttachmentInput(
+                        user_id="alice", message_id="m-1", attachment_id="att-1"
                     )
-            finally:
-                _stop(patches)
+                )
 
     def test_missing_size_estimated_from_payload_and_capped(self):
         # No 'size' metadata: the guard must estimate from the base64 payload
         # so a missing size can't bypass the cap.
         blob = _gmail_attachment_blob(b"PDFBYTESPDFBYTES")
         blob.pop("size", None)
-        with _patch_db() as factory:
-            _seed_token(factory)
-            mock = _make_mock_service()
+        with _gmail_env() as mock:
             mock.users().messages().attachments().get().execute.return_value = blob
-            patches = _patch_client(mock)
-            _apply(patches)
-            try:
-                with (
-                    patch.object(global_config.gmail, "max_attachment_bytes", 2),
-                    pytest.raises(GmailAttachmentTooLargeError),
-                ):
-                    gmail_get_attachment(
-                        GmailGetAttachmentInput(
-                            user_id="alice", message_id="m-1", attachment_id="att-1"
-                        )
+            with (
+                patch.object(global_config.gmail, "max_attachment_bytes", 2),
+                pytest.raises(GmailAttachmentTooLargeError),
+            ):
+                gmail_get_attachment(
+                    GmailGetAttachmentInput(
+                        user_id="alice", message_id="m-1", attachment_id="att-1"
                     )
-            finally:
-                _stop(patches)
+                )
 
 
 class TestGmailCurateInbox(TestTemplate):
@@ -1115,24 +1000,17 @@ class TestGmailCurateInbox(TestTemplate):
         def fake_batch_get_threads(svc, ids, **kwargs):
             return {tid: thread_map[tid] for tid in ids if tid in thread_map}
 
-        with _patch_db() as factory:
-            _seed_token(factory)
-            mock = _make_mock_service()
+        with _gmail_env() as mock:
             mock.users().threads().list().execute.return_value = {
                 "threads": [{"id": "tA"}, {"id": "tB"}, {"id": "tC"}],
             }
-            patches = _patch_client(mock)
-            _apply(patches)
             with patch(
                 "services.gmail_curate_svc._batch_get_threads",
                 side_effect=fake_batch_get_threads,
             ):
-                try:
-                    result = gmail_curate_inbox(
-                        GmailCurateInboxInput(user_id="alice", limit=10)
-                    )
-                finally:
-                    _stop(patches)
+                result = gmail_curate_inbox(
+                    GmailCurateInboxInput(user_id="alice", limit=10)
+                )
 
         ids = [t.thread_id for t in result.threads]
         assert ids == ["tA", "tB", "tC"]
@@ -1159,31 +1037,24 @@ class TestGmailCurateInbox(TestTemplate):
         def fake_batch_get_threads(svc, ids, **kwargs):
             return {"good": good_thread}
 
-        with _patch_db() as factory:
-            _seed_token(factory)
-            mock = _make_mock_service()
+        with _gmail_env() as mock:
             mock.users().threads().list().execute.return_value = {
                 "threads": [{"id": "good"}, {"id": "bad"}],
             }
-            patches = _patch_client(mock)
-            _apply(patches)
             with patch(
                 "services.gmail_curate_svc._batch_get_threads",
                 side_effect=fake_batch_get_threads,
             ):
-                try:
-                    result = gmail_curate_inbox(
-                        GmailCurateInboxInput(user_id="alice", limit=10)
-                    )
-                finally:
-                    _stop(patches)
+                result = gmail_curate_inbox(
+                    GmailCurateInboxInput(user_id="alice", limit=10)
+                )
 
         assert [t.thread_id for t in result.threads] == ["good"]
 
 
 class TestGmailNotConnected(TestTemplate):
     def test_raises_when_no_row(self):
-        with _patch_db(), pytest.raises(GmailNotConnectedError) as excinfo:
+        with patch_db(), pytest.raises(GmailNotConnectedError) as excinfo:
             _get_gmail_client("nonexistent-user")
         assert excinfo.value.user_id == "nonexistent-user"
 
@@ -1235,7 +1106,7 @@ class TestGmailClientCache(TestTemplate):
         live = MagicMock()
         gmail_svc._client_cache["alice"] = (time.time() + 60, live)
 
-        with _patch_db() as factory:
+        with patch_db() as factory:
             _seed_token(factory)
             assert _get_gmail_client("alice") is live
 
@@ -1249,7 +1120,7 @@ class TestGmailClientCache(TestTemplate):
             gmail_svc._client_cache[f"u-{i}"] = (now + 3600 + i, MagicMock())
 
         built = MagicMock()
-        with _patch_db() as factory:
+        with patch_db() as factory:
             _seed_token(factory)
             p1, p2, p3 = self._build_patches(built)
             with p1, p2, p3:
@@ -1265,7 +1136,7 @@ class TestGmailClientCache(TestTemplate):
         B's disconnect), then the next call in process A must raise
         ``GmailNotConnectedError`` instead of serving the stale authorized
         client for up to the 50-minute TTL."""
-        with _patch_db() as factory:
+        with patch_db() as factory:
             _seed_token(factory)
             stale = MagicMock()
             gmail_svc._client_cache["alice"] = (
@@ -1282,7 +1153,7 @@ class TestGmailClientCache(TestTemplate):
 
     def test_active_row_still_serves_cache_hit(self):
         """The per-call token-row check must not break the happy path."""
-        with _patch_db() as factory:
+        with patch_db() as factory:
             _seed_token(factory)
             live = MagicMock()
             gmail_svc._client_cache["alice"] = (
@@ -1295,10 +1166,7 @@ class TestGmailClientCache(TestTemplate):
 
 class TestDraftRoundTrip(TestTemplate):
     def test_compose_get_update_send_records_call_order(self):
-        with _patch_db() as factory:
-            _seed_token(factory)
-            mock = _make_mock_service()
-
+        with _gmail_env() as mock:
             # Gmail's create/update responses carry only a minimal message;
             # the services re-fetch at format=full, so get() is the source of
             # truth for the echoed state.
@@ -1315,32 +1183,27 @@ class TestDraftRoundTrip(TestTemplate):
                 "threadId": "t-1",
             }
 
-            patches = _patch_client(mock)
-            _apply(patches)
-            try:
-                composed = gmail_compose(
-                    GmailComposeInput(
-                        user_id="alice",
-                        to="alice@example.com",
-                        subject="S",
-                        body="B",
-                    )
+            composed = gmail_compose(
+                GmailComposeInput(
+                    user_id="alice",
+                    to="alice@example.com",
+                    subject="S",
+                    body="B",
                 )
-                fetched = gmail_get_draft(
-                    GmailGetDraftInput(user_id="alice", draft_id=composed.draft_id)
+            )
+            fetched = gmail_get_draft(
+                GmailGetDraftInput(user_id="alice", draft_id=composed.draft_id)
+            )
+            updated = gmail_update_draft(
+                GmailUpdateDraftInput(
+                    user_id="alice",
+                    draft_id=composed.draft_id,
+                    body="B-updated",
                 )
-                updated = gmail_update_draft(
-                    GmailUpdateDraftInput(
-                        user_id="alice",
-                        draft_id=composed.draft_id,
-                        body="B-updated",
-                    )
-                )
-                sent = gmail_send(
-                    GmailSendInput(user_id="alice", draft_id=composed.draft_id)
-                )
-            finally:
-                _stop(patches)
+            )
+            sent = gmail_send(
+                GmailSendInput(user_id="alice", draft_id=composed.draft_id)
+            )
 
         assert composed.draft_id == "d-new"
         assert fetched.draft_id == "d-new"
@@ -1355,18 +1218,11 @@ class TestDraftRoundTrip(TestTemplate):
 
 class TestGmailMarkThreadRead(TestTemplate):
     def test_calls_threads_modify_with_remove_unread_label(self):
-        with _patch_db() as factory:
-            _seed_token(factory)
-            mock = _make_mock_service()
+        with _gmail_env() as mock:
             mock.users().threads().modify().execute.return_value = {"id": "t-1"}
-            patches = _patch_client(mock)
-            _apply(patches)
-            try:
-                result = gmail_mark_thread_read(
-                    GmailThreadModifyInput(user_id="alice", thread_id="t-1")
-                )
-            finally:
-                _stop(patches)
+            result = gmail_mark_thread_read(
+                GmailThreadModifyInput(user_id="alice", thread_id="t-1")
+            )
 
         assert result.marked_read is True
         modify_calls = [
@@ -1380,18 +1236,11 @@ class TestGmailMarkThreadRead(TestTemplate):
 
 class TestGmailArchiveThread(TestTemplate):
     def test_calls_threads_modify_with_remove_inbox_label(self):
-        with _patch_db() as factory:
-            _seed_token(factory)
-            mock = _make_mock_service()
+        with _gmail_env() as mock:
             mock.users().threads().modify().execute.return_value = {"id": "t-2"}
-            patches = _patch_client(mock)
-            _apply(patches)
-            try:
-                result = gmail_archive_thread(
-                    GmailThreadModifyInput(user_id="alice", thread_id="t-2")
-                )
-            finally:
-                _stop(patches)
+            result = gmail_archive_thread(
+                GmailThreadModifyInput(user_id="alice", thread_id="t-2")
+            )
 
         assert result.archived is True
         modify_calls = [
@@ -1404,8 +1253,9 @@ class TestGmailArchiveThread(TestTemplate):
 
 
 class TestGmailReplyToThread(TestTemplate):
-    def _patch_reply(self, *, last_msg_headers: dict[str, str], created_draft: dict):
-        mock = _make_mock_service()
+    def _configure_reply(
+        self, mock, *, last_msg_headers: dict[str, str], created_draft: dict
+    ):
         thread_payload = {
             "id": "t-rep",
             "messages": [
@@ -1423,12 +1273,11 @@ class TestGmailReplyToThread(TestTemplate):
             "id": created_draft["id"]
         }
         mock.users().drafts().get().execute.return_value = created_draft
-        return mock
 
     def test_derives_to_and_subject_from_last_message(self):
-        with _patch_db() as factory:
-            _seed_token(factory)
-            mock = self._patch_reply(
+        with _gmail_env() as mock:
+            self._configure_reply(
+                mock,
                 last_msg_headers={
                     "From": "sender@example.com",
                     "Subject": "Original Subject",
@@ -1441,14 +1290,9 @@ class TestGmailReplyToThread(TestTemplate):
                     thread_id="t-rep",
                 ),
             )
-            patches = _patch_client(mock)
-            _apply(patches)
-            try:
-                draft = gmail_reply_to_thread(
-                    GmailReplyInput(user_id="alice", thread_id="t-rep")
-                )
-            finally:
-                _stop(patches)
+            draft = gmail_reply_to_thread(
+                GmailReplyInput(user_id="alice", thread_id="t-rep")
+            )
 
         assert draft.draft_id == "d-rep"
         # Verify the MIME built carried derived To/Subject + the threadId was
@@ -1465,9 +1309,9 @@ class TestGmailReplyToThread(TestTemplate):
         assert mime["Subject"] == "Re: Original Subject"
 
     def test_does_not_double_prefix_re_when_already_present(self):
-        with _patch_db() as factory:
-            _seed_token(factory)
-            mock = self._patch_reply(
+        with _gmail_env() as mock:
+            self._configure_reply(
+                mock,
                 last_msg_headers={
                     "From": "sender@example.com",
                     "Subject": "Re: already a reply",
@@ -1479,14 +1323,7 @@ class TestGmailReplyToThread(TestTemplate):
                     body="",
                 ),
             )
-            patches = _patch_client(mock)
-            _apply(patches)
-            try:
-                gmail_reply_to_thread(
-                    GmailReplyInput(user_id="alice", thread_id="t-rep")
-                )
-            finally:
-                _stop(patches)
+            gmail_reply_to_thread(GmailReplyInput(user_id="alice", thread_id="t-rep"))
 
         create_calls = [
             c for c in mock.users().drafts().create.call_args_list if c.kwargs
@@ -1496,26 +1333,20 @@ class TestGmailReplyToThread(TestTemplate):
         assert mime["Subject"] == "Re: already a reply"
 
     def test_raises_when_thread_has_no_messages(self):
-        with _patch_db() as factory:
-            _seed_token(factory)
-            mock = _make_mock_service()
+        with _gmail_env() as mock:
             mock.users().threads().get().execute.return_value = {
                 "id": "t-empty",
                 "messages": [],
             }
-            patches = _patch_client(mock)
-            _apply(patches)
-            try:
-                with pytest.raises(ValueError, match="no messages"):
-                    gmail_reply_to_thread(
-                        GmailReplyInput(user_id="alice", thread_id="t-empty")
-                    )
-            finally:
-                _stop(patches)
+            with pytest.raises(ValueError, match="no messages"):
+                gmail_reply_to_thread(
+                    GmailReplyInput(user_id="alice", thread_id="t-empty")
+                )
 
-    def _patch_multi_reply(self, *, messages: list[dict], created_draft: dict):
+    def _configure_multi_reply(
+        self, mock, *, messages: list[dict], created_draft: dict
+    ):
         """Mock a thread with several messages (thread order) + drafts.create."""
-        mock = _make_mock_service()
         mock.users().threads().get().execute.return_value = {
             "id": "t-rep",
             "messages": messages,
@@ -1526,7 +1357,6 @@ class TestGmailReplyToThread(TestTemplate):
             "id": created_draft["id"]
         }
         mock.users().drafts().get().execute.return_value = created_draft
-        return mock
 
     @staticmethod
     def _thread_msg(msg_id: str, headers: dict[str, str]) -> dict:
@@ -1540,9 +1370,9 @@ class TestGmailReplyToThread(TestTemplate):
         # Seeded account is alice@example.com. Tom wrote first, then alice
         # replied - so the latest message is from self. The reply must default
         # to Tom, not alice, otherwise the owner emails themselves.
-        with _patch_db() as factory:
-            _seed_token(factory)  # alice@example.com
-            mock = self._patch_multi_reply(
+        with _gmail_env() as mock:
+            self._configure_multi_reply(
+                mock,
                 messages=[
                     self._thread_msg(
                         "m-1",
@@ -1565,14 +1395,7 @@ class TestGmailReplyToThread(TestTemplate):
                     draft_id="d-self", to="Tom <tom@example.com>", thread_id="t-rep"
                 ),
             )
-            patches = _patch_client(mock)
-            _apply(patches)
-            try:
-                gmail_reply_to_thread(
-                    GmailReplyInput(user_id="alice", thread_id="t-rep")
-                )
-            finally:
-                _stop(patches)
+            gmail_reply_to_thread(GmailReplyInput(user_id="alice", thread_id="t-rep"))
 
         create_calls = [
             c for c in mock.users().drafts().create.call_args_list if c.kwargs
@@ -1584,9 +1407,9 @@ class TestGmailReplyToThread(TestTemplate):
     def test_replies_to_recipients_when_all_messages_from_self(self):
         # The only message in the thread was sent by the owner. Reply to the
         # people it was addressed to (minus self), not the owner.
-        with _patch_db() as factory:
-            _seed_token(factory)  # alice@example.com
-            mock = self._patch_multi_reply(
+        with _gmail_env() as mock:
+            self._configure_multi_reply(
+                mock,
                 messages=[
                     self._thread_msg(
                         "m-1",
@@ -1602,14 +1425,7 @@ class TestGmailReplyToThread(TestTemplate):
                     draft_id="d-self2", to="Tom <tom@example.com>", thread_id="t-rep"
                 ),
             )
-            patches = _patch_client(mock)
-            _apply(patches)
-            try:
-                gmail_reply_to_thread(
-                    GmailReplyInput(user_id="alice", thread_id="t-rep")
-                )
-            finally:
-                _stop(patches)
+            gmail_reply_to_thread(GmailReplyInput(user_id="alice", thread_id="t-rep"))
 
         create_calls = [
             c for c in mock.users().drafts().create.call_args_list if c.kwargs
@@ -1623,9 +1439,9 @@ class TestGmailReplyToThread(TestTemplate):
         # Whole thread is from the owner and the last message names no other
         # participant (To/Cc are only self) - there is nobody to reply to, so
         # the service raises instead of creating a blank-To draft.
-        with _patch_db() as factory:
-            _seed_token(factory)  # alice@example.com
-            mock = self._patch_multi_reply(
+        with _gmail_env() as mock:
+            self._configure_multi_reply(
+                mock,
                 messages=[
                     self._thread_msg(
                         "m-1",
@@ -1638,23 +1454,16 @@ class TestGmailReplyToThread(TestTemplate):
                 ],
                 created_draft=_draft_resource(draft_id="d-none", thread_id="t-rep"),
             )
-            patches = _patch_client(mock)
-            _apply(patches)
-            try:
-                with pytest.raises(
-                    ValueError, match="Cannot determine a reply recipient"
-                ):
-                    gmail_reply_to_thread(
-                        GmailReplyInput(user_id="alice", thread_id="t-rep")
-                    )
-            finally:
-                _stop(patches)
+            with pytest.raises(ValueError, match="Cannot determine a reply recipient"):
+                gmail_reply_to_thread(
+                    GmailReplyInput(user_id="alice", thread_id="t-rep")
+                )
 
     def test_self_only_thread_still_works_when_caller_supplies_to(self):
         # The same self-only thread succeeds when the caller passes 'to'.
-        with _patch_db() as factory:
-            _seed_token(factory)  # alice@example.com
-            mock = self._patch_multi_reply(
+        with _gmail_env() as mock:
+            self._configure_multi_reply(
+                mock,
                 messages=[
                     self._thread_msg(
                         "m-1",
@@ -1669,18 +1478,13 @@ class TestGmailReplyToThread(TestTemplate):
                     draft_id="d-ok", to="Tom <tom@example.com>", thread_id="t-rep"
                 ),
             )
-            patches = _patch_client(mock)
-            _apply(patches)
-            try:
-                gmail_reply_to_thread(
-                    GmailReplyInput(
-                        user_id="alice",
-                        thread_id="t-rep",
-                        to="Tom <tom@example.com>",
-                    )
+            gmail_reply_to_thread(
+                GmailReplyInput(
+                    user_id="alice",
+                    thread_id="t-rep",
+                    to="Tom <tom@example.com>",
                 )
-            finally:
-                _stop(patches)
+            )
 
         create_calls = [
             c for c in mock.users().drafts().create.call_args_list if c.kwargs
@@ -1692,27 +1496,22 @@ class TestGmailReplyToThread(TestTemplate):
     def test_caller_supplied_to_overrides_thread_default(self):
         # When the caller sets 'to' explicitly it is used verbatim - the
         # thread-derived default is not consulted.
-        with _patch_db() as factory:
-            _seed_token(factory)
-            mock = self._patch_reply(
+        with _gmail_env() as mock:
+            self._configure_reply(
+                mock,
                 last_msg_headers={
                     "From": "sender@example.com",
                     "Subject": "Original Subject",
                 },
                 created_draft=_draft_resource(draft_id="d-ov", thread_id="t-rep"),
             )
-            patches = _patch_client(mock)
-            _apply(patches)
-            try:
-                gmail_reply_to_thread(
-                    GmailReplyInput(
-                        user_id="alice",
-                        thread_id="t-rep",
-                        to="chosen@example.com",
-                    )
+            gmail_reply_to_thread(
+                GmailReplyInput(
+                    user_id="alice",
+                    thread_id="t-rep",
+                    to="chosen@example.com",
                 )
-            finally:
-                _stop(patches)
+            )
 
         create_calls = [
             c for c in mock.users().drafts().create.call_args_list if c.kwargs
@@ -1726,9 +1525,9 @@ class TestGmailReplyToThread(TestTemplate):
         # (e.g. "reply to my assistant"). Ownership is judged by From, so this
         # message is still recognized as the owner's and skipped - the reply
         # goes to the earlier other party (Tom), NOT the Reply-To address.
-        with _patch_db() as factory:
-            _seed_token(factory)  # alice@example.com
-            mock = self._patch_multi_reply(
+        with _gmail_env() as mock:
+            self._configure_multi_reply(
+                mock,
                 messages=[
                     self._thread_msg(
                         "m-1",
@@ -1752,14 +1551,7 @@ class TestGmailReplyToThread(TestTemplate):
                     draft_id="d-rt", to="Tom <tom@example.com>", thread_id="t-rep"
                 ),
             )
-            patches = _patch_client(mock)
-            _apply(patches)
-            try:
-                gmail_reply_to_thread(
-                    GmailReplyInput(user_id="alice", thread_id="t-rep")
-                )
-            finally:
-                _stop(patches)
+            gmail_reply_to_thread(GmailReplyInput(user_id="alice", thread_id="t-rep"))
 
         create_calls = [
             c for c in mock.users().drafts().create.call_args_list if c.kwargs
@@ -1769,28 +1561,23 @@ class TestGmailReplyToThread(TestTemplate):
         assert mime["To"] == "Tom <tom@example.com>"
 
     def test_caller_supplied_cc_and_bcc_pass_through(self):
-        with _patch_db() as factory:
-            _seed_token(factory)
-            mock = self._patch_reply(
+        with _gmail_env() as mock:
+            self._configure_reply(
+                mock,
                 last_msg_headers={
                     "From": "sender@example.com",
                     "Subject": "Original Subject",
                 },
                 created_draft=_draft_resource(draft_id="d-cc", thread_id="t-rep"),
             )
-            patches = _patch_client(mock)
-            _apply(patches)
-            try:
-                gmail_reply_to_thread(
-                    GmailReplyInput(
-                        user_id="alice",
-                        thread_id="t-rep",
-                        cc="cc@example.com",
-                        bcc="bcc@example.com",
-                    )
+            gmail_reply_to_thread(
+                GmailReplyInput(
+                    user_id="alice",
+                    thread_id="t-rep",
+                    cc="cc@example.com",
+                    bcc="bcc@example.com",
                 )
-            finally:
-                _stop(patches)
+            )
 
         create_calls = [
             c for c in mock.users().drafts().create.call_args_list if c.kwargs
@@ -1835,23 +1622,14 @@ class TestUpdateDraftOmitVsNullOverMcp(TestTemplate):
             subject="Original Subject",
             body=current_body,
         )
-        with _patch_db() as factory:
-            _seed_token(factory)
-            mock = _make_mock_service()
+        with _gmail_env() as mock:
             mock.users().drafts().get().execute.side_effect = [original, original]
             mock.users().drafts().update().execute.return_value = {"id": "d-1"}
-            patches = _patch_client(mock)
-            _apply(patches)
-            try:
-                # Build the input the way the MCP transport does: every field
-                # present, omitted ones filled with their (sentinel) default.
-                gmail_update_draft(
-                    GmailUpdateDraftInput(
-                        **_mcp_kwargs(GmailUpdateDraftInput, provided)
-                    )
-                )
-            finally:
-                _stop(patches)
+            # Build the input the way the MCP transport does: every field
+            # present, omitted ones filled with their (sentinel) default.
+            gmail_update_draft(
+                GmailUpdateDraftInput(**_mcp_kwargs(GmailUpdateDraftInput, provided))
+            )
         raw = _last_update_raw(mock)
         return message_from_bytes(base64.urlsafe_b64decode(raw.encode("ascii")))
 
@@ -1882,44 +1660,28 @@ class TestMutationsEchoSavedState(TestTemplate):
         saved = _draft_resource(
             draft_id="d-1", to="a@x", subject="Subj", body="patched"
         )
-        with _patch_db() as factory:
-            _seed_token(factory)
-            mock = _make_mock_service()
+        with _gmail_env() as mock:
             mock.users().drafts().get().execute.side_effect = [original, saved]
             # Real Gmail returns only {id} here - the previous code echoed this
             # verbatim and produced an all-null draft.
             mock.users().drafts().update().execute.return_value = {"id": "d-1"}
-            patches = _patch_client(mock)
-            _apply(patches)
-            try:
-                draft = gmail_update_draft(
-                    GmailUpdateDraftInput(
-                        user_id="alice", draft_id="d-1", body="patched"
-                    )
-                )
-            finally:
-                _stop(patches)
+            draft = gmail_update_draft(
+                GmailUpdateDraftInput(user_id="alice", draft_id="d-1", body="patched")
+            )
         assert draft.to == "a@x"
         assert draft.subject == "Subj"
         assert draft.body == "patched"
         assert draft.body_preview == "patched"
 
     def test_compose_echoes_saved_state_from_minimal_create_response(self):
-        with _patch_db() as factory:
-            _seed_token(factory)
-            mock = _make_mock_service()
+        with _gmail_env() as mock:
             mock.users().drafts().create().execute.return_value = {"id": "d-new"}
             mock.users().drafts().get().execute.return_value = _draft_resource(
                 draft_id="d-new", to="a@x", subject="S", body="B"
             )
-            patches = _patch_client(mock)
-            _apply(patches)
-            try:
-                draft = gmail_compose(
-                    GmailComposeInput(user_id="alice", to="a@x", subject="S", body="B")
-                )
-            finally:
-                _stop(patches)
+            draft = gmail_compose(
+                GmailComposeInput(user_id="alice", to="a@x", subject="S", body="B")
+            )
         # Would be all-null if the minimal create response were echoed directly.
         assert draft.draft_id == "d-new"
         assert draft.to == "a@x"
@@ -1946,9 +1708,7 @@ class TestUpdateDraftPreservesAttachments(TestTemplate):
         original = _draft_resource_with_attachment(body="Original body")
         echoed = _draft_resource_with_attachment(body="New body")
 
-        with _patch_db() as factory:
-            _seed_token(factory)
-            mock = _make_mock_service()
+        with _gmail_env() as mock:
             # Pre-read returns the current draft; the post-update re-fetch
             # returns the saved state the response echoes.
             mock.users().drafts().get().execute.side_effect = [original, echoed]
@@ -1957,16 +1717,9 @@ class TestUpdateDraftPreservesAttachments(TestTemplate):
                 _gmail_attachment_blob()
             )
 
-            patches = _patch_client(mock)
-            _apply(patches)
-            try:
-                draft = gmail_update_draft(
-                    GmailUpdateDraftInput(
-                        user_id="alice", draft_id="d-1", body="New body"
-                    )
-                )
-            finally:
-                _stop(patches)
+            draft = gmail_update_draft(
+                GmailUpdateDraftInput(user_id="alice", draft_id="d-1", body="New body")
+            )
 
         # The raw MIME actually sent to Gmail still carries the file (proof the
         # bytes were re-downloaded and re-attached, not dropped).
@@ -1988,9 +1741,7 @@ class TestUpdateDraftPreservesAttachments(TestTemplate):
         original = _draft_resource_with_attachment(body="body")
         echoed = _draft_resource(draft_id="d-1", to="b@y", subject="hi", body="body")
 
-        with _patch_db() as factory:
-            _seed_token(factory)
-            mock = _make_mock_service()
+        with _gmail_env() as mock:
             # Pre-read still has the file; the post-update re-fetch reflects the
             # cleared attachment list.
             mock.users().drafts().get().execute.side_effect = [original, echoed]
@@ -1999,16 +1750,9 @@ class TestUpdateDraftPreservesAttachments(TestTemplate):
                 _gmail_attachment_blob()
             )
 
-            patches = _patch_client(mock)
-            _apply(patches)
-            try:
-                draft = gmail_update_draft(
-                    GmailUpdateDraftInput(
-                        user_id="alice", draft_id="d-1", attachments=None
-                    )
-                )
-            finally:
-                _stop(patches)
+            draft = gmail_update_draft(
+                GmailUpdateDraftInput(user_id="alice", draft_id="d-1", attachments=None)
+            )
 
         raw = _last_update_raw(mock)
         assert _attachment_filenames_in_raw(raw) == []
@@ -2019,20 +1763,13 @@ class TestUpdateDraftPreservesAttachments(TestTemplate):
             draft_id="d-1", to="b@y", subject="Keep me", body="hi"
         )
 
-        with _patch_db() as factory:
-            _seed_token(factory)
-            mock = _make_mock_service()
+        with _gmail_env() as mock:
             mock.users().drafts().get().execute.return_value = original
             mock.users().drafts().update().execute.return_value = original
 
-            patches = _patch_client(mock)
-            _apply(patches)
-            try:
-                gmail_update_draft(
-                    GmailUpdateDraftInput(user_id="alice", draft_id="d-1", subject=None)
-                )
-            finally:
-                _stop(patches)
+            gmail_update_draft(
+                GmailUpdateDraftInput(user_id="alice", draft_id="d-1", subject=None)
+            )
 
         mime = message_from_bytes(
             base64.urlsafe_b64decode(_last_update_raw(mock).encode("ascii"))
@@ -2045,28 +1782,21 @@ class TestUpdateDraftPreservesAttachments(TestTemplate):
         original = _draft_resource_with_attachment(body="body")
         echoed = _draft_resource_with_attachment(body="body")
 
-        with _patch_db() as factory:
-            _seed_token(factory)
-            mock = _make_mock_service()
+        with _gmail_env() as mock:
             mock.users().drafts().get().execute.return_value = original
             mock.users().drafts().update().execute.return_value = echoed
             mock.users().messages().attachments().get().execute.return_value = (
                 _gmail_attachment_blob()
             )
 
-            patches = _patch_client(mock)
-            _apply(patches)
-            try:
-                gmail_update_draft(
-                    GmailUpdateDraftInput(
-                        user_id="alice",
-                        draft_id="d-1",
-                        body="body",
-                        attachments=[AttachmentReference(attachment_id="att-1")],
-                    )
+            gmail_update_draft(
+                GmailUpdateDraftInput(
+                    user_id="alice",
+                    draft_id="d-1",
+                    body="body",
+                    attachments=[AttachmentReference(attachment_id="att-1")],
                 )
-            finally:
-                _stop(patches)
+            )
 
         raw = _last_update_raw(mock)
         assert _attachment_filenames_in_raw(raw) == ["report.pdf"]
@@ -2077,56 +1807,42 @@ class TestUpdateDraftPreservesAttachments(TestTemplate):
     def test_reference_to_unknown_id_raises(self):
         original = _draft_resource_with_attachment(body="body")
 
-        with _patch_db() as factory:
-            _seed_token(factory)
-            mock = _make_mock_service()
+        with _gmail_env() as mock:
             mock.users().drafts().get().execute.return_value = original
             mock.users().messages().attachments().get().execute.return_value = (
                 _gmail_attachment_blob()
             )
 
-            patches = _patch_client(mock)
-            _apply(patches)
-            try:
-                with pytest.raises(ValueError, match="not on draft"):
-                    gmail_update_draft(
-                        GmailUpdateDraftInput(
-                            user_id="alice",
-                            draft_id="d-1",
-                            attachments=[AttachmentReference(attachment_id="nope")],
-                        )
+            with pytest.raises(ValueError, match="not on draft"):
+                gmail_update_draft(
+                    GmailUpdateDraftInput(
+                        user_id="alice",
+                        draft_id="d-1",
+                        attachments=[AttachmentReference(attachment_id="nope")],
                     )
-            finally:
-                _stop(patches)
+                )
 
     def test_mix_reference_and_new_upload(self):
         original = _draft_resource_with_attachment(body="body")
         echoed = _draft_resource_with_attachment(body="body")
 
-        with _patch_db() as factory:
-            _seed_token(factory)
-            mock = _make_mock_service()
+        with _gmail_env() as mock:
             mock.users().drafts().get().execute.return_value = original
             mock.users().drafts().update().execute.return_value = echoed
             mock.users().messages().attachments().get().execute.return_value = (
                 _gmail_attachment_blob()
             )
 
-            patches = _patch_client(mock)
-            _apply(patches)
-            try:
-                gmail_update_draft(
-                    GmailUpdateDraftInput(
-                        user_id="alice",
-                        draft_id="d-1",
-                        attachments=[
-                            AttachmentReference(attachment_id="att-1"),
-                            _new_upload(filename="extra.txt"),
-                        ],
-                    )
+            gmail_update_draft(
+                GmailUpdateDraftInput(
+                    user_id="alice",
+                    draft_id="d-1",
+                    attachments=[
+                        AttachmentReference(attachment_id="att-1"),
+                        _new_upload(filename="extra.txt"),
+                    ],
                 )
-            finally:
-                _stop(patches)
+            )
 
         raw = _last_update_raw(mock)
         assert sorted(_attachment_filenames_in_raw(raw)) == ["extra.txt", "report.pdf"]
@@ -2136,9 +1852,7 @@ class TestEditBodyRepeatedlyKeepsAttachment(TestTemplate):
     """Acceptance: change the body three times without re-uploading or losing the file."""
 
     def test_three_body_edits_in_a_row(self):
-        with _patch_db() as factory:
-            _seed_token(factory)
-            mock = _make_mock_service()
+        with _gmail_env() as mock:
             # The server always reports the file still on the draft.
             mock.users().drafts().get().execute.return_value = (
                 _draft_resource_with_attachment(body="v0")
@@ -2150,24 +1864,19 @@ class TestEditBodyRepeatedlyKeepsAttachment(TestTemplate):
                 _gmail_attachment_blob()
             )
 
-            patches = _patch_client(mock)
-            _apply(patches)
             drafts = []
-            try:
-                for new_body in ("v1", "v2", "v3"):
-                    drafts.append(
-                        gmail_update_draft(
-                            GmailUpdateDraftInput(
-                                user_id="alice", draft_id="d-1", body=new_body
-                            )
+            for new_body in ("v1", "v2", "v3"):
+                drafts.append(
+                    gmail_update_draft(
+                        GmailUpdateDraftInput(
+                            user_id="alice", draft_id="d-1", body=new_body
                         )
                     )
-                    # Each round re-attaches the file in the outgoing MIME.
-                    assert _attachment_filenames_in_raw(_last_update_raw(mock)) == [
-                        "report.pdf"
-                    ]
-            finally:
-                _stop(patches)
+                )
+                # Each round re-attaches the file in the outgoing MIME.
+                assert _attachment_filenames_in_raw(_last_update_raw(mock)) == [
+                    "report.pdf"
+                ]
 
         # Three edits happened, and the file is still present at the end -
         # without ever supplying attachment bytes.
@@ -2183,27 +1892,20 @@ class TestAddRemoveAttachment(TestTemplate):
         )
         echoed = _draft_resource_with_attachment(body="Keep this body")
 
-        with _patch_db() as factory:
-            _seed_token(factory)
-            mock = _make_mock_service()
+        with _gmail_env() as mock:
             mock.users().drafts().get().execute.return_value = original
             mock.users().drafts().update().execute.return_value = echoed
             mock.users().messages().attachments().get().execute.return_value = (
                 _gmail_attachment_blob()
             )
 
-            patches = _patch_client(mock)
-            _apply(patches)
-            try:
-                result = gmail_add_attachment(
-                    GmailAddAttachmentInput(
-                        user_id="alice",
-                        draft_id="d-1",
-                        attachment=_new_upload(filename="added.txt"),
-                    )
+            result = gmail_add_attachment(
+                GmailAddAttachmentInput(
+                    user_id="alice",
+                    draft_id="d-1",
+                    attachment=_new_upload(filename="added.txt"),
                 )
-            finally:
-                _stop(patches)
+            )
 
         raw = _last_update_raw(mock)
         # Both the existing and the newly-added file are present.
@@ -2227,9 +1929,7 @@ class TestAddRemoveAttachment(TestTemplate):
             draft_id="d-1", to="stay@x", subject="Subj stays", body="Body stays"
         )
 
-        with _patch_db() as factory:
-            _seed_token(factory)
-            mock = _make_mock_service()
+        with _gmail_env() as mock:
             # Pre-read has the file (so it can be found and removed); the
             # post-update re-fetch reflects the file being gone.
             mock.users().drafts().get().execute.side_effect = [original, echoed]
@@ -2238,16 +1938,11 @@ class TestAddRemoveAttachment(TestTemplate):
                 _gmail_attachment_blob()
             )
 
-            patches = _patch_client(mock)
-            _apply(patches)
-            try:
-                result = gmail_remove_attachment(
-                    GmailRemoveAttachmentInput(
-                        user_id="alice", draft_id="d-1", attachment_id="att-1"
-                    )
+            result = gmail_remove_attachment(
+                GmailRemoveAttachmentInput(
+                    user_id="alice", draft_id="d-1", attachment_id="att-1"
                 )
-            finally:
-                _stop(patches)
+            )
 
         raw = _last_update_raw(mock)
         assert _attachment_filenames_in_raw(raw) == []
@@ -2259,22 +1954,15 @@ class TestAddRemoveAttachment(TestTemplate):
     def test_remove_unknown_attachment_raises(self):
         original = _draft_resource_with_attachment(body="body")
 
-        with _patch_db() as factory:
-            _seed_token(factory)
-            mock = _make_mock_service()
+        with _gmail_env() as mock:
             mock.users().drafts().get().execute.return_value = original
 
-            patches = _patch_client(mock)
-            _apply(patches)
-            try:
-                with pytest.raises(ValueError, match="not on draft"):
-                    gmail_remove_attachment(
-                        GmailRemoveAttachmentInput(
-                            user_id="alice", draft_id="d-1", attachment_id="ghost"
-                        )
+            with pytest.raises(ValueError, match="not on draft"):
+                gmail_remove_attachment(
+                    GmailRemoveAttachmentInput(
+                        user_id="alice", draft_id="d-1", attachment_id="ghost"
                     )
-            finally:
-                _stop(patches)
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -2337,20 +2025,13 @@ def _mime_part_texts(raw_b64: str, content_type: str) -> list[str]:
 
 class TestRebuildPreservesContent(TestTemplate):
     def _run_update(self, original, update_input, echoed=None):
-        with _patch_db() as factory:
-            _seed_token(factory)
-            mock = _make_mock_service()
+        with _gmail_env() as mock:
             mock.users().drafts().get().execute.return_value = original
             mock.users().drafts().update().execute.return_value = echoed or original
             mock.users().messages().attachments().get().execute.return_value = (
                 _gmail_attachment_blob()
             )
-            patches = _patch_client(mock)
-            _apply(patches)
-            try:
-                gmail_update_draft(update_input)
-            finally:
-                _stop(patches)
+            gmail_update_draft(update_input)
         return _last_update_raw(mock)
 
     def test_omitted_body_preserves_html_only_body(self):
@@ -2468,23 +2149,16 @@ class TestAddAttachmentPreservesHtmlAndBcc(TestTemplate):
                 },
             },
         }
-        with _patch_db() as factory:
-            _seed_token(factory)
-            mock = _make_mock_service()
+        with _gmail_env() as mock:
             mock.users().drafts().get().execute.return_value = original
             mock.users().drafts().update().execute.return_value = original
-            patches = _patch_client(mock)
-            _apply(patches)
-            try:
-                gmail_add_attachment(
-                    GmailAddAttachmentInput(
-                        user_id="alice",
-                        draft_id="d-1",
-                        attachment=_new_upload(filename="a.txt"),
-                    )
+            gmail_add_attachment(
+                GmailAddAttachmentInput(
+                    user_id="alice",
+                    draft_id="d-1",
+                    attachment=_new_upload(filename="a.txt"),
                 )
-            finally:
-                _stop(patches)
+            )
         raw = _last_update_raw(mock)
         mime = message_from_bytes(base64.urlsafe_b64decode(raw.encode("ascii")))
         assert mime["Bcc"] == "secret@x"
@@ -2547,22 +2221,15 @@ class TestComposerAutosavePreservesAttachments(TestTemplate):
     def _run_save_draft(self, **kwargs):
         original = _draft_resource_with_attachment(body="draft body")
         echoed = _draft_resource_with_attachment(body="draft body")
-        with _patch_db() as factory:
-            _seed_token(factory)
-            mock = _make_mock_service()
+        with _gmail_env() as mock:
             mock.users().drafts().get().execute.side_effect = [original, echoed]
             mock.users().drafts().update().execute.return_value = {"id": "d-1"}
             mock.users().messages().attachments().get().execute.return_value = (
                 _gmail_attachment_blob()
             )
-            patches = _patch_client(mock)
-            _apply(patches)
-            try:
-                # Call the app-tool exactly as the composer does: text fields
-                # only, attachments omitted entirely.
-                result = _save_draft(draft_id="d-1", user_id="alice", **kwargs)
-            finally:
-                _stop(patches)
+            # Call the app-tool exactly as the composer does: text fields
+            # only, attachments omitted entirely.
+            result = _save_draft(draft_id="d-1", user_id="alice", **kwargs)
         return result, _last_update_raw(mock)
 
     def test_autosave_without_attachments_keeps_existing_file(self):
@@ -2658,20 +2325,13 @@ def _parts_by_type(raw_b64: str, content_type: str):
 
 class TestInlineImagePreservation(TestTemplate):
     def _run(self, original, update_input):
-        with _patch_db() as factory:
-            _seed_token(factory)
-            mock = _make_mock_service()
+        with _gmail_env() as mock:
             mock.users().drafts().get().execute.return_value = original
             mock.users().drafts().update().execute.return_value = original
             mock.users().messages().attachments().get().execute.return_value = (
                 _gmail_attachment_blob()
             )
-            patches = _patch_client(mock)
-            _apply(patches)
-            try:
-                gmail_update_draft(update_input)
-            finally:
-                _stop(patches)
+            gmail_update_draft(update_input)
         return _last_update_raw(mock)
 
     def test_omitted_body_preserves_inline_image(self):
@@ -2699,23 +2359,16 @@ class TestInlineImagePreservation(TestTemplate):
 
     def test_add_attachment_keeps_inline_image(self):
         original = _draft_resource_html_inline_image(img_bytes=b"PNGDATA")
-        with _patch_db() as factory:
-            _seed_token(factory)
-            mock = _make_mock_service()
+        with _gmail_env() as mock:
             mock.users().drafts().get().execute.return_value = original
             mock.users().drafts().update().execute.return_value = original
-            patches = _patch_client(mock)
-            _apply(patches)
-            try:
-                gmail_add_attachment(
-                    GmailAddAttachmentInput(
-                        user_id="alice",
-                        draft_id="d-1",
-                        attachment=_new_upload(filename="doc.txt"),
-                    )
+            gmail_add_attachment(
+                GmailAddAttachmentInput(
+                    user_id="alice",
+                    draft_id="d-1",
+                    attachment=_new_upload(filename="doc.txt"),
                 )
-            finally:
-                _stop(patches)
+            )
         raw = _last_update_raw(mock)
         imgs = _parts_by_type(raw, "image/png")
         assert len(imgs) == 1
@@ -2780,21 +2433,14 @@ def _draft_alt_with_inline_image(
 class TestInlineImageAlternativeStructure(TestTemplate):
     def test_plain_and_html_inline_image_nests_related_under_alternative(self):
         original = _draft_alt_with_inline_image(img_bytes=b"PNGDATA")
-        with _patch_db() as factory:
-            _seed_token(factory)
-            mock = _make_mock_service()
+        with _gmail_env() as mock:
             mock.users().drafts().get().execute.return_value = original
             mock.users().drafts().update().execute.return_value = original
-            patches = _patch_client(mock)
-            _apply(patches)
-            try:
-                gmail_update_draft(
-                    GmailUpdateDraftInput(
-                        user_id="alice", draft_id="d-1", subject="New subj"
-                    )
+            gmail_update_draft(
+                GmailUpdateDraftInput(
+                    user_id="alice", draft_id="d-1", subject="New subj"
                 )
-            finally:
-                _stop(patches)
+            )
         raw = _last_update_raw(mock)
         mime = message_from_bytes(base64.urlsafe_b64decode(raw.encode("ascii")))
         # Canonical, broadly-compatible shape: the related (html + image) nests

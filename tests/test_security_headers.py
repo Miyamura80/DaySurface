@@ -11,14 +11,10 @@ through three different response paths.
 import base64
 import hashlib
 import re
-from contextlib import contextmanager
 from unittest.mock import patch
 
 import anyio
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 from starlette.applications import Starlette
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
@@ -29,8 +25,7 @@ from api_server.auth.api_key_auth import create_api_key
 from api_server.middleware.security_headers import SecurityHeadersMiddleware
 from api_server.server import SessionCookiePolicy, app, session_cookie_policy
 from common import global_config
-from db import engine as db_engine
-from db.base import Base
+from tests._harness import patch_db
 from tests.test_template import TestTemplate
 
 _PROTOCOL_VERSION = "2025-03-26"
@@ -59,27 +54,6 @@ def _assert_secure(headers, *, csp_check=None) -> None:
         assert check(value), f"{name} has a non-hardening value: {value!r}"
 
 
-@contextmanager
-def _patch_db():
-    """Wire an in-memory SQLite into db.engine for the duration of the block."""
-    orig_engine = db_engine._engine
-    orig_session = db_engine._SessionLocal
-    eng = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(eng)
-    session_factory = sessionmaker(bind=eng, autoflush=False, expire_on_commit=False)
-    db_engine._engine = eng
-    db_engine._SessionLocal = session_factory
-    try:
-        yield session_factory
-    finally:
-        db_engine._engine = orig_engine
-        db_engine._SessionLocal = orig_session
-
-
 class TestSecurityHeaders(TestTemplate):
     def test_headers_on_a_normal_route(self):
         # /health is the endpoint an uptime probe and a scanner both hit first.
@@ -100,7 +74,7 @@ class TestSecurityHeaders(TestTemplate):
         with patch("api_server.middleware.mcp_auth.global_config") as mock_config:
             mock_config.WORKOS_CLIENT_ID = None
             mock_config.WORKOS_AUTHKIT_DOMAIN = None
-            with _patch_db() as session_factory:
+            with patch_db() as session_factory:
                 with session_factory() as s:
                     raw_key, _ = create_api_key(s, user_id="u-sec-hdr", scopes=["*"])
                 with TestClient(app) as client:

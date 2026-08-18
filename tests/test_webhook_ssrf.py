@@ -38,8 +38,8 @@ from services._ssrf_guard import (
 )
 from services.webhook_delivery_svc import drain_due_deliveries
 from services.webhooks_svc import enqueue_event, webhook_subscribe
+from tests._harness import patch_db, plaintext_encryption
 from tests.test_template import TestTemplate
-from tests.test_webhooks import _patch_db, _plaintext_encryption
 
 _PUBLIC_IP = "93.184.216.34"
 _PUBLIC_V6 = "2606:4700:4700::1111"
@@ -214,7 +214,7 @@ class TestDeliverySsrf(TestTemplate):
     def test_delivery_refuses_when_host_rebinds_to_internal(self, internal_ip):
         # Validated public at subscribe time; flipped to an internal address
         # before delivery. The POST must never leave the process.
-        with _patch_db(), _plaintext_encryption():
+        with patch_db(), plaintext_encryption():
             self._seed()
             rec = _Recorder()
             counts = self._deliver(rec, _addrinfo(internal_ip))
@@ -229,7 +229,7 @@ class TestDeliverySsrf(TestTemplate):
 
     def test_delivery_rejects_when_any_answer_is_internal(self):
         # Split-horizon at delivery: [public, private] -> rejected wholesale.
-        with _patch_db(), _plaintext_encryption():
+        with patch_db(), plaintext_encryption():
             self._seed()
             rec = _Recorder()
             counts = self._deliver(rec, _PUBLIC_ADDRINFO + _addrinfo("169.254.169.254"))
@@ -240,7 +240,7 @@ class TestDeliverySsrf(TestTemplate):
         # Happy path: delivery resolves public, pins to that IP, and the POST
         # carries the original hostname in Host (proving the pin, not a second
         # unguarded resolve of the name).
-        with _patch_db(), _plaintext_encryption():
+        with patch_db(), plaintext_encryption():
             self._seed()
             rec = _Recorder(httpx.Response(200))
             counts = self._deliver(rec, _PUBLIC_ADDRINFO)
@@ -260,7 +260,7 @@ class TestDeliverySsrf(TestTemplate):
         redirect = httpx.Response(
             302, headers={"location": "http://169.254.169.254/latest/meta-data/"}
         )
-        with _patch_db(), _plaintext_encryption():
+        with patch_db(), plaintext_encryption():
             self._seed()
             rec = _Recorder(redirect)
             counts = self._deliver(rec, _PUBLIC_ADDRINFO)

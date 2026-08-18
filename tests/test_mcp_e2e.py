@@ -19,61 +19,21 @@ from unittest.mock import patch
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from api_server.auth.api_key_auth import create_api_key
 from api_server.server import app
 from common import global_config, token_encryption
 from common.token_encryption import FernetEncryption
-from db import engine as db_engine
-from db.base import Base
 from mcp_server._tool_factory import make_tool
 from mcp_server.enhancers import _enhancers, enhance
 from mcp_server.server import mcp
 from models.curation import CurationBucket, ThreadJudgment
 from services import _registry, get_registry, service
 from services.curation_ledger import upsert_judgments
+from tests._harness import patch_db, read_sse_first_message
 from tests.test_template import TestTemplate
 
 _PROTOCOL_VERSION = "2025-03-26"
-
-
-@contextmanager
-def _patch_db():
-    """Wire an in-memory SQLite into db.engine for the duration of the block."""
-    orig_engine = db_engine._engine
-    orig_session = db_engine._SessionLocal
-    eng = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(eng)
-    session_factory = sessionmaker(bind=eng, autoflush=False, expire_on_commit=False)
-    db_engine._engine = eng
-    db_engine._SessionLocal = session_factory
-    try:
-        yield session_factory
-    finally:
-        db_engine._engine = orig_engine
-        db_engine._SessionLocal = orig_session
-
-
-def _read_sse_first_message(response) -> dict:
-    """Parse the first ``data:`` line from an MCP SSE response.
-
-    Deliberately NOT ``iter_lines()``: that splits on Unicode line
-    boundaries (U+2028, NEL, ...) which legally appear unescaped inside
-    JSON string payloads (e.g. the pdf_signer app bundle's inlined pdf.js
-    worker), truncating the frame. The SSE spec ends lines on CR/LF only.
-    """
-    normalized = response.text.replace("\r\n", "\n").replace("\r", "\n")
-    for line in normalized.split("\n"):
-        if line.startswith("data:"):
-            return json.loads(line.removeprefix("data:").strip())
-    raise AssertionError("no SSE data frame in response")
 
 
 class _McpSession:
@@ -115,7 +75,7 @@ class _McpSession:
         assert resp.status_code == 200, f"{method}: {resp.status_code} {resp.text}"
         if self._session_id is None:
             self._session_id = resp.headers.get("mcp-session-id")
-        msg = _read_sse_first_message(resp)
+        msg = read_sse_first_message(resp)
         assert "error" not in msg, f"{method} returned error: {msg.get('error')}"
         return msg["result"]
 
@@ -133,7 +93,7 @@ class _McpSession:
             },
         )
         assert resp.status_code == 200, f"{method}: {resp.status_code} {resp.text}"
-        msg = _read_sse_first_message(resp)
+        msg = read_sse_first_message(resp)
         assert "error" in msg, f"{method} unexpectedly succeeded: {msg}"
         return msg["error"]
 
@@ -165,7 +125,7 @@ def _wire_session(user_id: str):
     with patch("api_server.middleware.mcp_auth.global_config") as mock_config:
         mock_config.WORKOS_CLIENT_ID = None
         mock_config.WORKOS_AUTHKIT_DOMAIN = None
-        with _patch_db() as session_factory:
+        with patch_db() as session_factory:
             with session_factory() as s:
                 raw_key, _ = create_api_key(s, user_id=user_id, scopes=["*"])
 

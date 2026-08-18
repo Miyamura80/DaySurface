@@ -3,18 +3,11 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import contextmanager
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
-
 from common import global_config
-from common.token_encryption import PlaintextEncryption
 from db import engine as db_engine
-from db.base import Base
 from db.models.google_tokens import GoogleToken
 from mcp_server.app_tools import _auth_guard
 from mcp_server.server import build_mcp_server
@@ -22,42 +15,14 @@ from models.webhook_settings import WebhookSettingsInput
 from models.webhooks import WebhookSubscribeInput
 from services.webhook_settings_svc import webhook_settings
 from services.webhooks_svc import webhook_subscribe
+from tests._harness import patch_db, plaintext_encryption
 from tests.test_template import TestTemplate
-
-
-@contextmanager
-def _patch_db():
-    orig_engine = db_engine._engine
-    orig_session = db_engine._SessionLocal
-    eng = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(eng)
-    factory = sessionmaker(bind=eng, autoflush=False, expire_on_commit=False)
-    db_engine._engine = eng
-    db_engine._SessionLocal = factory
-    try:
-        yield factory
-    finally:
-        db_engine._engine = orig_engine
-        db_engine._SessionLocal = orig_session
-
-
-@contextmanager
-def _plaintext_encryption():
-    with patch(
-        "services.webhooks_svc.require_encryption",
-        return_value=PlaintextEncryption(),
-    ):
-        yield
 
 
 class TestSettingsSnapshot(TestTemplate):
     def test_not_connected_no_subs(self):
         with (
-            _patch_db(),
+            patch_db(),
             patch.object(global_config, "GMAIL_PUBSUB_TOPIC", None),
         ):
             res = webhook_settings(WebhookSettingsInput(user_id="u1"))
@@ -67,8 +32,8 @@ class TestSettingsSnapshot(TestTemplate):
 
     def test_connected_with_watch_and_subscription(self):
         with (
-            _patch_db(),
-            _plaintext_encryption(),
+            patch_db(),
+            plaintext_encryption(),
             patch.object(global_config, "GMAIL_PUBSUB_TOPIC", "projects/p/topics/t"),
         ):
             with db_engine.use_db_session() as session:

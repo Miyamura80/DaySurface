@@ -15,15 +15,10 @@ from unittest.mock import MagicMock, patch
 
 from cryptography.fernet import Fernet
 from googleapiclient.errors import HttpError
-from sqlalchemy import create_engine
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from common import token_encryption
 from common.token_encryption import FernetEncryption
-from db import engine as db_engine
-from db.base import Base
 from db.models.google_tokens import GoogleToken
 from db.models.thread_curation import ThreadCuration
 from models.curation import (
@@ -65,31 +60,12 @@ from services.inbox_curation_svc import (
     inbox_save_curation,
     inbox_search,
 )
+from tests._harness import patch_db
 from tests.test_template import TestTemplate
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
-
-
-@contextmanager
-def _patch_db():
-    orig_engine = db_engine._engine
-    orig_session = db_engine._SessionLocal
-    eng = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(eng)
-    session_factory = sessionmaker(bind=eng, autoflush=False, expire_on_commit=False)
-    db_engine._engine = eng
-    db_engine._SessionLocal = session_factory
-    try:
-        yield session_factory
-    finally:
-        db_engine._engine = orig_engine
-        db_engine._SessionLocal = orig_session
 
 
 @contextmanager
@@ -169,7 +145,7 @@ class TestCurationContracts(TestTemplate):
 
 class TestEncryptionAtRest(TestTemplate):
     def test_round_trip_encrypt_store_decrypt(self):
-        with _patch_db() as factory, _patch_fernet():
+        with patch_db() as factory, _patch_fernet():
             upsert_judgments("alice", [_judgment("t1")], history_ids={"t1": "100"})
             # Ciphertext on disk must NOT contain the plaintext.
             row = factory().query(ThreadCuration).one()
@@ -191,7 +167,7 @@ class TestSaveCuration(TestTemplate):
     def _run_save(self, judgments, history_map):
         svc = MagicMock()
         with (
-            _patch_db(),
+            patch_db(),
             _patch_fernet(),
             patch("services.inbox_curation_svc._get_gmail_client", return_value=svc),
             patch(
@@ -208,7 +184,7 @@ class TestSaveCuration(TestTemplate):
             )
 
     def test_insert_new(self):
-        with _patch_db(), _patch_fernet():
+        with patch_db(), _patch_fernet():
             svc = MagicMock()
             with (
                 patch(
@@ -228,7 +204,7 @@ class TestSaveCuration(TestTemplate):
             assert recs[0].state == CurationState.curated
 
     def test_update_existing_advances_history(self):
-        with _patch_db(), _patch_fernet():
+        with patch_db(), _patch_fernet():
             svc = MagicMock()
             with (
                 patch(
@@ -274,7 +250,7 @@ class TestSaveCuration(TestTemplate):
         assert set(res.thread_ids) == {"t1", "t2"}
 
     def test_empty_batch_noop(self):
-        with _patch_db(), _patch_fernet():
+        with patch_db(), _patch_fernet():
             with patch("services.inbox_curation_svc._get_gmail_client") as get_client:
                 res = inbox_save_curation(
                     SaveCurationInput(user_id="alice", judgments=[])
@@ -283,7 +259,7 @@ class TestSaveCuration(TestTemplate):
             get_client.assert_not_called()  # no Gmail call for an empty batch
 
     def test_recurate_preserves_watermark_when_history_missing(self):
-        with _patch_db(), _patch_fernet():
+        with patch_db(), _patch_fernet():
             svc = MagicMock()
             with (
                 patch(
@@ -332,7 +308,7 @@ class TestGetCuration(TestTemplate):
             return inbox_get_curation(inp or GetCurationInput(user_id="alice"))
 
     def test_empty_ledger_cold_start(self):
-        with _patch_db(), _patch_fernet():
+        with patch_db(), _patch_fernet():
             res = self._run_get([_stub("t1", "100"), _stub("t2", "101")])
             assert res.coverage.curated == 0
             assert res.coverage.stale == 0
@@ -340,7 +316,7 @@ class TestGetCuration(TestTemplate):
             assert res.records == []
 
     def test_fresh_rows_returned(self):
-        with _patch_db(), _patch_fernet():
+        with patch_db(), _patch_fernet():
             upsert_judgments("alice", [_judgment("t1")], history_ids={"t1": "100"})
             res = self._run_get([_stub("t1", "100"), _stub("t2", "101")])
             assert res.coverage.curated == 1
@@ -350,7 +326,7 @@ class TestGetCuration(TestTemplate):
             assert res.records[0].ledger_status == LedgerStatus.curated
 
     def test_stale_detection(self):
-        with _patch_db(), _patch_fernet():
+        with patch_db(), _patch_fernet():
             upsert_judgments("alice", [_judgment("t1")], history_ids={"t1": "100"})
             # Thread t1's current historyId advanced -> stale.
             res = self._run_get([_stub("t1", "999")])
@@ -359,7 +335,7 @@ class TestGetCuration(TestTemplate):
             assert res.records[0].ledger_status == LedgerStatus.stale
 
     def test_fresh_only_filters_stale(self):
-        with _patch_db(), _patch_fernet():
+        with patch_db(), _patch_fernet():
             upsert_judgments("alice", [_judgment("t1")], history_ids={"t1": "100"})
             res = self._run_get(
                 [_stub("t1", "999")],
@@ -369,7 +345,7 @@ class TestGetCuration(TestTemplate):
             assert res.coverage.stale == 1
 
     def test_thread_left_inbox_is_stale(self):
-        with _patch_db(), _patch_fernet():
+        with patch_db(), _patch_fernet():
             upsert_judgments("alice", [_judgment("t1")], history_ids={"t1": "100"})
             # t1 no longer in the inbox stub set (archived out of band).
             res = self._run_get([_stub("t2", "200")])
@@ -377,7 +353,7 @@ class TestGetCuration(TestTemplate):
             assert res.coverage.uncurated == 1  # only t2 counts against inbox
 
     def test_check_freshness_false_treats_all_as_curated(self):
-        with _patch_db(), _patch_fernet():
+        with patch_db(), _patch_fernet():
             upsert_judgments("alice", [_judgment("t1")], history_ids={"t1": "100"})
             # historyId advanced, but the freshness check is disabled.
             res = self._run_get(
@@ -389,7 +365,7 @@ class TestGetCuration(TestTemplate):
             assert res.records[0].ledger_status == LedgerStatus.curated
 
     def test_bucket_filter_scopes_records_not_coverage(self):
-        with _patch_db(), _patch_fernet():
+        with patch_db(), _patch_fernet():
             upsert_judgments(
                 "alice",
                 [
@@ -439,7 +415,7 @@ class TestInboxSearch(TestTemplate):
         return out
 
     def test_mixed_fresh_stale_uncurated(self):
-        with _patch_db(), _patch_fernet():
+        with patch_db(), _patch_fernet():
             upsert_judgments(
                 "alice",
                 [_judgment("fresh"), _judgment("stale")],
@@ -491,7 +467,7 @@ class TestInboxSearch(TestTemplate):
 
 class TestActionsUpdateLedger(TestTemplate):
     def test_archive_marks_dismissed(self):
-        with _patch_db(), _patch_fernet():
+        with patch_db(), _patch_fernet():
             upsert_judgments("alice", [_judgment("t1")], history_ids={"t1": "100"})
             svc = MagicMock()
             with patch(
@@ -504,7 +480,7 @@ class TestActionsUpdateLedger(TestTemplate):
             assert recs[0].state == CurationState.dismissed
 
     def test_reply_marks_acted_with_draft(self):
-        with _patch_db(), _patch_fernet():
+        with patch_db(), _patch_fernet():
             upsert_judgments("alice", [_judgment("t1")], history_ids={"t1": "100"})
             svc = MagicMock()
             svc.users().threads().get().execute.return_value = {
@@ -541,7 +517,7 @@ class TestActionsUpdateLedger(TestTemplate):
             assert recs[0].draft_id == "draft-9"
 
     def test_mark_done_marks_dismissed(self):
-        with _patch_db(), _patch_fernet():
+        with patch_db(), _patch_fernet():
             upsert_judgments("alice", [_judgment("t1")], history_ids={"t1": "100"})
             svc = MagicMock()
             svc.users().labels().list().execute.return_value = {
@@ -556,7 +532,7 @@ class TestActionsUpdateLedger(TestTemplate):
             assert list_records("alice")[0].state == CurationState.dismissed
 
     def test_mark_state_noop_for_uncurated(self):
-        with _patch_db(), _patch_fernet():
+        with patch_db(), _patch_fernet():
             # No ledger row for t-missing -> mark_state returns False, no row made.
             assert mark_state("alice", "t-missing", CurationState.acted) is False
             assert list_records("alice") == []
@@ -578,7 +554,7 @@ class TestActionsUpdateLedger(TestTemplate):
 
 class TestPurge(TestTemplate):
     def test_purge_user_removes_rows(self):
-        with _patch_db(), _patch_fernet():
+        with patch_db(), _patch_fernet():
             upsert_judgments(
                 "alice",
                 [_judgment("t1"), _judgment("t2")],
@@ -591,7 +567,7 @@ class TestPurge(TestTemplate):
             assert len(list_records("bob")) == 1  # other users untouched
 
     def test_disconnect_purges_ledger(self):
-        with _patch_db() as factory, _patch_fernet():
+        with patch_db() as factory, _patch_fernet():
             s = factory()
             s.add(
                 GoogleToken(
@@ -610,7 +586,7 @@ class TestPurge(TestTemplate):
     def test_disconnect_survives_purge_failure(self):
         # The token is already revoked+committed before the purge runs, so a
         # purge DB error must not turn a successful disconnect into an error.
-        with _patch_db() as factory, _patch_fernet():
+        with patch_db() as factory, _patch_fernet():
             s = factory()
             s.add(
                 GoogleToken(
@@ -761,7 +737,7 @@ class TestInboxSearchIncremental(TestTemplate):
         }
 
     def test_since_history_id_uses_history_delta(self):
-        with _patch_db(), _patch_fernet():
+        with patch_db(), _patch_fernet():
             svc = MagicMock()
             svc.users().history().list().execute.return_value = {
                 "historyId": "999",
@@ -808,7 +784,7 @@ class TestInboxSearchIncremental(TestTemplate):
         # The unfiltered history delta can include archived/done threads after a
         # label-only change; they must be dropped so inbox_search stays scoped to
         # the triageable inbox.
-        with _patch_db(), _patch_fernet():
+        with patch_db(), _patch_fernet():
             svc = MagicMock()
             svc.users().history().list().execute.return_value = {
                 "historyId": "999",

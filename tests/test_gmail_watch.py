@@ -10,22 +10,16 @@ from __future__ import annotations
 
 import base64
 import json
-from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 from googleapiclient.errors import HttpError
 from httplib2 import Response
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from api_server.server import app
 from common import global_config
-from common.token_encryption import PlaintextEncryption
 from db import engine as db_engine
-from db.base import Base
 from db.models.gmail_push import ProcessedPubsubMessage
 from db.models.google_tokens import GoogleToken
 from db.models.webhooks import WebhookDelivery
@@ -37,36 +31,8 @@ from services.gmail_watch_svc import (
     renew_due_watches,
 )
 from services.webhooks_svc import webhook_subscribe
+from tests._harness import patch_db, plaintext_encryption
 from tests.test_template import TestTemplate
-
-
-@contextmanager
-def _patch_db():
-    orig_engine = db_engine._engine
-    orig_session = db_engine._SessionLocal
-    eng = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(eng)
-    factory = sessionmaker(bind=eng, autoflush=False, expire_on_commit=False)
-    db_engine._engine = eng
-    db_engine._SessionLocal = factory
-    try:
-        yield factory
-    finally:
-        db_engine._engine = orig_engine
-        db_engine._SessionLocal = orig_session
-
-
-@contextmanager
-def _plaintext_encryption():
-    with patch(
-        "services.webhooks_svc.require_encryption",
-        return_value=PlaintextEncryption(),
-    ):
-        yield
 
 
 def _seed_token(email="a@b.com", user_id="u1", history_id="100"):
@@ -127,7 +93,7 @@ def _http_error(status: int) -> HttpError:
 class TestWatchStart(TestTemplate):
     def test_start_persists_history_id_and_expiration(self):
         with (
-            _patch_db(),
+            patch_db(),
             patch.object(global_config, "GMAIL_PUBSUB_TOPIC", "projects/p/topics/t"),
             patch(
                 "services.gmail_watch_svc._get_gmail_client",
@@ -161,8 +127,8 @@ class TestProcessNotification(TestTemplate):
             history={"history": [{"messagesAdded": [{"message": {"id": "m1"}}]}]}
         )
         with (
-            _patch_db(),
-            _plaintext_encryption(),
+            patch_db(),
+            plaintext_encryption(),
             patch("services.gmail_watch_svc._get_gmail_client", return_value=client),
         ):
             _seed_token(history_id="100")
@@ -181,8 +147,8 @@ class TestProcessNotification(TestTemplate):
             history={"history": [{"messagesAdded": [{"message": {"id": "m1"}}]}]}
         )
         with (
-            _patch_db(),
-            _plaintext_encryption(),
+            patch_db(),
+            plaintext_encryption(),
             patch("services.gmail_watch_svc._get_gmail_client", return_value=client),
         ):
             _seed_token()
@@ -200,8 +166,8 @@ class TestProcessNotification(TestTemplate):
         # messages delivered as brand-new events.
         client = _fake_client(history_error=_http_error(404))
         with (
-            _patch_db(),
-            _plaintext_encryption(),
+            patch_db(),
+            plaintext_encryption(),
             patch("services.gmail_watch_svc._get_gmail_client", return_value=client),
         ):
             _seed_token(history_id="1")
@@ -219,8 +185,8 @@ class TestProcessNotification(TestTemplate):
         # must not rewind it (which would re-walk + re-deliver old messages).
         client = _fake_client(history={"history": []})
         with (
-            _patch_db(),
-            _plaintext_encryption(),
+            patch_db(),
+            plaintext_encryption(),
             patch("services.gmail_watch_svc._get_gmail_client", return_value=client),
         ):
             _seed_token(history_id="500")
@@ -266,8 +232,8 @@ class TestProcessNotification(TestTemplate):
             side_effect=_get
         )
         with (
-            _patch_db(),
-            _plaintext_encryption(),
+            patch_db(),
+            plaintext_encryption(),
             patch("services.gmail_watch_svc._get_gmail_client", return_value=client),
         ):
             _seed_token(history_id="100")
@@ -288,8 +254,8 @@ class TestProcessNotification(TestTemplate):
             MagicMock(side_effect=pages)
         )
         with (
-            _patch_db(),
-            _plaintext_encryption(),
+            patch_db(),
+            plaintext_encryption(),
             patch("services.gmail_watch_svc._get_gmail_client", return_value=client),
         ):
             _seed_token(history_id="100")
@@ -298,7 +264,7 @@ class TestProcessNotification(TestTemplate):
             assert result == {"status": "ok", "enqueued": 2}
 
     def test_unknown_email_is_acked_without_enqueue(self):
-        with _patch_db(), _plaintext_encryption():
+        with patch_db(), plaintext_encryption():
             result = process_notification("nobody@x.com", "5", "pubsub-u")
             assert result == {"status": "unknown_user"}
 
@@ -455,7 +421,7 @@ class TestRenewDueWatches(TestTemplate):
     def test_selects_only_topic_bound_near_expiry_rows(self):
         client = _fake_client()  # watch() returns a fresh historyId/expiration
         with (
-            _patch_db(),
+            patch_db(),
             patch.object(global_config, "GMAIL_PUBSUB_TOPIC", "projects/p/topics/t"),
             patch("services.gmail_watch_svc._get_gmail_client", return_value=client),
         ):

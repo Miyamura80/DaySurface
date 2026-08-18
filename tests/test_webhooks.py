@@ -18,14 +18,9 @@ from unittest.mock import patch
 
 import httpx
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from common import global_config
-from common.token_encryption import PlaintextEncryption
 from db import engine as db_engine
-from db.base import Base
 from db.models.webhooks import WebhookDelivery
 from models.webhooks import (
     WebhookListInput,
@@ -43,39 +38,8 @@ from services.webhooks_svc import (
     webhook_subscribe,
     webhook_unsubscribe,
 )
+from tests._harness import patch_db, plaintext_encryption
 from tests.test_template import TestTemplate
-
-
-@contextmanager
-def _patch_db():
-    """Wire an in-memory SQLite into db.engine for the duration of a test."""
-    orig_engine = db_engine._engine
-    orig_session = db_engine._SessionLocal
-    eng = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(eng)
-    session_factory = sessionmaker(bind=eng, autoflush=False, expire_on_commit=False)
-    db_engine._engine = eng
-    db_engine._SessionLocal = session_factory
-    try:
-        yield session_factory
-    finally:
-        db_engine._engine = orig_engine
-        db_engine._SessionLocal = orig_session
-
-
-@contextmanager
-def _plaintext_encryption():
-    """Force PlaintextEncryption so no Fernet key is needed under test."""
-    with patch(
-        "services.webhooks_svc.require_encryption",
-        return_value=PlaintextEncryption(),
-    ):
-        yield
-
 
 # A public IP the SSRF allowlist accepts, used to mock DNS for hostname seeds so
 # delivery's resolve-then-pin step succeeds without touching the real network.
@@ -114,7 +78,7 @@ def _mock_http(handler, *, addrinfo=_PUBLIC_ADDRINFO):
 
 class TestWebhookSubscriptions(TestTemplate):
     def test_subscribe_returns_secret_and_persists(self):
-        with _patch_db(), _plaintext_encryption():
+        with patch_db(), plaintext_encryption():
             res = webhook_subscribe(
                 WebhookSubscribeInput(user_id="u1", url="https://example.com/hook")
             )
@@ -130,7 +94,7 @@ class TestWebhookSubscriptions(TestTemplate):
             assert not hasattr(view, "secret")
 
     def test_subscribe_rejects_non_http_url(self):
-        with _patch_db(), _plaintext_encryption():
+        with patch_db(), plaintext_encryption():
             try:
                 webhook_subscribe(WebhookSubscribeInput(user_id="u1", url="ftp://nope"))
                 raise AssertionError("expected ValueError")
@@ -138,7 +102,7 @@ class TestWebhookSubscriptions(TestTemplate):
                 assert "http" in str(exc)
 
     def test_unsubscribe_deactivates_then_is_idempotent(self):
-        with _patch_db(), _plaintext_encryption():
+        with patch_db(), plaintext_encryption():
             res = webhook_subscribe(
                 WebhookSubscribeInput(user_id="u1", url="https://e.com/h")
             )
@@ -152,7 +116,7 @@ class TestWebhookSubscriptions(TestTemplate):
             assert second.unsubscribed is False
 
     def test_rotate_secret_changes_secret(self):
-        with _patch_db(), _plaintext_encryption():
+        with patch_db(), plaintext_encryption():
             res = webhook_subscribe(
                 WebhookSubscribeInput(user_id="u1", url="https://e.com/h")
             )
@@ -165,7 +129,7 @@ class TestWebhookSubscriptions(TestTemplate):
     def test_subscribe_rejects_private_and_metadata_ips(self):
         # SSRF guard: literal private / link-local addresses are blocked
         # regardless of DEV_ENV so a tenant cannot reach cloud metadata.
-        with _patch_db(), _plaintext_encryption():
+        with patch_db(), plaintext_encryption():
             for bad in (
                 "https://169.254.169.254/latest/meta-data/",  # link-local
                 "https://10.0.0.5/internal",  # private
@@ -179,7 +143,7 @@ class TestWebhookSubscriptions(TestTemplate):
         # CGNAT / shared address space (100.64/10) and unique-local IPv6
         # (fc00::/7). Both are non-global; neither is caught by an is_private-
         # only check on every Python. Error type/message stay the same.
-        with _patch_db(), _plaintext_encryption():
+        with patch_db(), plaintext_encryption():
             for bad in (
                 "https://100.64.0.1/hook",  # CGNAT (RFC 6598 shared space)
                 "https://[fc00::1]/hook",  # IPv6 unique-local
@@ -190,8 +154,8 @@ class TestWebhookSubscriptions(TestTemplate):
 
     def test_subscribe_rejects_plaintext_http_to_public_host(self):
         with (
-            _patch_db(),
-            _plaintext_encryption(),
+            patch_db(),
+            plaintext_encryption(),
             pytest.raises(ValueError, match="https"),
         ):
             webhook_subscribe(
@@ -215,7 +179,7 @@ class TestEnqueueEvent(TestTemplate):
         )
 
     def test_fans_out_to_matching_active_subs(self):
-        with _patch_db(), _plaintext_encryption():
+        with patch_db(), plaintext_encryption():
             self._make_sub("u1")
             with db_engine.use_db_session() as session:
                 event_id = enqueue_event(
@@ -232,7 +196,7 @@ class TestEnqueueEvent(TestTemplate):
                 assert deliveries[0].status == "pending"
 
     def test_no_delivery_when_event_type_filtered_out(self):
-        with _patch_db(), _plaintext_encryption():
+        with patch_db(), plaintext_encryption():
             self._make_sub("u1", event_types=["other.event"])
             with db_engine.use_db_session() as session:
                 event_id = enqueue_event(
@@ -247,7 +211,7 @@ class TestEnqueueEvent(TestTemplate):
                 assert session.query(WebhookDelivery).count() == 0
 
     def test_fans_out_to_all_matching_subs_only(self):
-        with _patch_db(), _plaintext_encryption():
+        with patch_db(), plaintext_encryption():
             self._make_sub("u1")  # matches all (no filter)
             self._make_sub("u1", event_types=["gmail.message.new"])  # matches
             self._make_sub("u1", event_types=["other.event"])  # no match
@@ -300,7 +264,7 @@ class TestDelivery(TestTemplate):
             captured["body"] = request.content
             return httpx.Response(200)
 
-        with _patch_db(), _plaintext_encryption():
+        with patch_db(), plaintext_encryption():
             res = self._seed()
             with _mock_http(handler):
                 counts = drain_due_deliveries()
@@ -334,7 +298,7 @@ class TestDelivery(TestTemplate):
         def handler(_request: httpx.Request) -> httpx.Response:
             return httpx.Response(500)
 
-        with _patch_db(), _plaintext_encryption():
+        with patch_db(), plaintext_encryption():
             self._seed()
             before = datetime.now(UTC)
             with _mock_http(handler):
@@ -358,8 +322,8 @@ class TestDelivery(TestTemplate):
             return httpx.Response(503)
 
         with (
-            _patch_db(),
-            _plaintext_encryption(),
+            patch_db(),
+            plaintext_encryption(),
             patch.object(global_config, "WEBHOOK_MAX_ATTEMPTS", 1),
         ):
             self._seed()
@@ -379,7 +343,7 @@ class TestDelivery(TestTemplate):
             calls["n"] += 1
             return httpx.Response(200)
 
-        with _patch_db(), _plaintext_encryption():
+        with patch_db(), plaintext_encryption():
             res = self._seed()
             # Deactivate the sub after the delivery was enqueued.
             webhook_unsubscribe(
@@ -402,7 +366,7 @@ class TestDelivery(TestTemplate):
         def boom(_ciphertext):
             raise ValueError("undecryptable secret")
 
-        with _patch_db(), _plaintext_encryption():
+        with patch_db(), plaintext_encryption():
             self._seed()
             with patch(
                 "services.webhook_delivery_svc.decrypt_secret", side_effect=boom

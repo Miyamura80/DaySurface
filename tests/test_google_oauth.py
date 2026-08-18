@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import base64
 import json
-from contextlib import contextmanager
 from datetime import UTC, datetime
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
@@ -12,15 +11,10 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from api_server.server import app
 from common import global_config
 from common.token_encryption import PlaintextEncryption
-from db import engine as db_engine
-from db.base import Base
 from db.models.google_tokens import GoogleToken
 from models.gmail import (
     GmailConnectInput,
@@ -35,31 +29,12 @@ from services.gmail_svc import (
     gmail_disconnect,
     gmail_status,
 )
+from tests._harness import patch_db
 from tests.test_template import TestTemplate
 
 # ---------------------------------------------------------------------------
 # DB fixture: in-memory SQLite wired into db.engine for the duration of a test
 # ---------------------------------------------------------------------------
-
-
-@contextmanager
-def _patch_db():
-    orig_engine = db_engine._engine
-    orig_session = db_engine._SessionLocal
-    eng = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(eng)
-    session_factory = sessionmaker(bind=eng, autoflush=False, expire_on_commit=False)
-    db_engine._engine = eng
-    db_engine._SessionLocal = session_factory
-    try:
-        yield session_factory
-    finally:
-        db_engine._engine = orig_engine
-        db_engine._SessionLocal = orig_session
 
 
 def _fake_id_token(email: str) -> str:
@@ -142,14 +117,14 @@ class TestStateSigning(TestTemplate):
 
 class TestGmailStatusService(TestTemplate):
     def test_not_connected_when_no_row(self):
-        with _patch_db():
+        with patch_db():
             result = gmail_status(GmailStatusInput(user_id="ghost"))
         assert result.connected is False
         assert result.email is None
         assert result.scopes == []
 
     def test_connected_when_active_row(self):
-        with _patch_db() as factory:
+        with patch_db() as factory:
             s = factory()
             s.add(
                 GoogleToken(
@@ -170,7 +145,7 @@ class TestGmailStatusService(TestTemplate):
         assert result.scopes == ["openid", "email"]
 
     def test_not_connected_when_revoked(self):
-        with _patch_db() as factory:
+        with patch_db() as factory:
             s = factory()
             s.add(
                 GoogleToken(
@@ -192,12 +167,12 @@ class TestGmailStatusService(TestTemplate):
 
 class TestGmailDisconnectService(TestTemplate):
     def test_returns_false_when_no_row(self):
-        with _patch_db():
+        with patch_db():
             result = gmail_disconnect(GmailDisconnectInput(user_id="ghost"))
         assert result.revoked is False
 
     def test_revokes_locally_even_when_http_fails(self):
-        with _patch_db() as factory:
+        with patch_db() as factory:
             s = factory()
             s.add(
                 GoogleToken(
@@ -241,14 +216,14 @@ def _client():
 
 class TestCallbackRoute(TestTemplate):
     def test_missing_state_returns_400(self):
-        with _patch_db():
+        with patch_db():
             client = _client()
             resp = client.get("/api/v1/auth/google/callback?code=abc")
         assert resp.status_code == 400
         assert "state" in resp.text.lower()
 
     def test_bad_state_returns_400(self):
-        with _patch_db():
+        with patch_db():
             client = _client()
             resp = client.get(
                 "/api/v1/auth/google/callback?code=abc&state=garbage.value"
@@ -256,7 +231,7 @@ class TestCallbackRoute(TestTemplate):
         assert resp.status_code == 400
 
     def test_error_param_returns_400(self):
-        with _patch_db():
+        with patch_db():
             client = _client()
             resp = client.get("/api/v1/auth/google/callback?error=access_denied")
         assert resp.status_code == 400
@@ -278,7 +253,7 @@ class TestCallbackRoute(TestTemplate):
             return body
 
         with (
-            _patch_db() as factory,
+            patch_db() as factory,
             patch.object(global_config, "GOOGLE_CLIENT_ID", "cid"),
             patch.object(global_config, "GOOGLE_CLIENT_SECRET", "csecret"),
             patch.object(
