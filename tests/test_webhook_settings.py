@@ -65,6 +65,30 @@ class TestSettingsSnapshot(TestTemplate):
             assert res.push_available is False
             assert res.subscriptions == []
 
+    def test_erased_credential_not_reported_connected(self):
+        """A row whose ciphertext was erased (but not yet flagged revoked) must
+        not render as connected: every Gmail client path fails closed on it, so
+        Settings claiming a connection would be a lie the next call exposes."""
+        with (
+            _patch_db(),
+            patch.object(global_config, "GMAIL_PUBSUB_TOPIC", None),
+        ):
+            with db_engine.use_db_session() as session:
+                session.add(
+                    GoogleToken(
+                        user_id="u1",
+                        email="me@example.com",
+                        refresh_token_enc=None,
+                        key_id="plaintext",
+                    )
+                )
+                session.commit()
+
+            res = webhook_settings(WebhookSettingsInput(user_id="u1"))
+            assert res.gmail_connected is False
+            assert res.gmail_email is None
+            assert res.watching is False
+
     def test_connected_with_watch_and_subscription(self):
         with (
             _patch_db(),
