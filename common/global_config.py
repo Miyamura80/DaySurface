@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from cryptography.fernet import Fernet
 from dotenv import dotenv_values, load_dotenv
 from loguru import logger
 from pydantic import Field, model_validator
@@ -318,6 +319,29 @@ class Config(BaseSettings):
             raise ValueError(
                 "SESSION_SECRET_KEY must be set to a strong random value in production"
             )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_token_enc_key(self) -> "Config":
+        # Normalize blank/whitespace-only values to None so an empty .env entry
+        # falls back to dev PlaintextEncryption (or the prod RuntimeError in
+        # require_encryption()) instead of being treated as a real key. A stray
+        # inline comment in .env.example historically leaked in here as the value
+        # (see .env.example), so a non-empty key is validated eagerly: garbage
+        # fails loudly at boot rather than deep inside a later encrypt call.
+        if self.GOOGLE_TOKEN_ENC_KEY is not None:
+            key = self.GOOGLE_TOKEN_ENC_KEY.strip() or None
+            self.GOOGLE_TOKEN_ENC_KEY = key
+            if key is not None:
+                try:
+                    Fernet(key.encode())
+                except (ValueError, TypeError) as exc:
+                    raise ValueError(
+                        "GOOGLE_TOKEN_ENC_KEY must be a valid Fernet key "
+                        "(url-safe base64-encoded 32-byte key). Generate one with: "
+                        "python -c 'from cryptography.fernet import Fernet; "
+                        "print(Fernet.generate_key().decode())'"
+                    ) from exc
         return self
 
     @model_validator(mode="after")
