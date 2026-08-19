@@ -65,6 +65,10 @@ CLOUD_SANDBOX_IGNORES = [
     # off the allowlist and are skipped in the sandbox only.
     r"https?://(www\.)?claude\.ai(/|\?|$)",
     r"https?://(www\.)?vscode\.dev(/|\?|$)",
+    # cursor.com/install-mcp takes a base64 `config=` deep-link parameter the
+    # host decodes and acts on - same relay shape as the other install links, so
+    # it stays off the allowlist and is skipped in the sandbox only.
+    r"https?://(www\.)?cursor\.com(/|\?|$)",
     # GitHub hosts user-writable, readable-back surfaces (gists, repo contents,
     # issue bodies) - a textbook publish-then-read exfil channel. Skip in the
     # sandbox rather than grant standing egress for repo links.

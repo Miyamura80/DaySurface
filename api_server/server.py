@@ -27,7 +27,6 @@ from api_server.routes import (
     health,
     index,
     services,
-    stream,
     well_known,
 )
 from api_server.routes.google import webhooks as google_webhooks
@@ -172,7 +171,6 @@ app.include_router(index.router)
 app.include_router(health.router)
 app.include_router(well_known.router)
 app.include_router(services.router)
-app.include_router(stream.router)
 app.include_router(auth.router)
 app.include_router(google_oauth.router)
 app.include_router(checkout.router)

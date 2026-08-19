@@ -1,14 +1,25 @@
-"""Auto-register every service as an authenticated ``POST /api/v1/services/{name}``."""
+"""Auto-register every service as an authenticated ``POST /api/v1/services/{name}``.
+
+Administrative services (config/doctor) are **CLI-only**: they are not registered
+as HTTP routes at all, so no administrative function is reachable over the
+network. This closes CASA AL1 finding 3.3.1 ("administrative interfaces shall use
+appropriate MFA") by removing the interface rather than adding a second factor -
+every interactive login already satisfies single-factor ``admin:*`` (interactive
+users get ``scopes=["*"]``), so a scope gate could not hold the boundary.
+
+The CLI-only set is derived from the MCP transport's
+``EXCLUDED_DEFAULT_MCP_SERVICES`` (the same services hidden from the LLM tool
+surface), minus ``greet`` - the one non-administrative member, a plain demo
+endpoint kept reachable over REST with the ordinary ``services:execute`` scope.
+Deriving from that single source of truth fails closed: any service added to
+``EXCLUDED_DEFAULT_MCP_SERVICES`` is off *both* remote transports (MCP and HTTP)
+until it is explicitly exempted the way ``greet`` is.
+"""
 
 from fastapi import APIRouter, Depends, Request
 
 from api_server.auth import AuthenticatedUser
-from api_server.auth.scopes import (
-    ADMIN_READ,
-    ADMIN_WRITE,
-    SERVICES_EXECUTE,
-    require_scopes,
-)
+from api_server.auth.scopes import SERVICES_EXECUTE, require_scopes
 from api_server.billing.limits import ensure_daily_limit
 from api_server.billing.paywall import enforce_payment
 from api_server.idempotency import execute_idempotent
@@ -17,16 +28,14 @@ from services import ServiceEntry, discover_services, get_registry
 router = APIRouter(prefix="/api/v1/services", tags=["services"])
 
 
-def _admin_only_services() -> frozenset[str]:
-    """Services whose REST route requires an administrative scope.
+def _cli_only_services() -> frozenset[str]:
+    """Services with no HTTP route at all - reachable only through the CLI.
 
     Source of truth is the MCP transport's ``EXCLUDED_DEFAULT_MCP_SERVICES`` set
     (config/doctor administration + the ``greet`` demo). We reuse that constant
-    rather than re-listing the names so the two transports can't drift, and drop
-    only ``greet`` - the one non-administrative member, a plain demo endpoint
-    that stays reachable with the ordinary ``services:execute`` grant. Deriving
-    this way fails closed: any service later hidden from the MCP tool surface is
-    admin-gated here until it is explicitly exempted, never silently downgraded.
+    rather than re-listing the names so the two remote transports can't drift,
+    and drop only ``greet`` - the one non-administrative member, which stays
+    reachable over REST with the ordinary ``services:execute`` grant.
     """
     # Deferred like the other api_server -> mcp_server imports (well_known.py,
     # index.py): keeps module import order robust even though there is no cycle.
@@ -35,36 +44,29 @@ def _admin_only_services() -> frozenset[str]:
     return EXCLUDED_DEFAULT_MCP_SERVICES - {"greet"}
 
 
-def _required_scope(entry: ServiceEntry, admin_services: frozenset[str]) -> str:
-    """Scope required to invoke this service over REST.
-
-    Administrative services (config/doctor) require an admin scope - ``admin:write``
-    for the mutating ones (``config_set``, ``doctor_fix``), ``admin:read`` for the
-    read-only ones. Every other service keeps the standard ``services:execute``
-    grant. This is the only place ``admin:*`` is enforced, so a ``standard`` key
-    (which lacks it) is rejected from these privileged functions with a 403.
-    """
-    if entry.name in admin_services:
-        return ADMIN_WRITE if entry.mutating else ADMIN_READ
-    return SERVICES_EXECUTE
-
-
 def _register_service_routes() -> None:
-    """Discover all service modules and create one route per service."""
+    """Discover all service modules and create one route per non-CLI-only service.
+
+    Services in :func:`_cli_only_services` get no route registered - no handler,
+    no 403 stub, just a 404 for any HTTP caller. Every registered service uses
+    the same ``services:execute`` scope.
+    """
     discover_services()
-    admin_services = _admin_only_services()
+    cli_only = _cli_only_services()
     for entry in get_registry():
-        _make_route(entry, _required_scope(entry, admin_services))
+        if entry.name in cli_only:
+            continue
+        _make_route(entry)
 
 
-def _make_route(entry: ServiceEntry, required_scope: str) -> None:
+def _make_route(entry: ServiceEntry) -> None:
     """Register ``POST /api/v1/services/{name}`` for one service.
 
     Read-only services run the compute directly. Mutating services run the same
     compute through ``execute_idempotent``, which enforces ``Idempotency-Key``
-    and replays the stored response on retries. ``required_scope`` is the scope
-    the caller must hold (``services:execute`` for ordinary services, ``admin:*``
-    for administrative ones - see ``_required_scope``).
+    and replays the stored response on retries. Every route requires
+    ``services:execute``; administrative services have no route at all (see the
+    module docstring).
     """
     func = entry.func
     input_model = entry.input_model
@@ -79,7 +81,7 @@ def _make_route(entry: ServiceEntry, required_scope: str) -> None:
     def _handler(
         body: input_model,  # ty: ignore[invalid-type-form]
         request: Request,
-        _user: AuthenticatedUser = Depends(require_scopes(required_scope)),
+        _user: AuthenticatedUser = Depends(require_scopes(SERVICES_EXECUTE)),
     ):
         if "user_id" in input_model.model_fields:  # ty: ignore[unresolved-attribute]
             body = body.model_copy(update={"user_id": _user.user_id})

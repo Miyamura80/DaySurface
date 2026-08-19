@@ -100,6 +100,14 @@ Each API key has scopes that control what it can do:
 | `admin:read` | Read admin data |
 | `admin:write` | Admin operations |
 
+<Callout type="info">
+No HTTP endpoint currently requires `admin:read` or `admin:write`. Administrative
+functions (`config`, `doctor`) are **CLI-only** - they have no REST route, so
+they cannot be reached over the network regardless of scope. Use the `daysurface`
+CLI (`daysurface config …`, `daysurface doctor`) for those operations. The
+`admin:*` scopes remain defined so existing keys that carry them stay valid.
+</Callout>
+
 Wildcards: `*` grants all scopes, `services:*` grants all service scopes.
 
 A new key's scopes cannot exceed the creating key's scopes (no privilege escalation).

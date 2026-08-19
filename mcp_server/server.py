@@ -135,10 +135,11 @@ mcp: FastMCP = FastMCP(
 _populated: bool = False
 # Administrative / CLI-only services that are NOT auto-exposed as MCP tools.
 # This is the single source of truth for that classification: the REST transport
-# (api_server/routes/services.py) also consumes it - it keeps these services
-# reachable but gates the administrative ones (config/doctor) behind admin
-# scopes, exempting only the `greet` demo. Keep this public so REST can import
-# it instead of duplicating the list.
+# (api_server/routes/services.py) also consumes it - it registers NO HTTP route
+# for these administrative services (config/doctor), so they are CLI-only and
+# unreachable over the network, exempting only the `greet` demo (which keeps its
+# ordinary `services:execute` route). Keep this public so REST can import it
+# instead of duplicating the list.
 EXCLUDED_DEFAULT_MCP_SERVICES = frozenset(
     {
         "config_get",
@@ -151,15 +152,15 @@ EXCLUDED_DEFAULT_MCP_SERVICES = frozenset(
 )
 
 # Mutating webhook-management services kept OFF the default LLM (MCP) tool
-# surface, but - unlike EXCLUDED_DEFAULT_MCP_SERVICES - NOT admin-gated on HTTP.
+# surface, but - unlike EXCLUDED_DEFAULT_MCP_SERVICES - still reachable over HTTP.
 # The assistant is fed untrusted email content, so an injected instruction could
 # otherwise make the model subscribe an attacker endpoint (webhook_subscribe
 # also returns the signing secret) or rotate/remove a subscription - a silent
 # mail-exfil primitive. Users drive these through the Settings app
 # (`settings.subscribe`, an app-only tool); programmatic HTTP integrators keep
 # the authenticated route with an ordinary `services:execute` key. This is
-# MCP-only: it does not appear in `_admin_only_services()`, so the REST scope is
-# unchanged. `webhook_list` (read-only) stays on the LLM surface.
+# MCP-only: it is NOT in `_cli_only_services()`, so these services keep their
+# REST route. `webhook_list` (read-only) stays on the LLM surface.
 LLM_HIDDEN_SERVICES = frozenset(
     {
         "webhook_subscribe",
