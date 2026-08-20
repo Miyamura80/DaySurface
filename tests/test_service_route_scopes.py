@@ -123,10 +123,14 @@ class TestServiceRouteSurface(TestTemplate):
         the requirement off each route's resolved dependency, so a route wired
         with a different (or missing) scope would fail here.
 
-        (Behavioral proof that this gate is enforced - a ``services:read`` key
-        gets 403, ``services:execute`` gets 200 - lives in ``TestServiceRouteScopes``
-        below; a full behavioral sweep over every route is unusable because the
-        rate limiter trips after ~5 requests from one client.)
+        Why introspection rather than a behavioral sweep: proving a route
+        requires *exactly* ``services:execute`` needs both a rejection (a
+        ``services:read`` key 403s) *and* an acceptance (an ``services:execute``
+        key succeeds). The acceptance leg would have to actually execute every
+        service - real Gmail/PDF/DB backends - so it can't run surface-wide.
+        Behavioral proof that the gate is enforced is spot-checked on ``greet``
+        in ``TestServiceRouteScopes`` below; this test carries the surface-wide
+        exact-scope guarantee.
         """
         routes = _service_routes()
         assert routes, "expected service routes to be registered"
