@@ -13,6 +13,7 @@ gated by the single ``services:execute`` scope.
 from contextlib import contextmanager
 from unittest.mock import patch
 
+from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -55,15 +56,37 @@ def _override_use_db_session():
         session.close()
 
 
+_PREFIX = "/api/v1/services/"
+
+
+def _service_routes() -> list[APIRoute]:
+    """Every registered ``/api/v1/services/{name}`` route."""
+    return [
+        r for r in app.routes if isinstance(r, APIRoute) and r.path.startswith(_PREFIX)
+    ]
+
+
 def _service_route_names() -> set[str]:
     """Names of every registered ``/api/v1/services/{name}`` route."""
-    prefix = "/api/v1/services/"
-    names: set[str] = set()
-    for route in app.routes:
-        path = getattr(route, "path", "")
-        if path.startswith(prefix):
-            names.add(path[len(prefix) :])
-    return names
+    return {r.path[len(_PREFIX) :] for r in _service_routes()}
+
+
+def _route_required_scopes(route: APIRoute) -> set[str]:
+    """Scopes the route's ``require_scopes(...)`` dependency enforces.
+
+    ``require_scopes(*scopes)`` returns a nested ``_check`` closure that captures
+    the requested scopes as its single free variable; we read them back off the
+    route's resolved dependency tree so the assertion measures the *actual* gate
+    wired onto the endpoint, not a re-derivation of what it should be.
+    """
+    for dep in route.dependant.dependencies:
+        call = dep.call
+        if getattr(call, "__qualname__", "").startswith("require_scopes"):
+            for cell in getattr(call, "__closure__", None) or ():
+                value = cell.cell_contents
+                if isinstance(value, tuple) and all(isinstance(s, str) for s in value):
+                    return {s for s in value if isinstance(s, str)}
+    return set()
 
 
 class TestServiceRouteSurface(TestTemplate):
@@ -78,16 +101,26 @@ class TestServiceRouteSurface(TestTemplate):
         for name in _CLI_ONLY:
             assert name not in routes, f"{name} must not have an HTTP route"
 
-    def test_every_registered_service_route_is_execute_scoped(self):
-        """Every service that *does* get a route uses ``services:execute`` - no
-        route carries an admin scope any more, and none of the CLI-only names
-        leak back onto the surface."""
+    def test_registered_routes_cover_registry_minus_cli_only(self):
+        """The HTTP surface is exactly the registry minus the CLI-only services -
+        no CLI-only name leaks back on, and ``greet`` stays exposed."""
         discover_services()
         registered = {e.name for e in get_registry()}
         routes = _service_route_names()
-        # Routes cover exactly the registry minus the CLI-only services.
         assert routes == registered - frozenset(_CLI_ONLY)
         assert "greet" in routes
+
+    def test_every_registered_service_route_requires_only_execute(self):
+        """Every registered route's actual scope gate is exactly
+        ``{"services:execute"}`` - no admin scope survives on any endpoint. Reads
+        the requirement off each route's resolved dependency, so a route wired
+        with a different (or missing) scope would fail here."""
+        routes = _service_routes()
+        assert routes, "expected service routes to be registered"
+        for route in routes:
+            assert _route_required_scopes(route) == {"services:execute"}, (
+                f"{route.path} must require exactly services:execute"
+            )
 
 
 class TestServiceRouteScopes(TestTemplate):
