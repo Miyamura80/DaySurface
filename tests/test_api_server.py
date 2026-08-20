@@ -114,9 +114,12 @@ class TestAPIServer(TestTemplate):
         """Ordinary services get API routes; CLI-only admin services do not."""
         routes = [r.path for r in app.routes if hasattr(r, "path")]
         assert "/api/v1/services/greet" in routes
-        # config/doctor are CLI-only - no HTTP route at all.
-        assert "/api/v1/services/config_show" not in routes
-        assert "/api/v1/services/doctor" not in routes
+        # All five config/doctor admin services are CLI-only - no HTTP route.
+        for name in ("config_get", "config_set", "config_show", "doctor", "doctor_fix"):
+            assert f"/api/v1/services/{name}" not in routes
+        # The SSE doctor stream (which also ran doctor/doctor_fix over HTTP) is
+        # removed too - it was the real doctor endpoint, so pin its absence.
+        assert "/api/v1/stream/doctor" not in routes
 
     def test_mutating_service_requires_idempotency_key(self):
         """gmail_send is mutating=True, so its route enforces Idempotency-Key."""

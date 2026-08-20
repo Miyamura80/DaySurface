@@ -71,13 +71,20 @@ def _service_route_names() -> set[str]:
     return {r.path[len(_PREFIX) :] for r in _service_routes()}
 
 
-def _route_required_scopes(route: APIRoute) -> set[str]:
+def _route_required_scopes(route: APIRoute) -> set[str] | None:
     """Scopes the route's ``require_scopes(...)`` dependency enforces.
 
     ``require_scopes(*scopes)`` returns a nested ``_check`` closure that captures
     the requested scopes as its single free variable; we read them back off the
     route's resolved dependency tree so the assertion measures the *actual* gate
     wired onto the endpoint, not a re-derivation of what it should be.
+
+    Returns ``None`` (not an empty set) when no ``require_scopes`` dependency /
+    scope tuple can be located. This reads private FastAPI + ``require_scopes``
+    internals, so if either restructures (the dep is wrapped, the scopes stop
+    living in a single closure cell), the caller can distinguish "introspection
+    broke" from "route requires no scope" and fail with an honest message rather
+    than a misleading wrong-scope one.
     """
     for dep in route.dependant.dependencies:
         call = dep.call
@@ -86,7 +93,7 @@ def _route_required_scopes(route: APIRoute) -> set[str]:
                 value = cell.cell_contents
                 if isinstance(value, tuple) and all(isinstance(s, str) for s in value):
                     return {s for s in value if isinstance(s, str)}
-    return set()
+    return None
 
 
 class TestServiceRouteSurface(TestTemplate):
@@ -114,12 +121,23 @@ class TestServiceRouteSurface(TestTemplate):
         """Every registered route's actual scope gate is exactly
         ``{"services:execute"}`` - no admin scope survives on any endpoint. Reads
         the requirement off each route's resolved dependency, so a route wired
-        with a different (or missing) scope would fail here."""
+        with a different (or missing) scope would fail here.
+
+        (Behavioral proof that this gate is enforced - a ``services:read`` key
+        gets 403, ``services:execute`` gets 200 - lives in ``TestServiceRouteScopes``
+        below; a full behavioral sweep over every route is unusable because the
+        rate limiter trips after ~5 requests from one client.)
+        """
         routes = _service_routes()
         assert routes, "expected service routes to be registered"
         for route in routes:
-            assert _route_required_scopes(route) == {"services:execute"}, (
-                f"{route.path} must require exactly services:execute"
+            found = _route_required_scopes(route)
+            assert found is not None, (
+                f"{route.path}: could not locate a require_scopes dependency - "
+                "the scope-introspection helper is likely stale, not the route"
+            )
+            assert found == {"services:execute"}, (
+                f"{route.path} must require exactly services:execute, got {found}"
             )
 
 
@@ -178,6 +196,12 @@ class TestServiceRouteScopes(TestTemplate):
             assert client.post("/api/v1/services/doctor", json={}).status_code == 404
             assert (
                 client.post("/api/v1/services/doctor_fix", json={}).status_code == 404
+            )
+            # The SSE variant that also ran doctor/doctor_fix over HTTP is gone
+            # too - this was the largest removal, so it gets an explicit 404.
+            assert (
+                client.post("/api/v1/stream/doctor", json={"fix": True}).status_code
+                == 404
             )
 
     def test_execute_scope_reaches_greet(self):
