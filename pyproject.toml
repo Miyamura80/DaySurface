@@ -67,7 +67,6 @@ dependencies = [
     "google-auth>=2.53.0",
     "psycopg2-binary>=2.9.12",
     "rank-bm25>=0.2.2",
-    "sse-starlette>=3.4.5",
     "pypdf>=6.14.2",
     "pyhanko>=0.35.2",
     "pypdfium2>=5.12.1",

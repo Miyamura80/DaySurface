@@ -92,8 +92,11 @@ class TestScopes(TestTemplate):
     # --- admin scope boundary (Finding B) ---
 
     def test_admin_scopes_defined(self):
-        """ADMIN_* remain defined - they are enforced on the config/doctor
-        REST routes (see tests/test_api_server.py), not dead constants."""
+        """ADMIN_* remain defined so API keys can still carry them and
+        ``validate_scopes`` keeps accepting them. No HTTP endpoint currently
+        *requires* them - the administrative config/doctor services are CLI-only
+        (see tests/test_service_route_scopes.py) - but the constants must not be
+        dropped while keys in the wild may already hold the scope."""
         assert "admin:read" in ALL_SCOPES
         assert "admin:write" in ALL_SCOPES
 

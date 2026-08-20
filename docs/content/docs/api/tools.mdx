@@ -161,23 +161,21 @@ draft, so the content exists and is reviewable before it goes out.
 
 ## Operational tools
 
-The server also exposes its own maintenance services over the same route shape:
+The server's own maintenance services (`config_show`, `config_get`, `config_set`,
+`doctor`, `doctor_fix`) are **CLI-only** - they are not exposed over HTTP and have
+no REST route. A `POST /api/v1/services/config_get` (or any of the others) returns
+`404` for every caller, regardless of scope.
 
-| Tool | Description |
-|------|-------------|
-| `config_show` | Show the full configuration |
-| `config_get` | Get a single value by dot-separated key |
-| `config_set` | Write a config override (mutating) |
-| `doctor` | Run environment health checks |
-| `doctor_fix` | Run health checks and auto-fix what it can (mutating) |
+Administer the server through the `daysurface` CLI instead:
 
 ```bash
-curl -X POST https://api.daysurface.com/api/v1/services/config_get \
-  -H "Authorization: Bearer sk_live_..." \
-  -H "Content-Type: application/json" \
-  -d '{"key": "llm_config.cache_enabled"}'
+daysurface config show
+daysurface config get llm_config.cache_enabled
+daysurface config set llm_config.cache_enabled false
+daysurface doctor
+daysurface doctor --fix
 ```
 
-```json
-{ "key": "llm_config.cache_enabled", "value": true }
-```
+This keeps administrative functions off the network entirely (CASA AL1 control
+3.3.1): the remote HTTP surface carries only the ordinary, `services:execute`-scoped
+tools above.

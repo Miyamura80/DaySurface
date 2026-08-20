@@ -20,12 +20,6 @@ class DoctorFixInput(BaseModel):
     """Input for ``doctor_fix`` - no options: it always attempts fixes."""
 
 
-class DoctorStreamInput(DoctorInput):
-    """Input for the SSE streaming variant, which may also apply fixers."""
-
-    fix: bool = False
-
-
 class CheckResultModel(BaseModel):
     name: str
     status: Literal["pass", "fail", "warn"]
@@ -36,10 +30,4 @@ class CheckResultModel(BaseModel):
 
 class DoctorResult(BaseModel):
     checks: list[CheckResultModel]
-    has_failures: bool
-
-
-class DoctorStreamDone(BaseModel):
-    """Payload of the terminal ``done`` event on the doctor SSE stream."""
-
     has_failures: bool
