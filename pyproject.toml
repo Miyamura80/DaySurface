@@ -29,7 +29,7 @@ dependencies = [
     "loguru>=0.7.3",
     "vulture>=2.14",
     "dspy>=3.1.2",
-    "langfuse>=4.7.1",
+    "langfuse>=4.14.1",
     "litellm>=1.59.8,!=1.82.*",
     "tenacity>=9.0.0",
     "pillow>=12.3.0",
