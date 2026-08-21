@@ -23,3 +23,4 @@ export * from "./support";
 export * from "./webhooks";
 export * from "./client-guides";
 export * from "./triage";
+export * from "./waitlist";

@@ -47,6 +47,7 @@ export const footer: { columns: FooterColumn[]; copyright: string } = {
       heading: "Product",
       links: [
         { label: "Get started", href: "/connect" },
+        { label: "Waitlist", href: "/waitlist" },
         { label: "Features", href: "/#features" },
         { label: "Compare", href: "/compare" },
         // The /pricing page only ships when pricing.enabled - don't link a dead route otherwise.

@@ -1,0 +1,296 @@
+---
+/**
+ * /waitlist - early-access signup.
+ *
+ * Reuses the homepage hero's client-toggle product animation (<ChatMock />, the
+ * same four-client shells + the ConvoScroll "how it works" loop) so the page
+ * shows what people are signing up for while they sign up. The email form is
+ * data-driven (src/config/landing/waitlist.ts) and progressively enhanced: with
+ * JS it POSTs to `waitlist.endpoint` via fetch and swaps in an inline success
+ * state; with JS off it is an ordinary <form> that submits to the same endpoint.
+ *
+ * noindex: a waitlist is a conversion surface, not something to rank; keeping it
+ * out of the index also keeps the site's "no signup to use it" story unmuddied
+ * in search results while still being reachable from the footer.
+ */
+import Base from "../layouts/Base.astro";
+import Nav from "../components/Nav.astro";
+import Footer from "../components/Footer.astro";
+import ChatMock from "../components/ChatMock.astro";
+import { site, waitlist } from "../config/landing";
+
+const origin = (Astro.site ?? new URL(site.url)).origin;
+
+const pageTitle = `Waitlist - ${site.name}`;
+const pageDescription = waitlist.subhead;
+
+// Inline glyphs for the perks list, keyed by the config's `icon`. Kept here (not
+// in config) because they're markup, not copy - config stays string-only.
+const perkPaths: Record<string, string> = {
+  bolt: "M13 2L3 14h7l-1 8 10-12h-7z",
+  shield: "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z",
+  spark: "M12 2v6m0 8v6M2 12h6m8 0h6M5 5l4 4m6 6l4 4m0-14l-4 4m-6 6l-4 4",
+};
+
+const jsonLd = [
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: site.url },
+      { "@type": "ListItem", position: 2, name: "Waitlist", item: `${origin}/waitlist` },
+    ],
+  },
+];
+---
+
+<Base title={pageTitle} description={pageDescription} noindex={true}>
+  <script
+    type="application/ld+json"
+    is:inline
+    slot="head"
+    set:html={JSON.stringify(jsonLd)}
+  />
+
+  <Nav />
+
+  <main>
+    <section id="top" class="relative overflow-hidden">
+      <div class="grid-bg pointer-events-none absolute inset-0"></div>
+      <div class="glow pointer-events-none absolute inset-x-0 top-0 h-[600px]"></div>
+
+      <div
+        class="relative mx-auto grid max-w-6xl items-center gap-12 px-4 pt-14 pb-20 sm:px-6 sm:pt-24 sm:pb-24 lg:grid-cols-2 lg:gap-10"
+      >
+        <!-- Left: pitch + waitlist form -->
+        <div class="min-w-0 text-center lg:text-left">
+          <a
+            href="/"
+            class="inline-flex min-h-11 items-center text-sm text-fg-muted transition hover:text-fg"
+          >
+            &larr; Back to {site.name}
+          </a>
+
+          {
+            waitlist.eyebrow && (
+              <p class="mt-4 inline-flex items-center gap-2 border border-accent/50 bg-surface-1 px-4 py-1.5 font-mono text-xs font-medium uppercase tracking-widest text-fg-muted">
+                <span class="size-1.5 bg-accent" />
+                {waitlist.eyebrow}
+              </p>
+            )
+          }
+
+          <h1 class="mt-5 text-balance text-3xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
+            {waitlist.headline}
+          </h1>
+
+          <p
+            class="mx-auto mt-5 max-w-xl text-pretty text-base leading-relaxed text-fg-muted sm:mt-6 sm:text-lg lg:mx-0"
+          >
+            {waitlist.subhead}
+          </p>
+
+          <!-- Form. data-waitlist wraps the whole thing; the script reads the
+               endpoint off it and swaps [data-form] for [data-success]. -->
+          <div class="mx-auto mt-9 w-full max-w-md lg:mx-0" data-waitlist data-endpoint={waitlist.endpoint}>
+            <form
+              class="relative border-2 border-accent bg-surface-1 p-3 text-left shadow-2xl shadow-black/40 sm:p-4"
+              method="POST"
+              action={waitlist.endpoint || undefined}
+              data-form
+              novalidate
+            >
+              <label
+                for="waitlist-email"
+                class="font-mono text-[11px] uppercase tracking-widest text-fg-subtle"
+              >
+                {waitlist.emailLabel}
+              </label>
+
+              <div class="mt-1.5 flex flex-col gap-2 sm:flex-row">
+                <input
+                  id="waitlist-email"
+                  name="email"
+                  type="email"
+                  required
+                  autocomplete="email"
+                  inputmode="email"
+                  placeholder={waitlist.emailPlaceholder}
+                  class="min-h-12 min-w-0 flex-1 border border-border bg-bg px-3 py-2.5 font-mono text-sm text-fg outline-none transition placeholder:text-fg-subtle focus:border-accent"
+                />
+                <button
+                  type="submit"
+                  class="flex min-h-12 shrink-0 items-center justify-center gap-2 bg-accent px-5 font-semibold text-accent-fg transition hover:bg-accent-strong disabled:opacity-60"
+                  data-submit
+                >
+                  {waitlist.cta}
+                </button>
+              </div>
+
+              <!-- Honeypot: real users never see or fill this; bots do. The
+                   backend should drop any submission where it's non-empty. -->
+              <div class="absolute h-px w-px overflow-hidden" aria-hidden="true">
+                <label>
+                  Company
+                  <input type="text" name="company" tabindex="-1" autocomplete="off" />
+                </label>
+              </div>
+
+              <!-- Inline error, revealed by the script on a failed POST. -->
+              <p class="mt-2.5 hidden text-sm text-[color:var(--color-infra)]" role="alert" data-error>
+                {waitlist.errorBody}
+              </p>
+            </form>
+
+            <!-- Success state, swapped in after a good submit. -->
+            <div
+              class="hidden border-2 border-accent bg-surface-1 p-6 text-left"
+              role="status"
+              data-success
+            >
+              <div class="flex items-start gap-3">
+                <span class="mt-0.5 grid size-8 shrink-0 place-items-center border border-accent/60 bg-accent/10 text-accent">
+                  <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5" /></svg>
+                </span>
+                <div class="min-w-0">
+                  <p class="text-lg font-bold text-fg">{waitlist.successHeading}</p>
+                  <p class="mt-1.5 text-pretty text-sm text-fg-muted">{waitlist.successBody}</p>
+                </div>
+              </div>
+            </div>
+
+            <p class="mt-3 text-xs leading-relaxed text-fg-subtle">{waitlist.finePrint}</p>
+          </div>
+        </div>
+
+        <!-- Right: the product animation (same client-toggle shell as the hero) -->
+        <div class="min-w-0 lg:pl-4">
+          <p class="mb-3 text-center font-mono text-[11px] uppercase tracking-widest text-fg-subtle lg:text-left">
+            {waitlist.demoCaption}
+          </p>
+          <ChatMock />
+        </div>
+      </div>
+    </section>
+
+    <!-- Perks -->
+    <section class="border-t border-border/60 py-16 sm:py-20">
+      <div class="mx-auto max-w-6xl px-4 sm:px-6">
+        <div class="grid gap-6 sm:grid-cols-3">
+          {
+            waitlist.perks.map((perk) => (
+              <div class="flex flex-col border border-border bg-surface-1 p-7">
+                <span class="grid size-10 place-items-center border border-accent/50 text-accent">
+                  <svg
+                    class="size-5"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d={perkPaths[perk.icon]} />
+                  </svg>
+                </span>
+                <h2 class="mt-5 text-lg font-semibold text-fg">{perk.title}</h2>
+                <p class="mt-2 text-pretty text-sm leading-relaxed text-fg-muted">{perk.body}</p>
+              </div>
+            ))
+          }
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <Footer />
+</Base>
+
+<script>
+  /*
+   * Progressive enhancement for the waitlist form.
+   *
+   * With JS off, the <form> just POSTs to `action` (waitlist.endpoint) and the
+   * backend renders its own thank-you. With JS on, we intercept, POST via fetch
+   * so the page never navigates, and swap in the inline success panel.
+   *
+   * When no endpoint is configured (the shipped default), there is nothing to
+   * POST to, so we confirm locally instead of faking a network round-trip -
+   * enough to preview the flow; wiring `waitlist.endpoint` makes it real.
+   */
+  function initWaitlist() {
+    document.querySelectorAll<HTMLElement>("[data-waitlist]").forEach((root) => {
+      if (root.dataset.waitlistReady === "true") return;
+      root.dataset.waitlistReady = "true";
+
+      const form = root.querySelector<HTMLFormElement>("[data-form]");
+      const success = root.querySelector<HTMLElement>("[data-success]");
+      const errorEl = root.querySelector<HTMLElement>("[data-error]");
+      const submit = root.querySelector<HTMLButtonElement>("[data-submit]");
+      const email = root.querySelector<HTMLInputElement>('input[name="email"]');
+      const honeypot = root.querySelector<HTMLInputElement>('input[name="company"]');
+      if (!form || !success || !submit || !email) return;
+
+      const endpoint = root.dataset.endpoint?.trim() ?? "";
+      const restingLabel = submit.textContent ?? "Join the waitlist";
+      const pendingLabel = "Joining…";
+
+      const showError = () => {
+        errorEl?.classList.remove("hidden");
+        submit.disabled = false;
+        submit.textContent = restingLabel;
+      };
+
+      const showSuccess = () => {
+        form.classList.add("hidden");
+        success.classList.remove("hidden");
+        // Move focus to the confirmation so it's announced and reachable.
+        success.setAttribute("tabindex", "-1");
+        success.focus();
+      };
+
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        errorEl?.classList.add("hidden");
+
+        // Bots fill the hidden honeypot; treat that as a silent success so we
+        // don't tell them why nothing happened.
+        if (honeypot && honeypot.value.trim() !== "") {
+          showSuccess();
+          return;
+        }
+
+        if (!email.checkValidity()) {
+          email.reportValidity();
+          return;
+        }
+
+        submit.disabled = true;
+        submit.textContent = pendingLabel;
+
+        // No endpoint wired yet: confirm locally rather than fake a request.
+        if (!endpoint) {
+          showSuccess();
+          return;
+        }
+
+        try {
+          const res = await fetch(endpoint, {
+            method: "POST",
+            headers: { Accept: "application/json" },
+            body: new FormData(form),
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          showSuccess();
+        } catch {
+          // Network error or non-2xx: let them retry rather than lose the email.
+          showError();
+        }
+      });
+    });
+  }
+
+  initWaitlist();
+  document.addEventListener("astro:page-load", initWaitlist);
+</script>
