@@ -24,7 +24,9 @@ export const nav: {
     // like /compare and /vs/* - a bare "#features" would only resolve on home.
     { label: "Features", href: "/#features" },
     { label: "Compare", href: "/compare" },
-    ...(pricing.enabled ? [{ label: "Pricing", href: "/pricing" }] : []),
+    // Pricing is unlisted (pricing.listed): the /pricing page stays reachable by
+    // direct URL, but it is deliberately not surfaced in the header nav.
+    ...(pricing.listed ? [{ label: "Pricing", href: "/pricing" }] : []),
     { label: "API", href: "/api" },
     { label: "Docs", href: site.docsUrl },
   ],
@@ -49,8 +51,9 @@ export const footer: { columns: FooterColumn[]; copyright: string } = {
         { label: "Get started", href: "/connect" },
         { label: "Features", href: "/#features" },
         { label: "Compare", href: "/compare" },
-        // The /pricing page only ships when pricing.enabled - don't link a dead route otherwise.
-        ...(pricing.enabled ? [{ label: "Pricing", href: "/pricing" }] : []),
+        // Only linked when pricing is listed. The page can be live (pricing.enabled)
+        // yet intentionally unlisted, in which case the footer stays quiet about it.
+        ...(pricing.listed ? [{ label: "Pricing", href: "/pricing" }] : []),
       ],
     },
     {

@@ -30,7 +30,10 @@ const routes = [
   // The triage argument. A notch below the client guides: same intent to capture
   // demand, but a broader query with less buying intent behind it.
   { path: "/ai-email-triage", priority: "0.7", changefreq: "monthly" },
-  ...(pricing.enabled
+  // Listed for crawlers only when pricing is surfaced. An unlisted-but-live
+  // /pricing page (enabled && !listed) is reachable by direct URL but kept out
+  // of the sitemap so it is not advertised for indexing.
+  ...(pricing.enabled && pricing.listed
     ? [{ path: "/pricing", priority: "0.9", changefreq: "monthly" }]
     : []),
   { path: "/api", priority: "0.7", changefreq: "weekly" },

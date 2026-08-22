@@ -64,15 +64,24 @@ export interface PricingTier {
 
 export const pricing: {
   enabled: boolean;
+  listed: boolean;
   heading: string;
   subhead: string;
   /** The one-line rule the whole table follows. */
   principle: string;
   tiers: PricingTier[];
 } = {
-  // Surfaced on the homepage AND in the machine-readable /pricing.md manifest.
-  // Flip to false to hide the on-page section (the manifest still generates).
+  // Does the /pricing page render at all? `false` makes the route redirect home
+  // and drops it everywhere. Keep `true` to keep the page reachable by direct
+  // URL even when it is unlisted (see `listed`). The machine-readable
+  // /pricing.md manifest generates regardless of either flag.
   enabled: true,
+  // Is pricing *surfaced* - the header nav link, footer link, homepage teaser,
+  // and the sitemap/schemamap discovery entries? `false` hides pricing from all
+  // of those while leaving the /pricing page live for anyone who navigates to it
+  // directly. Set independently of `enabled` so "hidden but reachable" is a
+  // state the config can express, not just "on" or "gone".
+  listed: false,
   heading: "Pricing",
   subhead:
     "The full Gmail experience is free forever, and always will be. Paid tiers buy autonomy and throughput, governance is an add-on you attach when you need it, and you can self-host the whole thing for nothing.",
