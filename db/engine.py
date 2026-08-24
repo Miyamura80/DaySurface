@@ -4,6 +4,7 @@ The engine is created on first use so that CLI / MCP transports work
 without a database configured.
 """
 
+import threading
 from collections.abc import Generator
 from contextlib import contextmanager
 
@@ -15,6 +16,7 @@ from common import global_config
 
 _engine: Engine | None = None
 _SessionLocal: sessionmaker[Session] | None = None
+_init_lock = threading.Lock()
 
 
 CONNECT_TIMEOUT_SECONDS = 5
@@ -39,22 +41,37 @@ def _connect_args(uri: str) -> dict[str, object]:
 
 
 def _init_engine() -> Engine:
-    """Create the engine from ``global_config.BACKEND_DB_URI``."""
+    """Create the engine from ``global_config.BACKEND_DB_URI`` (thread-safe).
+
+    Double-checked locking so concurrent first-callers (e.g. two requests
+    offloaded to the threadpool on a fresh process) initialise exactly once.
+    ``_engine`` is published *last* - after ``_SessionLocal`` - so any thread
+    that sees ``_engine`` set is guaranteed to also see a non-None
+    ``_SessionLocal`` (which ``use_db_session`` asserts), closing the window
+    where one request could 500 mid-initialisation.
+    """
     global _engine, _SessionLocal  # noqa: PLW0603
 
     if _engine is not None:
         return _engine
 
-    uri = global_config.BACKEND_DB_URI
-    if not uri:
-        raise RuntimeError(
-            "BACKEND_DB_URI is not configured. "
-            "Set it in your .env file to use database features."
-        )
+    with _init_lock:
+        if _engine is not None:
+            return _engine
 
-    _engine = create_engine(uri, pool_pre_ping=True, **_connect_args(uri))
-    _SessionLocal = sessionmaker(bind=_engine, autoflush=False, expire_on_commit=False)
-    return _engine
+        uri = global_config.BACKEND_DB_URI
+        if not uri:
+            raise RuntimeError(
+                "BACKEND_DB_URI is not configured. "
+                "Set it in your .env file to use database features."
+            )
+
+        engine = create_engine(uri, pool_pre_ping=True, **_connect_args(uri))
+        _SessionLocal = sessionmaker(
+            bind=engine, autoflush=False, expire_on_commit=False
+        )
+        _engine = engine
+        return _engine
 
 
 def get_db_session() -> Generator[Session, None, None]:
