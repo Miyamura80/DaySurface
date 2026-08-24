@@ -202,6 +202,8 @@ describe("markdown negotiation", () => {
     ["/connect", "text/markdown"],
     ["/pricing", "text/markdown"],
     ["/compare", "text/markdown"],
+    ["/product", "text/markdown"],
+    ["/story", "text/markdown"],
     ["/api", "text/markdown"],
     ["/vs/composio-gmail", "text/markdown"],
   ])("%s serves markdown when asked", async (path, type) => {

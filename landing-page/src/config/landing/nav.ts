@@ -82,7 +82,6 @@ export const footer: { columns: FooterColumn[]; copyright: string } = {
       links: [
         { label: "Our story", href: "/story" },
         { label: "About", href: "/about" },
-        { label: "Blog", href: "#" },
         { label: "Contact", href: "/contact" },
       ],
     },
@@ -92,7 +91,7 @@ export const footer: { columns: FooterColumn[]; copyright: string } = {
         { label: "About", href: "/about" },
         { label: "Privacy", href: "/privacy" },
         { label: "Terms", href: "/terms" },
-        { label: "Security", href: "#" },
+        { label: "Security", href: `${site.githubUrl}/blob/main/SECURITY.md` },
       ],
     },
   ],
