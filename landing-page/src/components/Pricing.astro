@@ -3,7 +3,7 @@ import { pricing, repoName, site } from "../config/landing";
 ---
 
 {
-  pricing.enabled && (
+  pricing.enabled && pricing.listed && (
     <section id="pricing" class="scroll-mt-20 border-t border-border/60 py-16 sm:py-24">
       <div class="mx-auto max-w-6xl px-4 sm:px-6">
         <div class="mx-auto max-w-2xl text-center">

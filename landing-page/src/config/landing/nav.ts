@@ -20,11 +20,16 @@ export const nav: {
   cta: NavLink;
 } = {
   links: [
-    // Absolute anchors (with leading "/") so they also work from sub-pages
-    // like /compare and /vs/* - a bare "#features" would only resolve on home.
-    { label: "Features", href: "/#features" },
+    // All absolute paths (leading "/"), so every header link resolves from a
+    // sub-page like /compare or /vs/* too - a bare "#anchor" would only work on
+    // the home page it points into.
+    { label: "Product", href: "/product" },
     { label: "Compare", href: "/compare" },
-    ...(pricing.enabled ? [{ label: "Pricing", href: "/pricing" }] : []),
+    // Surfaced only when the page both exists (enabled) and is listed. `enabled`
+    // stays the master switch, so a live-but-unlisted page (enabled && !listed)
+    // is reachable by direct URL but kept out of the header, and a disabled page
+    // never leaves a "Pricing" link pointing at a route that 302s home.
+    ...(pricing.enabled && pricing.listed ? [{ label: "Pricing", href: "/pricing" }] : []),
     { label: "API", href: "/api" },
     { label: "Docs", href: site.docsUrl },
   ],
@@ -48,10 +53,11 @@ export const footer: { columns: FooterColumn[]; copyright: string } = {
       links: [
         { label: "Get started", href: "/connect" },
         { label: "Waitlist", href: "/waitlist" },
-        { label: "Features", href: "/#features" },
+        { label: "How it works", href: "/product" },
         { label: "Compare", href: "/compare" },
-        // The /pricing page only ships when pricing.enabled - don't link a dead route otherwise.
-        ...(pricing.enabled ? [{ label: "Pricing", href: "/pricing" }] : []),
+        // Same master-switch rule as the header: linked only when the page exists
+        // and is listed, so an unlisted or disabled page never gets a footer link.
+        ...(pricing.enabled && pricing.listed ? [{ label: "Pricing", href: "/pricing" }] : []),
       ],
     },
     {
@@ -76,8 +82,8 @@ export const footer: { columns: FooterColumn[]; copyright: string } = {
     {
       heading: "Company",
       links: [
+        { label: "Our story", href: "/story" },
         { label: "About", href: "/about" },
-        { label: "Blog", href: "#" },
         { label: "Contact", href: "/contact" },
       ],
     },
@@ -87,7 +93,7 @@ export const footer: { columns: FooterColumn[]; copyright: string } = {
         { label: "About", href: "/about" },
         { label: "Privacy", href: "/privacy" },
         { label: "Terms", href: "/terms" },
-        { label: "Security", href: "#" },
+        { label: "Security", href: `${site.githubUrl}/blob/main/SECURITY.md` },
       ],
     },
   ],

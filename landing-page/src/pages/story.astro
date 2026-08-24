@@ -1,0 +1,91 @@
+---
+import Base from "../layouts/Base.astro";
+import Nav from "../components/Nav.astro";
+import Footer from "../components/Footer.astro";
+import PageCta from "../components/PageCta.astro";
+import KeepReading from "../components/KeepReading.astro";
+import { site, story } from "../config/landing";
+
+const origin = (Astro.site ?? new URL(site.url)).origin;
+
+// schema.org: AboutPage (this is the narrative "why", distinct from /about's
+// OAuth-facing page) plus a breadcrumb. Advertised via /schemamap.xml.
+const jsonLd = [
+  {
+    "@context": "https://schema.org",
+    "@type": "AboutPage",
+    name: story.metaTitle,
+    description: story.metaDescription,
+    url: `${origin}/story`,
+    isPartOf: { "@type": "WebSite", name: site.name, url: site.url },
+    about: { "@type": "Organization", name: site.name, url: site.url },
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: site.url },
+      { "@type": "ListItem", position: 2, name: "Story", item: `${origin}/story` },
+    ],
+  },
+];
+---
+
+<Base
+  title={story.metaTitle}
+  description={story.metaDescription}
+  image="/og-story.png"
+  imageAlt="Why we built DaySurface - agents that run your inbox without lock-in"
+  markdownPath="/story.md"
+>
+  <script
+    type="application/ld+json"
+    is:inline
+    slot="head"
+    set:html={JSON.stringify(jsonLd)}
+  />
+
+  <Nav />
+  <main class="mx-auto max-w-3xl px-4 py-12 sm:px-6 sm:py-16">
+    <a href="/" class="inline-flex min-h-11 items-center text-sm opacity-70 hover:opacity-100">&larr; Back to {site.name}</a>
+
+    <header class="mt-6">
+      <span class="font-mono text-xs uppercase tracking-widest text-fg-subtle">{story.eyebrow}</span>
+      <h1 class="mt-3 text-4xl font-bold tracking-tight sm:text-5xl">{story.heading}</h1>
+      <p class="mt-4 text-xl text-pretty leading-relaxed text-fg-muted">{story.lede}</p>
+    </header>
+
+    <article class="mt-12 space-y-12">
+      {
+        story.sections.map((section) => (
+          <section>
+            <h2 class="text-2xl font-bold tracking-tight">{section.heading}</h2>
+            {section.paragraphs.map((p) => (
+              <p class="mt-4 text-pretty leading-relaxed text-fg-muted">{p}</p>
+            ))}
+          </section>
+        ))
+      }
+      <p class="text-pretty font-medium">{story.signoff}</p>
+    </article>
+
+    <PageCta
+      class="mt-16"
+      heading="See what we built"
+      body="A composer you edit drafts in and a ranked inbox you triage, inside the chat client you already use."
+      ctaLabel="How it works"
+      href="/product"
+    />
+
+    <KeepReading
+      class="mt-16"
+      links={[
+        { label: "How it works", href: "/product" },
+        { label: "Compare Gmail MCP servers", href: "/compare" },
+        { label: "Get started", href: "/connect" },
+        { label: "What it does with your Gmail", href: "/about" },
+      ]}
+    />
+  </main>
+  <Footer />
+</Base>

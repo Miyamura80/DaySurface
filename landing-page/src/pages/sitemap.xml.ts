@@ -13,6 +13,10 @@ const routes = [
   // service (see `server.ts`) and ships its own `/docs/sitemap.xml` covering
   // every page. Listing the index here gives crawlers a path in from the apex.
   { path: "/docs", priority: "0.9", changefreq: "weekly" },
+  // The product page: how it works and why it's better. Ranked with /compare -
+  // it is the page that turns "what is this" intent into a connect, one step
+  // upstream of the alternatives query /compare targets.
+  { path: "/product", priority: "0.8", changefreq: "monthly" },
   { path: "/compare", priority: "0.8", changefreq: "monthly" },
   // The standalone Gmail-webhooks resource. Ranked above /compare because it is
   // the page targeting an existing organic query cluster rather than one that
@@ -30,7 +34,10 @@ const routes = [
   // The triage argument. A notch below the client guides: same intent to capture
   // demand, but a broader query with less buying intent behind it.
   { path: "/ai-email-triage", priority: "0.7", changefreq: "monthly" },
-  ...(pricing.enabled
+  // Listed for crawlers only when pricing is surfaced. An unlisted-but-live
+  // /pricing page (enabled && !listed) is reachable by direct URL but kept out
+  // of the sitemap so it is not advertised for indexing.
+  ...(pricing.enabled && pricing.listed
     ? [{ path: "/pricing", priority: "0.9", changefreq: "monthly" }]
     : []),
   { path: "/api", priority: "0.7", changefreq: "weekly" },
@@ -40,6 +47,9 @@ const routes = [
     priority: "0.7",
     changefreq: "monthly",
   })),
+  // The founding narrative (why we built it). Distinct from /about, which is the
+  // OAuth-facing "what it does with your Gmail" page.
+  { path: "/story", priority: "0.5", changefreq: "yearly" },
   { path: "/about", priority: "0.5", changefreq: "yearly" },
   // /waitlist is intentionally absent: it's noindex (see waitlist.astro), like
   // the /signup, /help and /contact aliases below. It's reachable from the
