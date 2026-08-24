@@ -1,9 +1,13 @@
 example_parent:
   example_child: "prod_value"
 
-# Overrides applied when DEV_ENV=prod. Replace the placeholder origin with the
-# deployed dashboard / MCP host domain before going live.
+# Overrides applied when DEV_ENV=prod.
 server:
   host: "0.0.0.0"
+  # Browser origins allowed to call the API cross-origin. The landing page
+  # (daysurface.com) POSTs the waitlist form here, so its origin must be listed.
+  # NOTE: if the deployment sets allowed_origins via a Railway env var instead,
+  # add https://daysurface.com there too - the env override wins over this file.
   allowed_origins:
-    - "https://YOUR-DASHBOARD-DOMAIN.example.com"
+    - "https://daysurface.com"
+    - "https://www.daysurface.com"

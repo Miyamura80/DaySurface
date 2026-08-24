@@ -51,6 +51,9 @@ const routes = [
   // OAuth-facing "what it does with your Gmail" page.
   { path: "/story", priority: "0.5", changefreq: "yearly" },
   { path: "/about", priority: "0.5", changefreq: "yearly" },
+  // /waitlist is intentionally absent: it's noindex (see waitlist.astro), like
+  // the /signup, /help and /contact aliases below. It's reachable from the
+  // footer, which is the inbound path a conversion surface actually wants.
   // The canonical support & contact page. /help and /contact serve the same
   // body but are deliberately absent - they are noindex aliases of this URL.
   { path: "/support", priority: "0.5", changefreq: "monthly" },

@@ -13,6 +13,7 @@ from db.models.subscription_types import (
 )
 from db.models.thread_curation import ThreadCuration
 from db.models.user_subscriptions import UserSubscription
+from db.models.waitlist_signups import WaitlistSignup
 from db.models.webhooks import WebhookDelivery, WebhookEvent, WebhookSubscription
 
 __all__ = [
@@ -27,6 +28,7 @@ __all__ = [
     "SubscriptionTier",
     "ThreadCuration",
     "UserSubscription",
+    "WaitlistSignup",
     "WebhookDelivery",
     "WebhookEvent",
     "WebhookSubscription",

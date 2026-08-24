@@ -52,6 +52,7 @@ export const footer: { columns: FooterColumn[]; copyright: string } = {
       heading: "Product",
       links: [
         { label: "Get started", href: "/connect" },
+        { label: "Waitlist", href: "/waitlist" },
         { label: "How it works", href: "/product" },
         { label: "Compare", href: "/compare" },
         // Same master-switch rule as the header: linked only when the page exists

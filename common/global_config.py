@@ -259,6 +259,24 @@ class Config(BaseSettings):
     # Redis
     REDIS_URL: str | None = None
 
+    # Waitlist (public /waitlist page) + Resend email delivery.
+    # All optional and env-driven: with these unset, a signup is still stored in
+    # Postgres - only the Resend audience sync and the notification are skipped
+    # (logged, never fatal). Never put a Resend key anywhere client-side.
+    RESEND_API_KEY: str | None = None
+    RESEND_AUDIENCE_ID: str | None = None
+    # From identity for waitlist mail, e.g. "DaySurface <hello@daysurface.com>".
+    WAITLIST_FROM_EMAIL: str | None = None
+    # Slack Incoming Webhook URL that gets a message per new signup (used when
+    # WAITLIST_NOTIFY). Sensitive - treated as a secret in the exposed config.
+    WAITLIST_SLACK_WEBHOOK_URL: str | None = None
+    # Post to Slack on each new signup. Default on.
+    WAITLIST_NOTIFY: bool = True
+    # Send the signer a confirmation email via Resend. Default OFF - flip to true
+    # once RESEND_API_KEY + WAITLIST_FROM_EMAIL are set and the domain is
+    # verified, so nothing sends before you're ready.
+    WAITLIST_CONFIRM_EMAIL: bool = False
+
     # Google OAuth (Gmail integration) - fill in real values in .env
     GOOGLE_CLIENT_ID: str | None = None
     GOOGLE_CLIENT_SECRET: str | None = None
@@ -500,6 +518,8 @@ _SECRET_FIELD_NAMES: frozenset[str] = frozenset(
         "GOOGLE_CLIENT_SECRET",
         "GOOGLE_TOKEN_ENC_KEY",
         "WEBHOOK_RUNNER_TOKEN",
+        "RESEND_API_KEY",
+        "WAITLIST_SLACK_WEBHOOK_URL",
     }
 )
 
