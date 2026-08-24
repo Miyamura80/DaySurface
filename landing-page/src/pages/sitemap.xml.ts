@@ -13,6 +13,10 @@ const routes = [
   // service (see `server.ts`) and ships its own `/docs/sitemap.xml` covering
   // every page. Listing the index here gives crawlers a path in from the apex.
   { path: "/docs", priority: "0.9", changefreq: "weekly" },
+  // The product page: how it works and why it's better. Ranked with /compare -
+  // it is the page that turns "what is this" intent into a connect, one step
+  // upstream of the alternatives query /compare targets.
+  { path: "/product", priority: "0.8", changefreq: "monthly" },
   { path: "/compare", priority: "0.8", changefreq: "monthly" },
   // The standalone Gmail-webhooks resource. Ranked above /compare because it is
   // the page targeting an existing organic query cluster rather than one that
@@ -43,6 +47,9 @@ const routes = [
     priority: "0.7",
     changefreq: "monthly",
   })),
+  // The founding narrative (why we built it). Distinct from /about, which is the
+  // OAuth-facing "what it does with your Gmail" page.
+  { path: "/story", priority: "0.5", changefreq: "yearly" },
   { path: "/about", priority: "0.5", changefreq: "yearly" },
   // The canonical support & contact page. /help and /contact serve the same
   // body but are deliberately absent - they are noindex aliases of this URL.

@@ -22,7 +22,7 @@ export const nav: {
   links: [
     // Absolute anchors (with leading "/") so they also work from sub-pages
     // like /compare and /vs/* - a bare "#features" would only resolve on home.
-    { label: "Features", href: "/#features" },
+    { label: "Product", href: "/product" },
     { label: "Compare", href: "/compare" },
     // Surfaced only when the page both exists (enabled) and is listed. `enabled`
     // stays the master switch, so a live-but-unlisted page (enabled && !listed)
@@ -51,7 +51,7 @@ export const footer: { columns: FooterColumn[]; copyright: string } = {
       heading: "Product",
       links: [
         { label: "Get started", href: "/connect" },
-        { label: "Features", href: "/#features" },
+        { label: "How it works", href: "/product" },
         { label: "Compare", href: "/compare" },
         // Same master-switch rule as the header: linked only when the page exists
         // and is listed, so an unlisted or disabled page never gets a footer link.
@@ -80,6 +80,7 @@ export const footer: { columns: FooterColumn[]; copyright: string } = {
     {
       heading: "Company",
       links: [
+        { label: "Our story", href: "/story" },
         { label: "About", href: "/about" },
         { label: "Blog", href: "#" },
         { label: "Contact", href: "/contact" },

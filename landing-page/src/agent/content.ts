@@ -12,6 +12,7 @@
  *   _shared.ts   - helpers used by more than one builder
  *   connect.ts   - connect.md + the 404 body
  *   llms.ts      - llms.txt, llms-full.txt, agents.md
+ *   pages.ts     - product.md, story.md
  *   compare.ts   - compare.md, vs/<id>.md, api.md
  *   manifests.ts - skills.sh, auth.md, pricing.md
  *   support.ts   - support.md
@@ -20,6 +21,7 @@
  */
 export * from "./connect";
 export * from "./llms";
+export * from "./pages";
 export * from "./compare";
 export * from "./manifests";
 export * from "./support";

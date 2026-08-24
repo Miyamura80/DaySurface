@@ -32,6 +32,8 @@ ${agentGuide.whenToUse.map((s) => `- ${s}`).join("\n")}
 - [llms-full.txt](${o}/llms-full.txt): Full, expanded description of what ${site.name} is and how to use every transport.
 - [agents.md](${o}/agents.md): Agent-oriented capability and skills summary.
 - [compare.md](${o}/compare.md): ${site.name} vs other Gmail MCP servers (GongRzhe, Composio, Zapier/Pipedream, Google Workspace MCP), capability matrix spelled out in words.
+- [product.md](${o}/product.md): How ${site.name} works end to end - add-a-URL setup, the in-chat composer and ranked inbox, and the three ways it differs from a Gmail-API wrapper.
+- [story.md](${o}/story.md): Why ${site.name} was built - the founding thesis behind an in-chat Gmail product that is open source and self-hostable.
 - [api.md](${o}/api.md): The HTTP API and where to fetch its OpenAPI spec.
 
 ## Guides
