@@ -516,6 +516,7 @@ _SECRET_FIELD_NAMES: frozenset[str] = frozenset(
         "GOOGLE_CLIENT_SECRET",
         "GOOGLE_TOKEN_ENC_KEY",
         "WEBHOOK_RUNNER_TOKEN",
+        "RESEND_API_KEY",
     }
 )
 

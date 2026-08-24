@@ -14,6 +14,7 @@ import db.models.processed_stripe_events  # noqa: F401
 import db.models.profiles  # noqa: F401
 import db.models.thread_curation  # noqa: F401
 import db.models.user_subscriptions  # noqa: F401
+import db.models.waitlist_signups  # noqa: F401
 import db.models.webhooks  # noqa: F401
 from common import global_config
 from db.base import Base

@@ -12,7 +12,11 @@ from pydantic import BaseModel, Field
 
 class WaitlistJoinInput(BaseModel):
     email: str = Field(min_length=3, max_length=320)
-    company: str = Field(default="", max_length=320)
+    # Honeypot - intentionally unbounded: any non-empty value must reach the
+    # route to be uniformly dropped with a success. A max_length here would 422
+    # a long bot payload instead, tipping the bot off and breaking the silent
+    # drop; the field is never stored, only checked for emptiness.
+    company: str = ""
     source: str | None = Field(default=None, max_length=64)
 
 

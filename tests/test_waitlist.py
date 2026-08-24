@@ -44,10 +44,16 @@ def _count() -> int:
 
 class TestWaitlist(TestTemplate):
     def setup_method(self):
-        self._patcher = patch(
-            "services.waitlist_svc.use_db_session", _override_use_db_session
-        )
-        self._patcher.start()
+        self._patchers = [
+            patch("services.waitlist_svc.use_db_session", _override_use_db_session),
+            # Hermetic: never let the best-effort Resend side effects make real
+            # network calls, even if a dev/CI runner has RESEND keys in .env.
+            patch("services.waitlist_svc.sync_to_resend"),
+            patch("services.waitlist_svc.notify_new_signup"),
+            patch("services.waitlist_svc.send_confirmation"),
+        ]
+        for p in self._patchers:
+            p.start()
         self.client = TestClient(app)
         # Start each test from an empty table.
         with _SessionLocal() as s:
@@ -55,7 +61,8 @@ class TestWaitlist(TestTemplate):
             s.commit()
 
     def teardown_method(self):
-        self._patcher.stop()
+        for p in self._patchers:
+            p.stop()
 
     def test_valid_signup_stores_one_row(self):
         resp = self.client.post("/waitlist/join", json={"email": "a@b.com"})
@@ -83,6 +90,16 @@ class TestWaitlist(TestTemplate):
         )
         assert resp.status_code == 200
         assert resp.json() == {"success": True}  # bot cannot tell it was caught
+        assert _count() == 0
+
+    def test_long_honeypot_still_dropped_not_422(self):
+        # A bot filling a long honeypot value must be dropped with success, not
+        # rejected by validation (which would tip it off / break the silent drop).
+        resp = self.client.post(
+            "/waitlist/join", json={"email": "bot@b.com", "company": "x" * 5000}
+        )
+        assert resp.status_code == 200
+        assert resp.json() == {"success": True}
         assert _count() == 0
 
     def test_invalid_email_rejected(self):
