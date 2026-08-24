@@ -190,7 +190,7 @@ def _confirmation_content() -> tuple[str, str]:
 <tr><td style="padding:28px 32px 0;"><div style="font-weight:800;font-size:18px;letter-spacing:-0.02em;color:#0a0a0a;">DaySurface</div></td></tr>
 <tr><td style="padding:16px 32px 0;">
 <h1 style="margin:0;font-size:24px;line-height:1.25;color:#0a0a0a;">You're on the list \U0001f389</h1>
-<p style="margin:14px 0 0;font-size:15px;line-height:1.6;color:#3f3f46;">{_INTRO_LEAD}<span style="white-space:nowrap;">{icons}</span> and any MCP client.{_INTRO_TAIL}</p>
+<p style="margin:14px 0 0;font-size:15px;line-height:1.6;color:#3f3f46;">{_INTRO_LEAD}<span style="white-space:nowrap;">{icons}</span> or any MCP client.{_INTRO_TAIL}</p>
 </td></tr>
 <tr><td style="padding:22px 32px 0;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f0fdfc;border:1px solid #c3fffd;border-radius:10px;"><tr><td style="padding:18px 20px;">
