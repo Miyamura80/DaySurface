@@ -24,9 +24,11 @@ export const nav: {
     // like /compare and /vs/* - a bare "#features" would only resolve on home.
     { label: "Features", href: "/#features" },
     { label: "Compare", href: "/compare" },
-    // Pricing is unlisted (pricing.listed): the /pricing page stays reachable by
-    // direct URL, but it is deliberately not surfaced in the header nav.
-    ...(pricing.listed ? [{ label: "Pricing", href: "/pricing" }] : []),
+    // Surfaced only when the page both exists (enabled) and is listed. `enabled`
+    // stays the master switch, so a live-but-unlisted page (enabled && !listed)
+    // is reachable by direct URL but kept out of the header, and a disabled page
+    // never leaves a "Pricing" link pointing at a route that 302s home.
+    ...(pricing.enabled && pricing.listed ? [{ label: "Pricing", href: "/pricing" }] : []),
     { label: "API", href: "/api" },
     { label: "Docs", href: site.docsUrl },
   ],
@@ -51,9 +53,9 @@ export const footer: { columns: FooterColumn[]; copyright: string } = {
         { label: "Get started", href: "/connect" },
         { label: "Features", href: "/#features" },
         { label: "Compare", href: "/compare" },
-        // Only linked when pricing is listed. The page can be live (pricing.enabled)
-        // yet intentionally unlisted, in which case the footer stays quiet about it.
-        ...(pricing.listed ? [{ label: "Pricing", href: "/pricing" }] : []),
+        // Same master-switch rule as the header: linked only when the page exists
+        // and is listed, so an unlisted or disabled page never gets a footer link.
+        ...(pricing.enabled && pricing.listed ? [{ label: "Pricing", href: "/pricing" }] : []),
       ],
     },
     {
