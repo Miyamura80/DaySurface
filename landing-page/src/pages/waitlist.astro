@@ -21,6 +21,14 @@ import { site, waitlist } from "../config/landing";
 
 const origin = (Astro.site ?? new URL(site.url)).origin;
 
+// Whether a real form backend is wired. Decided once here so both the no-JS
+// <form> (method/action) and the confirmation copy agree: an unconfigured form
+// must not POST-to-self and must not claim the visitor joined a real list.
+const endpoint = waitlist.endpoint.trim();
+const configured = endpoint !== "";
+const confirmHeading = configured ? waitlist.successHeading : waitlist.previewHeading;
+const confirmBody = configured ? waitlist.successBody : waitlist.previewBody;
+
 const pageTitle = `Waitlist - ${site.name}`;
 const pageDescription = waitlist.subhead;
 
@@ -93,10 +101,14 @@ const jsonLd = [
           <!-- Form. data-waitlist wraps the whole thing; the script reads the
                endpoint off it and swaps [data-form] for [data-success]. -->
           <div class="mx-auto mt-9 w-full max-w-md lg:mx-0" data-waitlist data-endpoint={waitlist.endpoint}>
+            <!-- method/action only when an endpoint is wired: with no backend a
+                 no-JS submit must not POST back to /waitlist (the static host
+                 has no handler for it and would fail). Unconfigured, it stays a
+                 plain form the enhancement script confirms locally. -->
             <form
               class="relative border-2 border-accent bg-surface-1 p-3 text-left shadow-2xl shadow-black/40 sm:p-4"
-              method="POST"
-              action={waitlist.endpoint || undefined}
+              method={configured ? "POST" : undefined}
+              action={configured ? endpoint : undefined}
               data-form
               novalidate
             >
@@ -122,6 +134,7 @@ const jsonLd = [
                   type="submit"
                   class="flex min-h-12 shrink-0 items-center justify-center gap-2 bg-accent px-5 font-semibold text-accent-fg transition hover:bg-accent-strong disabled:opacity-60"
                   data-submit
+                  data-pending-label={waitlist.ctaPending}
                 >
                   {waitlist.cta}
                 </button>
@@ -153,8 +166,8 @@ const jsonLd = [
                   <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5" /></svg>
                 </span>
                 <div class="min-w-0">
-                  <p class="text-lg font-bold text-fg">{waitlist.successHeading}</p>
-                  <p class="mt-1.5 text-pretty text-sm text-fg-muted">{waitlist.successBody}</p>
+                  <p class="text-lg font-bold text-fg">{confirmHeading}</p>
+                  <p class="mt-1.5 text-pretty text-sm text-fg-muted">{confirmBody}</p>
                 </div>
               </div>
             </div>
@@ -233,8 +246,10 @@ const jsonLd = [
       if (!form || !success || !submit || !email) return;
 
       const endpoint = root.dataset.endpoint?.trim() ?? "";
-      const restingLabel = submit.textContent ?? "Join the waitlist";
-      const pendingLabel = "Joining…";
+      const restingLabel = submit.textContent?.trim() || "Join the waitlist";
+      // Config-driven (waitlist.ctaPending), passed through the button's data
+      // attribute so the label isn't a second source of truth in this script.
+      const pendingLabel = submit.dataset.pendingLabel?.trim() || restingLabel;
 
       const showError = () => {
         errorEl?.classList.remove("hidden");

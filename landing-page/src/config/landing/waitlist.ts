@@ -40,6 +40,14 @@ export const waitlist: {
   /** Shown after a successful submit (heading + supporting line). */
   successHeading: string;
   successBody: string;
+  /**
+   * Shown instead of the success copy when no `endpoint` is configured. The
+   * form can't persist anything in that state, so it must NOT claim the visitor
+   * joined a list - this copy says the form is a preview until it's wired. Once
+   * `endpoint` is set, the real success copy above is used.
+   */
+  previewHeading: string;
+  previewBody: string;
   /** Generic error line if the POST fails. */
   errorBody: string;
   /** Small reassurance line under the form. */
@@ -59,6 +67,9 @@ export const waitlist: {
   successHeading: "You're on the list.",
   successBody:
     "Thanks - we'll email you the moment your invite is ready. No spam, just launch news.",
+  previewHeading: "Preview - not collecting yet.",
+  previewBody:
+    "This waitlist form isn't wired to a backend. Set `waitlist.endpoint` in the site config to start capturing signups.",
   errorBody: "Something went wrong. Please try again, or email us and we'll add you by hand.",
   finePrint: "No account needed to try it today - the waitlist is only for early-access perks and updates.",
   demoCaption: "See it in your client",
