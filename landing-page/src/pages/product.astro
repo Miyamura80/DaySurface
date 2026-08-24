@@ -5,7 +5,7 @@ import Footer from "../components/Footer.astro";
 import NumberedList from "../components/NumberedList.astro";
 import ChatMock from "../components/ChatMock.astro";
 import PillarCards from "../components/PillarCards.astro";
-import PageCta from "../components/PageCta.astro";
+import FinalCta from "../components/FinalCta.astro";
 import KeepReading from "../components/KeepReading.astro";
 import { site, product } from "../config/landing";
 
@@ -76,16 +76,14 @@ const jsonLd = [
       </p>
     </section>
 
-    <PageCta
-      class="mt-20"
-      heading="Add DaySurface to your client"
-      body="One URL, OAuth in the browser, and your agent is triaging and drafting inside the chat."
-      ctaLabel="Get started"
-      href="/connect"
-    />
+    <!-- Same final CTA section as the homepage: connect-your-client widget +
+         flagship features, driven by the shared finalCta config. -->
+    <div class="mt-8">
+      <FinalCta />
+    </div>
 
     <KeepReading
-      class="mt-16"
+      class="mt-8"
       links={[
         { label: "Why we built it", href: "/story" },
         { label: "Compare Gmail MCP servers", href: "/compare" },
