@@ -10,6 +10,7 @@ saved and can be backfilled).
 """
 
 import re
+from html import escape
 
 import httpx
 from loguru import logger as log
@@ -154,18 +155,23 @@ def _confirmation_content() -> tuple[str, str]:
     repo = global_config.branding.repository_url
     docs = global_config.ask.docs_base_url
     base = global_config.branding.website_url.rstrip("/")
+    # Escaped forms for interpolation into HTML attributes; the text body keeps
+    # the raw URLs. Config is trusted, but a stray quote must not break markup.
+    repo_h = escape(repo, quote=True)
+    docs_h = escape(docs, quote=True)
+    base_h = escape(base, quote=True)
     # Bold "open source" in the HTML rendering of the shared callout sentence.
     callout_html = _CONFIRM_CALLOUT.replace(
         "open source", "<strong>open source</strong>", 1
     )
     # Client icons for the HTML intro (alt text shows when images are blocked).
     icons = "".join(
-        f'<img src="{base}/logos/email/{slug}.png" width="22" height="22" '
+        f'<img src="{base_h}/logos/email/{slug}.png" width="22" height="22" '
         f'alt="{alt}" style="vertical-align:middle;margin:0 3px;border:0;display:inline-block;">'
         for slug, alt in _INTRO_CLIENTS
     )
     gh_icon = (
-        f'<img src="{base}/logos/email/github.png" width="16" height="16" alt="" '
+        f'<img src="{base_h}/logos/email/github.png" width="16" height="16" alt="" '
         'style="vertical-align:middle;margin-right:8px;border:0;">'
     )
     text = (
@@ -190,8 +196,8 @@ def _confirmation_content() -> tuple[str, str]:
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f0fdfc;border:1px solid #c3fffd;border-radius:10px;"><tr><td style="padding:18px 20px;">
 <div style="font-weight:700;font-size:14px;color:#0a0a0a;">Don't want to wait?</div>
 <p style="margin:6px 0 14px;font-size:14px;line-height:1.55;color:#3f3f46;">{callout_html}</p>
-<table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="border-radius:8px;background:#0a0a0a;"><a href="{repo}" style="display:inline-block;padding:11px 20px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;">{gh_icon}Self-host on GitHub &rarr;</a></td></tr></table>
-<a href="{docs}" style="display:inline-block;margin-top:10px;font-size:13px;color:#0a7c78;text-decoration:underline;">Read the docs</a>
+<table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="border-radius:8px;background:#0a0a0a;"><a href="{repo_h}" style="display:inline-block;padding:11px 20px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;">{gh_icon}Self-host on GitHub &rarr;</a></td></tr></table>
+<a href="{docs_h}" style="display:inline-block;margin-top:10px;font-size:13px;color:#0a7c78;text-decoration:underline;">Read the docs</a>
 </td></tr></table>
 </td></tr>
 <tr><td style="padding:24px 32px 28px;"><p style="margin:0;font-size:12px;line-height:1.5;color:#a1a1aa;">{_CONFIRM_DISCLAIMER}</p></td></tr>
