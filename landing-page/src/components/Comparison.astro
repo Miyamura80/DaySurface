@@ -1,11 +1,10 @@
 ---
 /**
- * Landing-page comparison section: the three headline differentiators followed
- * by the full capability matrix. Links out to the /compare hub and the
- * per-competitor /vs pages. Data lives in config/landing.ts (`comparison`).
+ * Landing-page comparison section: the three headline differentiators.
+ * Links out to the /compare hub, which carries the full capability matrix,
+ * and the per-competitor /vs pages. Data lives in config/landing.ts (`comparison`).
  */
 import { comparison } from "../config/landing";
-import ComparisonTable from "./ComparisonTable.astro";
 import PillarCards from "./PillarCards.astro";
 ---
 
@@ -21,11 +20,6 @@ import PillarCards from "./PillarCards.astro";
     <!-- The three pillars -->
     <div class="mt-16">
       <PillarCards />
-    </div>
-
-    <!-- Full matrix -->
-    <div class="mt-16">
-      <ComparisonTable competitors={comparison.competitors} />
     </div>
 
     <div class="mt-10 text-center">
