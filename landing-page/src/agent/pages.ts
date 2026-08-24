@@ -25,7 +25,7 @@ export function buildProductMd(origin: string): string {
     .map((p) => `### ${p.title}\n${p.body}`)
     .join("\n\n");
 
-  return `# ${product.metaTitle}
+  return `# ${product.heading}
 
 ${product.subhead}
 

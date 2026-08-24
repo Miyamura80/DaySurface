@@ -32,7 +32,7 @@ export const story: {
   metaTitle: `Why we built ${site.name}`,
   metaDescription: `The story behind ${site.name}: I wanted my agents to run my email, and I didn't want to be locked into any one of them. So I built a Gmail server that's portable across every agent - open source, and yours to host.`,
   eyebrow: "Our story",
-  heading: "Why we built DaySurface",
+  heading: `Why we built ${site.name}`,
   lede: "I wanted my agents to run my email. I didn't want to marry one of them to do it.",
   sections: [
     {
@@ -57,5 +57,5 @@ export const story: {
       ],
     },
   ],
-  signoff: "Eito, DaySurface",
+  signoff: `Eito, ${site.name}`,
 } as const;

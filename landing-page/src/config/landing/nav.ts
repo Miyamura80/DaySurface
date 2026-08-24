@@ -20,8 +20,9 @@ export const nav: {
   cta: NavLink;
 } = {
   links: [
-    // Absolute anchors (with leading "/") so they also work from sub-pages
-    // like /compare and /vs/* - a bare "#features" would only resolve on home.
+    // All absolute paths (leading "/"), so every header link resolves from a
+    // sub-page like /compare or /vs/* too - a bare "#anchor" would only work on
+    // the home page it points into.
     { label: "Product", href: "/product" },
     { label: "Compare", href: "/compare" },
     // Surfaced only when the page both exists (enabled) and is listed. `enabled`

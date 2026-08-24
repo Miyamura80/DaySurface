@@ -9,7 +9,8 @@ regenerate locally after editing the brand copy, then commit the new PNGs:
     uv run --with pillow --with cairosvg python scripts/gen-og.py
 
 Colors mirror the @theme tokens in src/styles/global.css and the copy mirrors
-src/config/landing.ts, so the cards stay on-brand with the rest of the site.
+src/config/landing/{hero,product,story}.ts, so the cards stay on-brand with the
+rest of the site.
 The brand mark is rasterized from the canonical public/favicon.svg (cairosvg);
 if cairosvg is unavailable it falls back to a plain cyan square.
 """

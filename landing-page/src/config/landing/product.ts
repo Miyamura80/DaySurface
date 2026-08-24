@@ -35,11 +35,11 @@ export const product: {
   steps: [
     {
       title: "Add one URL",
-      body: "Paste the endpoint into any MCP client. No account, no install, no API key.",
+      body: "Paste the endpoint into any MCP client that speaks streamable HTTP. No account, no install, no API key.",
     },
     {
       title: "Sign in to Google",
-      body: "OAuth in the browser, one minimal Gmail scope. Disconnect revokes it instantly.",
+      body: "OAuth in the browser, one minimal Gmail scope. Disconnect drops the stored connection and asks Google to revoke access.",
     },
     {
       title: "Ask",
