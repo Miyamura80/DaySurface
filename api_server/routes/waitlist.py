@@ -22,6 +22,7 @@ notifications run in the background, off the request path.
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from pydantic import ValidationError
+from starlette.concurrency import run_in_threadpool
 
 from models.waitlist import WaitlistJoinInput, WaitlistJoinResult
 from services import waitlist_svc
@@ -75,7 +76,10 @@ async def join_waitlist(
         )
 
     source = (payload.source or "waitlist-page")[:64]
-    created = waitlist_svc.record_signup(email, source)
+    # record_signup is a blocking DB call; this handler is async, so run it in
+    # the threadpool rather than on the event loop where it would stall other
+    # requests under DB latency.
+    created = await run_in_threadpool(waitlist_svc.record_signup, email, source)
 
     # Best-effort side effects, off the request path, and only for a genuinely
     # new signup so a repeat submit never re-notifies or re-emails.

@@ -30,6 +30,18 @@ def is_valid_email(email: str) -> bool:
     return len(email) <= 320 and bool(_EMAIL_RE.match(email))
 
 
+def _ok(status_code: int) -> bool:
+    """A 2xx is success; 3xx (redirect) and everything else is failure."""
+    return 200 <= status_code < 300
+
+
+def _slack_escape(text: str) -> str:
+    """Escape Slack's three control characters so attacker-supplied text (a
+    signup email) can't inject a broadcast mention like ``<!channel>``.
+    ``&`` must be escaped first."""
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
 def record_signup(email: str, source: str | None) -> bool:
     """Insert the signup; return True if newly created, False if already present.
 
@@ -60,7 +72,7 @@ def sync_to_resend(email: str) -> None:
             json={"email": email, "unsubscribed": False},
             timeout=_HTTP_TIMEOUT,
         )
-        if resp.status_code >= 400:
+        if not _ok(resp.status_code):
             log.warning(
                 "Resend audience add failed: {} {}", resp.status_code, resp.text[:200]
             )
@@ -79,10 +91,10 @@ def notify_new_signup(email: str) -> None:
     try:
         resp = httpx.post(
             url,
-            json={"text": f"New DaySurface waitlist signup: {email}"},
+            json={"text": f"New DaySurface waitlist signup: {_slack_escape(email)}"},
             timeout=_HTTP_TIMEOUT,
         )
-        if resp.status_code >= 400:
+        if not _ok(resp.status_code):
             log.warning("Slack notify failed: {} {}", resp.status_code, resp.text[:200])
     except httpx.HTTPError as exc:
         log.warning("Slack notify error: {}", type(exc).__name__)
@@ -114,7 +126,7 @@ def _send_email(key: str, sender: str, to: str, subject: str, text: str) -> None
             json={"from": sender, "to": [to], "subject": subject, "text": text},
             timeout=_HTTP_TIMEOUT,
         )
-        if resp.status_code >= 400:
+        if not _ok(resp.status_code):
             log.warning("Resend send failed: {} {}", resp.status_code, resp.text[:200])
     except httpx.HTTPError as exc:
         log.warning("Resend send error: {}", type(exc).__name__)

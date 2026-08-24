@@ -17,6 +17,7 @@ from sqlalchemy.pool import StaticPool
 from api_server.server import app
 from db.base import Base
 from db.models.waitlist_signups import WaitlistSignup
+from services.waitlist_svc import _ok, _slack_escape
 from tests.test_template import TestTemplate
 
 _engine = create_engine(
@@ -115,3 +116,14 @@ class TestWaitlist(TestTemplate):
         resp = self.client.post("/waitlist/join", json={"email": "not-an-email"})
         assert resp.status_code == 422
         assert _count() == 0
+
+
+class TestWaitlistHelpers:
+    def test_slack_escape_neutralizes_mentions(self):
+        # A crafted signup must not become a Slack broadcast mention.
+        assert _slack_escape("<!channel>@e.com") == "&lt;!channel&gt;@e.com"
+        assert _slack_escape("a&b") == "a&amp;b"
+
+    def test_ok_is_2xx_only(self):
+        assert _ok(200) and _ok(299)
+        assert not _ok(302) and not _ok(404) and not _ok(500)
