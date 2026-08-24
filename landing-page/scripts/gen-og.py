@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""Generate the default social-share image: public/og.png (1200x630).
+"""Generate the social-share images in public/ (1200x630 each).
 
-Dev-only helper (the committed PNG is what ships). The Railway build runs
-`bun run build`, which does NOT run this - regenerate locally after editing the
-brand copy, then commit the new public/og.png:
+One default card plus a per-page card for the editorial pages that have their
+own headline (/product, /story). Dev-only helper (the committed PNGs are what
+ship). The Railway build runs `bun run build`, which does NOT run this -
+regenerate locally after editing the brand copy, then commit the new PNGs:
 
     uv run --with pillow --with cairosvg python scripts/gen-og.py
 
 Colors mirror the @theme tokens in src/styles/global.css and the copy mirrors
-src/config/landing.ts, so the card stays on-brand with the rest of the site.
+src/config/landing/{hero,product,story}.ts, so the cards stay on-brand with the
+rest of the site.
 The brand mark is rasterized from the canonical public/favicon.svg (cairosvg);
 if cairosvg is unavailable it falls back to a plain cyan square.
 """
@@ -18,6 +20,7 @@ from __future__ import annotations
 import io
 import re
 import urllib.request
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
@@ -29,16 +32,48 @@ FG = (255, 255, 255)
 FG_MUTED = (155, 164, 166)
 ACCENT = (195, 255, 253)  # Core Cyan 500
 
-# --- copy (keep in sync with src/config/landing.ts) -------------------------
-EYEBROW = "AN MCP SERVER FOR GMAIL"
 WORDMARK = "DaySurface"
-HEADLINE = ["Triage, draft, sign -", "without leaving chat."]
-SUBHEAD = "A real composer and a ranked inbox, inside any MCP client."
-PILLS = ["Gmail", "MCP", "Open source"]
 REPO = "github.com/Miyamura80/DaySurface"
+PILLS = ["Gmail", "MCP", "Open source"]
 
 W, H = 1200, 630
 PAD = 80
+
+
+@dataclass
+class Card:
+    """One social card. Copy mirrors the matching page's config."""
+
+    out: str
+    eyebrow: str
+    headline: list[str]
+    subhead: str
+    pills: list[str] = field(default_factory=lambda: PILLS)
+
+
+# The default card mirrors the homepage hero; the two page cards mirror
+# src/config/landing/{product,story}.ts.
+CARDS = [
+    Card(
+        out="og.png",
+        eyebrow="AN MCP SERVER FOR GMAIL",
+        headline=["Triage, draft, sign -", "without leaving chat."],
+        subhead="A real composer and a ranked inbox, inside any MCP client.",
+    ),
+    Card(
+        out="og-product.png",
+        eyebrow="HOW IT WORKS",
+        headline=["An inbox you drive", "from inside the chat."],
+        subhead="A composer and a ranked inbox, rendered in any MCP client.",
+    ),
+    Card(
+        out="og-story.png",
+        eyebrow="OUR STORY",
+        headline=["Why we built", "DaySurface."],
+        subhead="Agents that run your inbox - without locking you into one.",
+        pills=["Portable", "Open source", "Yours to host"],
+    ),
+]
 
 FONT_API = "https://fonts.googleapis.com/css2?family=Archivo:wght@{weight}"
 FONT_CACHE = Path("/tmp/daysurface-fonts")
@@ -92,7 +127,17 @@ def draw_tracked(draw, xy, text, font, fill, tracking):
     return x
 
 
-def main() -> None:
+def fit_headline(draw, lines: list[str]) -> ImageFont.FreeTypeFont:
+    """Largest Archivo-800 that keeps every headline line inside the margins."""
+    avail = W - 2 * PAD
+    for size in (86, 80, 74, 68, 62):
+        font = archivo(size, 800)
+        if all(draw.textlength(line, font=font) <= avail for line in lines):
+            return font
+    return archivo(62, 800)
+
+
+def render(card: Card) -> None:
     img = Image.new("RGB", (W, H), BG)
     d = ImageDraw.Draw(img)
 
@@ -118,25 +163,26 @@ def main() -> None:
     d.text((wm_x, row_y + 14), WORDMARK, font=wm_font, fill=FG)
 
     eb_font = archivo(20, 600)
-    eb_w = sum(d.textlength(c, font=eb_font) + 4 for c in EYEBROW) - 4
-    draw_tracked(d, (W - PAD - eb_w, row_y + 24), EYEBROW, eb_font, FG_MUTED, 4)
+    eb_w = sum(d.textlength(c, font=eb_font) + 4 for c in card.eyebrow) - 4
+    draw_tracked(d, (W - PAD - eb_w, row_y + 24), card.eyebrow, eb_font, FG_MUTED, 4)
 
-    # Headline.
-    hl_font = archivo(86, 800)
+    # Headline (auto-sized to fit the widest line).
+    hl_font = fit_headline(d, card.headline)
+    line_h = hl_font.size + 10
     y = 168
-    for line in HEADLINE:
+    for line in card.headline:
         d.text((PAD, y), line, font=hl_font, fill=FG)
-        y += 96
+        y += line_h
 
     # Subhead.
     sh_font = archivo(30, 400)
-    d.text((PAD, y + 24), SUBHEAD, font=sh_font, fill=FG_MUTED)
+    d.text((PAD, y + 24), card.subhead, font=sh_font, fill=FG_MUTED)
 
     # Bottom row: capability pills (left) + repo (right).
     pill_font = archivo(26, 600)
     px = PAD
     py = H - PAD - 44
-    for label in PILLS:
+    for label in card.pills:
         tw = d.textlength(label, font=pill_font)
         pw = tw + 44
         d.rounded_rectangle(
@@ -149,9 +195,14 @@ def main() -> None:
     rw = d.textlength(REPO, font=repo_font)
     d.text((W - PAD - rw, py + 12), REPO, font=repo_font, fill=FG_MUTED)
 
-    out = Path(__file__).resolve().parent.parent / "public" / "og.png"
+    out = Path(__file__).resolve().parent.parent / "public" / card.out
     img.save(out, "PNG")
     print(f"wrote {out} ({out.stat().st_size} bytes)")
+
+
+def main() -> None:
+    for card in CARDS:
+        render(card)
 
 
 if __name__ == "__main__":
