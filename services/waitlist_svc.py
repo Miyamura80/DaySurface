@@ -25,6 +25,10 @@ _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _RESEND_BASE = "https://api.resend.com"
 _HTTP_TIMEOUT = 5.0
 
+# Links used in the confirmation email's open-source / self-host callout.
+_GITHUB_URL = "https://github.com/Miyamura80/DaySurface"
+_DOCS_URL = "https://daysurface.com/docs"
+
 
 def is_valid_email(email: str) -> bool:
     return len(email) <= 320 and bool(_EMAIL_RE.match(email))
@@ -108,22 +112,76 @@ def send_confirmation(email: str) -> None:
     sender = global_config.WAITLIST_FROM_EMAIL
     if not (key and sender):
         return
+    text, html = _confirmation_content()
     _send_email(
         key,
         sender,
         email,
-        "You're on the DaySurface waitlist",
-        "Thanks for joining the DaySurface waitlist - we'll be in touch soon.",
+        "You're on the DaySurface waitlist \U0001f30a",
+        text,
+        html=html,
     )
 
 
-def _send_email(key: str, sender: str, to: str, subject: str, text: str) -> None:
+def _confirmation_content() -> tuple[str, str]:
+    """Return the ``(plain_text, html)`` bodies for the confirmation email.
+
+    Pure (no I/O) so it is unit-testable without the network. The HTML uses only
+    inline styles and a table skeleton for broad email-client support, and leads
+    with the open-source / self-host callout so a keen signer can start now.
+    """
+    text = (
+        "You're on the DaySurface waitlist.\n\n"
+        "Thanks for joining. DaySurface puts a ranked inbox, a real reply "
+        "composer, and fill-and-sign PDFs right inside Claude, ChatGPT, or any "
+        "MCP client. We'll email you the moment your invite is ready.\n\n"
+        "Don't want to wait? DaySurface is fully open source - self-host it and "
+        "connect your own client to get started right now:\n"
+        f"  {_GITHUB_URL}\n"
+        f"Docs: {_DOCS_URL}\n\n"
+        "You're getting this because you joined the waitlist at daysurface.com. "
+        "If that wasn't you, you can ignore this email."
+    )
+    html = f"""\
+<!doctype html><html><body style="margin:0;padding:0;background:#f4f4f5;">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;">You're on the DaySurface waitlist - and it's open source, so you can self-host today.</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:24px 0;"><tr><td align="center">
+<table role="presentation" width="480" cellpadding="0" cellspacing="0" style="width:480px;max-width:92%;background:#ffffff;border:1px solid #e5e5e5;border-radius:12px;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+<tr><td style="padding:28px 32px 0;"><div style="font-weight:800;font-size:18px;letter-spacing:-0.02em;color:#0a0a0a;">DaySurface</div></td></tr>
+<tr><td style="padding:16px 32px 0;">
+<h1 style="margin:0;font-size:24px;line-height:1.25;color:#0a0a0a;">You're on the list \U0001f389</h1>
+<p style="margin:14px 0 0;font-size:15px;line-height:1.6;color:#3f3f46;">Thanks for joining the DaySurface waitlist. DaySurface puts a ranked inbox, a real reply composer, and fill-and-sign PDFs right inside Claude, ChatGPT, or any MCP client. We'll email you the moment your invite is ready.</p>
+</td></tr>
+<tr><td style="padding:22px 32px 0;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f0fdfc;border:1px solid #c3fffd;border-radius:10px;"><tr><td style="padding:18px 20px;">
+<div style="font-weight:700;font-size:14px;color:#0a0a0a;">Don't want to wait?</div>
+<p style="margin:6px 0 14px;font-size:14px;line-height:1.55;color:#3f3f46;">DaySurface is fully <strong>open source</strong> - self-host it and connect your own client to get started right now.</p>
+<table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="border-radius:8px;background:#0a0a0a;"><a href="{_GITHUB_URL}" style="display:inline-block;padding:11px 20px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;">Self-host on GitHub &rarr;</a></td></tr></table>
+<a href="{_DOCS_URL}" style="display:inline-block;margin-top:10px;font-size:13px;color:#0a7c78;text-decoration:underline;">Read the docs</a>
+</td></tr></table>
+</td></tr>
+<tr><td style="padding:24px 32px 28px;"><p style="margin:0;font-size:12px;line-height:1.5;color:#a1a1aa;">You're getting this because you joined the waitlist at daysurface.com. If that wasn't you, you can ignore this email.</p></td></tr>
+</table></td></tr></table></body></html>"""
+    return text, html
+
+
+def _send_email(
+    key: str, sender: str, to: str, subject: str, text: str, html: str | None = None
+) -> None:
     """Send one transactional email via Resend. Never raises."""
+    payload: dict[str, object] = {
+        "from": sender,
+        "to": [to],
+        "subject": subject,
+        "text": text,
+    }
+    if html:
+        payload["html"] = html
     try:
         resp = httpx.post(
             f"{_RESEND_BASE}/emails",
             headers={"Authorization": f"Bearer {key}"},
-            json={"from": sender, "to": [to], "subject": subject, "text": text},
+            json=payload,
             timeout=_HTTP_TIMEOUT,
         )
         if not _ok(resp.status_code):
