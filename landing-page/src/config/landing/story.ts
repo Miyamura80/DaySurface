@@ -7,10 +7,8 @@
  * stay that way. This page carries the founding narrative instead: the problem,
  * the turning point, and where it's going.
  *
- * TODO: this is a faithful telling of the *product* thesis, not a personal one.
- * Replace the placeholders below with the real founder's voice - the actual
- * moment, the actual name - the day you have it. A specific story beats a
- * defensible one.
+ * This is the founder's own telling: the motivation was wanting agents to run
+ * a personal inbox without getting locked into any single assistant to do it.
  */
 import { site } from "./site";
 
@@ -32,33 +30,32 @@ export const story: {
   signoff: string;
 } = {
   metaTitle: `Why we built ${site.name}`,
-  metaDescription: `The story behind ${site.name}: why email tools for agents kept returning walls of JSON, and why we built a Gmail product you drive from inside the chat - open source, and yours to host.`,
+  metaDescription: `The story behind ${site.name}: I wanted my agents to run my email, and I didn't want to be locked into any one of them. So I built a Gmail server that's portable across every agent - open source, and yours to host.`,
   eyebrow: "Our story",
   heading: "Why we built DaySurface",
-  lede: "Agents got good at email fast. The tools they were handed did not.",
+  lede: "I wanted my agents to run my email. I didn't want to marry one of them to do it.",
   sections: [
     {
-      heading: "The wall of JSON",
+      heading: "The itch",
       paragraphs: [
-        "Every Gmail integration we tried gave an agent the same thing: a search endpoint and a send endpoint, and a wall of JSON in between. The agent could technically read your mail and technically draft a reply - but you never saw the draft until it was already sent, and \"what needs my attention?\" meant re-running a search from scratch every single time.",
-        "It worked in a demo and fell apart the moment you trusted it with a real inbox. The problem was never the model. It was that email had been wrapped, not built.",
+        "I have too much email, and I have agents that are finally good enough to help with it. The obvious move was to just let them - read what came in, tell me what actually needs me, draft the replies I keep putting off.",
+        "Every option that could do that came bolted to one assistant. Set it up inside that assistant, learn its way of doing things, and your inbox now lives there. That felt backwards. My mail is mine; the agent is a tool I should be free to swap.",
       ],
     },
     {
-      heading: "Email is a product, not an endpoint",
+      heading: "Portable on purpose",
       paragraphs: [
-        "So we built the thing we actually wanted: a real composer you edit drafts in, and a ranked inbox you triage - rendered inside the chat, not returned as a blob for the agent to describe back to you. Your agent does the reading and the first pass. You keep the last word, because nothing leaves your account until you press send.",
-        "Going deep on one product meant saying no to breadth. DaySurface does Gmail, and only Gmail, on purpose - a single minimal scope instead of a gateway holding keys to your whole digital life.",
+        "So the first rule was no lock-in. DaySurface is a Model Context Protocol server, which means any agent that speaks MCP can drive it - Claude today, something else next month, two of them at once if you like. Move setups and your email tooling comes with you. Nothing to re-learn, nothing stranded.",
+        "The same tools also run over a plain CLI and an HTTP API, not just MCP. One codebase behind all three, so a script, your shell, and your agent all reach the exact same inbox with the exact same behaviour.",
       ],
     },
     {
       heading: "Yours to run",
       paragraphs: [
-        "The last decision was the easiest. Your mail should never route through a proprietary service you can't inspect, so the whole server is open source and ships to self-host with your own OAuth credentials. The same tools run over a CLI and a plain HTTP API, not just MCP - one codebase, three interfaces, no behaviour that drifts between them.",
-        "That is the whole bet: email done deeply, in the open, where you can see it. We're still early, and the roadmap is public. If the wall of JSON ever frustrated you too, we'd love for you to try it.",
+        "Portability only counts if the thing underneath is yours. So the whole server is open source and ships to self-host with your own Google credentials - your mail never routes through a service you can't inspect or replace.",
+        "That's the whole bet: let your agents actually work your inbox, and never let any single one of them own it. It's early and the roadmap is public. If you've wanted the same thing, come try it.",
       ],
     },
   ],
-  // TODO: replace with the real founder / team signature.
-  signoff: "The DaySurface team",
+  signoff: "Eito, DaySurface",
 } as const;
