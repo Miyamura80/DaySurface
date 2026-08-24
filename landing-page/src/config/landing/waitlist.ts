@@ -22,15 +22,29 @@ export const waitlist: {
    * Where the email form POSTs. Empty by default: the page ships a fully
    * working form UI (validation, inline success/error, no-JS fallback), but
    * with no endpoint it cannot persist anything, so the client script only
-   * confirms locally. Point this at any static-friendly form backend that
-   * accepts a POST and can return JSON when sent `Accept: application/json`
-   * (Formspree, Getform, Basin, Web3Forms, a Cloudflare Worker, ...). The
-   * form sends an `email` field (and a honeypot `company` field the backend
-   * should reject when non-empty).
+   * confirms locally.
    *
-   * TODO: set the real waitlist form endpoint.
+   * Wired for Loops (loops.so): create a Form in Loops and paste its custom
+   * endpoint here -
+   *     https://app.loops.so/api/newsletter-form/<YOUR_FORM_ID>
+   * The form submits `email` (and `userGroup` below) as
+   * `application/x-www-form-urlencoded`. That endpoint needs NO API key, so it
+   * is safe to call from this static page - do not put a Loops API key here or
+   * anywhere in the client bundle. Any Loops mailing list attached to the form
+   * must be Public. Response is `{ "success": true }`.
+   *
+   * The same shape (urlencoded `email`, JSON reply) also works with Formspree,
+   * Getform, Basin, or a Cloudflare Worker if you switch providers later.
+   *
+   * TODO: set the Loops form endpoint.
    */
   endpoint: string;
+  /**
+   * Optional Loops user group tag applied to signups from this form (shows up
+   * in Loops for segmenting the waitlist). Sent only when non-empty; ignored by
+   * non-Loops backends. Empty string to omit.
+   */
+  userGroup: string;
   /** Field label + placeholder for the email input. */
   emailLabel: string;
   emailPlaceholder: string;
@@ -61,6 +75,7 @@ export const waitlist: {
   headline: "Get on the DaySurface waitlist.",
   subhead: `${site.name} brings a ranked inbox, a real reply composer, and fill-and-sign PDFs straight into the AI client you already use. Join the list for priority onboarding and launch updates.`,
   endpoint: "",
+  userGroup: "Waitlist",
   emailLabel: "Work email",
   emailPlaceholder: "you@company.com",
   cta: "Join the waitlist",

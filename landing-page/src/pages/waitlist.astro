@@ -100,7 +100,12 @@ const jsonLd = [
 
           <!-- Form. data-waitlist wraps the whole thing; the script reads the
                endpoint off it and swaps [data-form] for [data-success]. -->
-          <div class="mx-auto mt-9 w-full max-w-md lg:mx-0" data-waitlist data-endpoint={waitlist.endpoint}>
+          <div
+            class="mx-auto mt-9 w-full max-w-md lg:mx-0"
+            data-waitlist
+            data-endpoint={waitlist.endpoint}
+            data-user-group={waitlist.userGroup}
+          >
             <!-- method/action only when an endpoint is wired: with no backend a
                  no-JS submit must not POST back to /waitlist (the static host
                  has no handler for it and would fail). Unconfigured, it stays a
@@ -144,6 +149,13 @@ const jsonLd = [
                   {waitlist.cta}
                 </button>
               </div>
+
+              {/* Loops user group, carried on the no-JS native POST too (the
+                  enhancement script adds it itself for the fetch path). Only
+                  emitted when configured, so an unconfigured form stays clean. */}
+              {configured && waitlist.userGroup && (
+                <input type="hidden" name="userGroup" value={waitlist.userGroup} />
+              )}
 
               <!-- Honeypot: real users never see or fill this; bots do. The
                    backend should drop any submission where it's non-empty. -->
@@ -251,6 +263,7 @@ const jsonLd = [
       if (!form || !success || !submit || !email) return;
 
       const endpoint = root.dataset.endpoint?.trim() ?? "";
+      const userGroup = root.dataset.userGroup?.trim() ?? "";
       const restingLabel = submit.textContent?.trim() || "Join the waitlist";
       // Config-driven (waitlist.ctaPending), passed through the button's data
       // attribute so the label isn't a second source of truth in this script.
@@ -296,15 +309,30 @@ const jsonLd = [
         }
 
         try {
+          // Loops' custom-form endpoint wants application/x-www-form-urlencoded.
+          // Build the body explicitly (email + optional userGroup) so the bot
+          // honeypot is never forwarded and Loops gets only fields it expects.
+          const params = new URLSearchParams({ email: email.value.trim() });
+          if (userGroup) params.set("userGroup", userGroup);
           const res = await fetch(endpoint, {
             method: "POST",
-            headers: { Accept: "application/json" },
-            body: new FormData(form),
+            headers: {
+              "Content-Type": "application/x-www-form-urlencoded",
+              Accept: "application/json",
+            },
+            body: params,
           });
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          // Loops replies 200 with {success:boolean}; a false there (e.g. the
+          // form's list isn't public) is a failure even though the HTTP is 2xx.
+          const data = await res.json().catch(() => null);
+          if (data && data.success === false) {
+            throw new Error(data.message || "submission rejected");
+          }
           showSuccess();
         } catch {
-          // Network error or non-2xx: let them retry rather than lose the email.
+          // Network error, non-2xx, or success:false: let them retry rather
+          // than lose the email.
           showError();
         }
       };
