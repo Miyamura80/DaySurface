@@ -157,8 +157,16 @@ const jsonLd = [
                 <input type="hidden" name="userGroup" value={waitlist.userGroup} />
               )}
 
-              <!-- Honeypot: real users never see or fill this; bots do. The
-                   backend should drop any submission where it's non-empty. -->
+              {/* Honeypot: real users never see or fill this; bots do. The JS
+                  path enforces it - a non-empty value short-circuits to a silent
+                  success with no POST (see handle() below), and the fetch body
+                  never forwards it. The no-JS native POST can't enforce it:
+                  Loops' form endpoint has no honeypot rejection and ignores
+                  unknown fields, so a JS-disabled bot could still sign up. That
+                  is inherent to a serverless form - strict no-JS filtering needs
+                  a server/Worker in front of Loops that drops a non-empty
+                  `company`. JS is the primary control here and covers ~all real
+                  traffic. */}
               <div class="absolute h-px w-px overflow-hidden" aria-hidden="true">
                 <label>
                   Company
