@@ -38,7 +38,10 @@ _INTRO_TAIL = " We'll email you the moment your invite is ready."
 # Client icons shown in the HTML intro (hosted PNGs - email clients don't render
 # SVG or data: URIs). Order + alt text; the plain-text intro names them instead.
 _INTRO_CLIENTS = (("claude", "Claude"), ("chatgpt", "ChatGPT"), ("goose", "Goose"))
-_INTRO_CLIENTS_TEXT = "Claude, ChatGPT, Goose, or any MCP client."
+# Trailing clause shared by both bodies so they can't drift: the text intro
+# prefixes it with the client names, the HTML intro prefixes it with the icons.
+_MCP_CLIENT_SUFFIX = "or any MCP client."
+_INTRO_CLIENTS_TEXT = f"Claude, ChatGPT, Goose, {_MCP_CLIENT_SUFFIX}"
 _CONFIRM_CALLOUT = (
     "DaySurface is fully open source - self-host it and connect your own client "
     "to get started right now."
@@ -190,7 +193,7 @@ def _confirmation_content() -> tuple[str, str]:
 <tr><td style="padding:28px 32px 0;"><div style="font-weight:800;font-size:18px;letter-spacing:-0.02em;color:#0a0a0a;">DaySurface</div></td></tr>
 <tr><td style="padding:16px 32px 0;">
 <h1 style="margin:0;font-size:24px;line-height:1.25;color:#0a0a0a;">You're on the list \U0001f389</h1>
-<p style="margin:14px 0 0;font-size:15px;line-height:1.6;color:#3f3f46;">{_INTRO_LEAD}<span style="white-space:nowrap;">{icons}</span> or any MCP client.{_INTRO_TAIL}</p>
+<p style="margin:14px 0 0;font-size:15px;line-height:1.6;color:#3f3f46;">{_INTRO_LEAD}<span style="white-space:nowrap;">{icons}</span> {_MCP_CLIENT_SUFFIX}{_INTRO_TAIL}</p>
 </td></tr>
 <tr><td style="padding:22px 32px 0;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f0fdfc;border:1px solid #c3fffd;border-radius:10px;"><tr><td style="padding:18px 20px;">
