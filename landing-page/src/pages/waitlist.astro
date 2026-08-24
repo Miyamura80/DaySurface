@@ -5,9 +5,11 @@
  * Reuses the homepage hero's client-toggle product animation (<ChatMock />, the
  * same four-client shells + the ConvoScroll "how it works" loop) so the page
  * shows what people are signing up for while they sign up. The email form is
- * data-driven (src/config/landing/waitlist.ts) and progressively enhanced: with
- * JS it POSTs to `waitlist.endpoint` via fetch and swaps in an inline success
- * state; with JS off it is an ordinary <form> that submits to the same endpoint.
+ * data-driven (src/config/landing/waitlist.ts). The form POSTs JSON to
+ * DaySurface's own public API (`waitlist.endpoint` = /waitlist/join), which
+ * stores the signup and rejects the honeypot server-side; the script swaps in an
+ * inline success state. JS is required (the API takes a JSON body a native form
+ * POST can't produce), so the submit control never natively navigates.
  *
  * noindex: a waitlist is a conversion surface, not something to rank; keeping it
  * out of the index also keeps the site's "no signup to use it" story unmuddied
@@ -20,14 +22,7 @@ import ChatMock from "../components/ChatMock.astro";
 import { site, waitlist } from "../config/landing";
 
 const origin = (Astro.site ?? new URL(site.url)).origin;
-
-// Whether a real form backend is wired. Decided once here so both the no-JS
-// <form> (method/action) and the confirmation copy agree: an unconfigured form
-// must not POST-to-self and must not claim the visitor joined a real list.
 const endpoint = waitlist.endpoint.trim();
-const configured = endpoint !== "";
-const confirmHeading = configured ? waitlist.successHeading : waitlist.previewHeading;
-const confirmBody = configured ? waitlist.successBody : waitlist.previewBody;
 
 const pageTitle = `Waitlist - ${site.name}`;
 const pageDescription = waitlist.subhead;
@@ -103,17 +98,12 @@ const jsonLd = [
           <div
             class="mx-auto mt-9 w-full max-w-md lg:mx-0"
             data-waitlist
-            data-endpoint={waitlist.endpoint}
-            data-user-group={waitlist.userGroup}
+            data-endpoint={endpoint}
           >
-            <!-- method/action only when an endpoint is wired: with no backend a
-                 no-JS submit must not POST back to /waitlist (the static host
-                 has no handler for it and would fail). Unconfigured, it stays a
-                 plain form the enhancement script confirms locally. -->
+            <!-- No native method/action: the API takes a JSON body, so submission
+                 goes through the script (fetch). The form never navigates. -->
             <form
               class="relative border-2 border-accent bg-surface-1 p-3 text-left shadow-2xl shadow-black/40 sm:p-4"
-              method={configured ? "POST" : undefined}
-              action={configured ? endpoint : undefined}
               data-form
               novalidate
             >
@@ -135,13 +125,11 @@ const jsonLd = [
                   placeholder={waitlist.emailPlaceholder}
                   class="min-h-12 min-w-0 flex-1 border border-border bg-bg px-3 py-2.5 font-mono text-sm text-fg outline-none transition placeholder:text-fg-subtle focus:border-accent"
                 />
-                <!-- A submit button only when there's a backend to submit to.
-                     Unconfigured, it's type=button so a no-JS click does nothing
-                     (there is no endpoint to reach) rather than firing a pointless
-                     same-page GET; the enhancement script handles the click to
-                     show the local preview confirmation. -->
+                <!-- type=button: the API takes JSON, so a native submit would be
+                     useless (and would navigate). The script drives it; Enter in
+                     the field is handled there too. -->
                 <button
-                  type={configured ? "submit" : "button"}
+                  type="button"
                   class="flex min-h-12 shrink-0 items-center justify-center gap-2 bg-accent px-5 font-semibold text-accent-fg transition hover:bg-accent-strong disabled:opacity-60"
                   data-submit
                   data-pending-label={waitlist.ctaPending}
@@ -150,23 +138,10 @@ const jsonLd = [
                 </button>
               </div>
 
-              {/* Loops user group, carried on the no-JS native POST too (the
-                  enhancement script adds it itself for the fetch path). Only
-                  emitted when configured, so an unconfigured form stays clean. */}
-              {configured && waitlist.userGroup && (
-                <input type="hidden" name="userGroup" value={waitlist.userGroup} />
-              )}
-
-              {/* Honeypot: real users never see or fill this; bots do. The JS
-                  path enforces it - a non-empty value short-circuits to a silent
-                  success with no POST (see handle() below), and the fetch body
-                  never forwards it. The no-JS native POST can't enforce it:
-                  Loops' form endpoint has no honeypot rejection and ignores
-                  unknown fields, so a JS-disabled bot could still sign up. That
-                  is inherent to a serverless form - strict no-JS filtering needs
-                  a server/Worker in front of Loops that drops a non-empty
-                  `company`. JS is the primary control here and covers ~all real
-                  traffic. */}
+              {/* Honeypot: real users never see or fill this; bots do. Unlike a
+                  serverless form, this is enforced server-side - the fetch sends
+                  `company` and the API drops any non-empty value - so it holds
+                  regardless of client JS. */}
               <div class="absolute h-px w-px overflow-hidden" aria-hidden="true">
                 <label>
                   Company
@@ -191,8 +166,8 @@ const jsonLd = [
                   <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5" /></svg>
                 </span>
                 <div class="min-w-0">
-                  <p class="text-lg font-bold text-fg">{confirmHeading}</p>
-                  <p class="mt-1.5 text-pretty text-sm text-fg-muted">{confirmBody}</p>
+                  <p class="text-lg font-bold text-fg">{waitlist.successHeading}</p>
+                  <p class="mt-1.5 text-pretty text-sm text-fg-muted">{waitlist.successBody}</p>
                 </div>
               </div>
             </div>
@@ -247,35 +222,31 @@ const jsonLd = [
 
 <script>
   /*
-   * Progressive enhancement for the waitlist form.
-   *
-   * With JS off, the <form> just POSTs to `action` (waitlist.endpoint) and the
-   * backend renders its own thank-you. With JS on, we intercept, POST via fetch
-   * so the page never navigates, and swap in the inline success panel.
-   *
-   * When no endpoint is configured (the shipped default), there is nothing to
-   * POST to, so we confirm locally instead of faking a network round-trip -
-   * enough to preview the flow; wiring `waitlist.endpoint` makes it real.
+   * Waitlist form -> DaySurface API. POSTs JSON { email, company, source } to
+   * `data-endpoint` (/waitlist/join). The API stores the signup, drops the
+   * honeypot server-side, and returns { success: true } on 2xx or 422 for a
+   * bad email. JS is required (JSON body); the button is type=button so nothing
+   * ever navigates. Enter in the field submits too.
    */
   function initWaitlist() {
     document.querySelectorAll<HTMLElement>("[data-waitlist]").forEach((root) => {
       if (root.dataset.waitlistReady === "true") return;
       root.dataset.waitlistReady = "true";
 
-      const form = root.querySelector<HTMLFormElement>("[data-form]");
       const success = root.querySelector<HTMLElement>("[data-success]");
+      const form = root.querySelector<HTMLElement>("[data-form]");
       const errorEl = root.querySelector<HTMLElement>("[data-error]");
       const submit = root.querySelector<HTMLButtonElement>("[data-submit]");
       const email = root.querySelector<HTMLInputElement>('input[name="email"]');
       const honeypot = root.querySelector<HTMLInputElement>('input[name="company"]');
-      if (!form || !success || !submit || !email) return;
+      if (!success || !form || !submit || !email) return;
 
       const endpoint = root.dataset.endpoint?.trim() ?? "";
-      const userGroup = root.dataset.userGroup?.trim() ?? "";
       const restingLabel = submit.textContent?.trim() || "Join the waitlist";
-      // Config-driven (waitlist.ctaPending), passed through the button's data
-      // attribute so the label isn't a second source of truth in this script.
+      // Config-driven (waitlist.ctaPending), read from the button so the label
+      // isn't a second source of truth in this script.
       const pendingLabel = submit.dataset.pendingLabel?.trim() || restingLabel;
+      let busy = false;
 
       const showError = () => {
         errorEl?.classList.remove("hidden");
@@ -291,66 +262,45 @@ const jsonLd = [
         success.focus();
       };
 
-      const handle = async (e: Event) => {
-        e.preventDefault();
+      const submitSignup = async () => {
+        if (busy) return;
         errorEl?.classList.add("hidden");
-
-        // Bots fill the hidden honeypot; treat that as a silent success so we
-        // don't tell them why nothing happened.
-        if (honeypot && honeypot.value.trim() !== "") {
-          showSuccess();
-          return;
-        }
-
         if (!email.checkValidity()) {
           email.reportValidity();
           return;
         }
-
+        busy = true;
         submit.disabled = true;
         submit.textContent = pendingLabel;
-
-        // No endpoint wired yet: confirm locally rather than fake a request.
-        if (!endpoint) {
-          showSuccess();
-          return;
-        }
-
         try {
-          // Loops' custom-form endpoint wants application/x-www-form-urlencoded.
-          // Build the body explicitly (email + optional userGroup) so the bot
-          // honeypot is never forwarded and Loops gets only fields it expects.
-          const params = new URLSearchParams({ email: email.value.trim() });
-          if (userGroup) params.set("userGroup", userGroup);
           const res = await fetch(endpoint, {
             method: "POST",
-            headers: {
-              "Content-Type": "application/x-www-form-urlencoded",
-              Accept: "application/json",
-            },
-            body: params,
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            // Send the honeypot too: the server drops a non-empty `company`,
+            // so the bot filter works without any client-side special-casing.
+            body: JSON.stringify({
+              email: email.value.trim(),
+              company: honeypot?.value ?? "",
+              source: "waitlist-page",
+            }),
           });
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          // Loops replies 200 with {success:boolean}; a false there (e.g. the
-          // form's list isn't public) is a failure even though the HTTP is 2xx.
-          const data = await res.json().catch(() => null);
-          if (data && data.success === false) {
-            throw new Error(data.message || "submission rejected");
-          }
           showSuccess();
         } catch {
-          // Network error, non-2xx, or success:false: let them retry rather
-          // than lose the email.
+          // Network error or non-2xx (e.g. 422 bad email): let them retry.
+          busy = false;
           showError();
         }
       };
 
-      // Configured: the button is type=submit, so the form's submit event covers
-      // both clicks and Enter. Unconfigured: it's type=button and the form never
-      // submits, so bind the click directly (Enter is inert in that preview
-      // state, which is fine - there's no backend to reach anyway).
-      form.addEventListener("submit", handle);
-      if (!endpoint) submit.addEventListener("click", handle);
+      submit.addEventListener("click", () => void submitSignup());
+      // Enter in the single field: there is no submit button, so drive it here.
+      email.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          void submitSignup();
+        }
+      });
     });
   }
 

@@ -27,6 +27,7 @@ from api_server.routes import (
     health,
     index,
     services,
+    waitlist,
     well_known,
 )
 from api_server.routes.google import webhooks as google_webhooks
@@ -180,6 +181,7 @@ app.include_router(webhooks.router)
 app.include_router(google_webhooks.router)
 app.include_router(agentic_payments.router)
 app.include_router(ask.router)
+app.include_router(waitlist.router)
 
 # --- MCP server (streamable HTTP) -----------------------------------------
 # Mounts FastMCP at /mcp so CLI/API/MCP share one process, port, and middleware.

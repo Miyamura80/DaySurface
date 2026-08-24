@@ -259,6 +259,22 @@ class Config(BaseSettings):
     # Redis
     REDIS_URL: str | None = None
 
+    # Waitlist (public /waitlist page) + Resend email delivery.
+    # All optional and env-driven: with these unset, a signup is still stored in
+    # Postgres - only the Resend audience sync and the notification are skipped
+    # (logged, never fatal). Never put a Resend key anywhere client-side.
+    RESEND_API_KEY: str | None = None
+    RESEND_AUDIENCE_ID: str | None = None
+    # From identity for waitlist mail, e.g. "DaySurface <hello@daysurface.com>".
+    WAITLIST_FROM_EMAIL: str | None = None
+    # Inbox that receives the per-signup notification (used when WAITLIST_NOTIFY).
+    WAITLIST_NOTIFY_TO: str | None = None
+    # Notify you (email to WAITLIST_NOTIFY_TO) on each signup. Default on.
+    WAITLIST_NOTIFY: bool = True
+    # Send the signer a confirmation/welcome email. Default OFF - turn on only
+    # once the sending domain is verified in Resend, or mail lands in spam.
+    WAITLIST_CONFIRM_EMAIL: bool = False
+
     # Google OAuth (Gmail integration) - fill in real values in .env
     GOOGLE_CLIENT_ID: str | None = None
     GOOGLE_CLIENT_SECRET: str | None = None
