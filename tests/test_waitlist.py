@@ -15,15 +15,10 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from api_server.server import app
+from common import global_config
 from db.base import Base
 from db.models.waitlist_signups import WaitlistSignup
-from services.waitlist_svc import (
-    _DOCS_URL,
-    _GITHUB_URL,
-    _confirmation_content,
-    _ok,
-    _slack_escape,
-)
+from services.waitlist_svc import _confirmation_content, _ok, _slack_escape
 from tests.test_template import TestTemplate
 
 _engine = create_engine(
@@ -136,9 +131,11 @@ class TestWaitlistHelpers:
 
     def test_confirmation_highlights_open_source_self_host(self):
         text, html = _confirmation_content()
+        repo = global_config.branding.repository_url
+        docs = global_config.ask.docs_base_url
         for body in (text, html):
             assert "open source" in body.lower()
-            assert _GITHUB_URL in body
+            assert repo in body  # links derived from central config
         # HTML body carries the styled self-host button + docs link.
         assert "Self-host on GitHub" in html
-        assert _DOCS_URL in html
+        assert docs in html

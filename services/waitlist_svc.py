@@ -25,9 +25,21 @@ _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _RESEND_BASE = "https://api.resend.com"
 _HTTP_TIMEOUT = 5.0
 
-# Links used in the confirmation email's open-source / self-host callout.
-_GITHUB_URL = "https://github.com/Miyamura80/DaySurface"
-_DOCS_URL = "https://daysurface.com/docs"
+# Shared confirmation-email copy, defined once and interpolated into both the
+# plain-text and HTML bodies so a copy edit can't leave them out of sync.
+_CONFIRM_INTRO = (
+    "Thanks for joining the DaySurface waitlist. DaySurface puts a ranked inbox, "
+    "a real reply composer, and fill-and-sign PDFs right inside Claude, ChatGPT, "
+    "or any MCP client. We'll email you the moment your invite is ready."
+)
+_CONFIRM_CALLOUT = (
+    "DaySurface is fully open source - self-host it and connect your own client "
+    "to get started right now."
+)
+_CONFIRM_DISCLAIMER = (
+    "You're getting this because you joined the waitlist at daysurface.com. "
+    "If that wasn't you, you can ignore this email."
+)
 
 
 def is_valid_email(email: str) -> bool:
@@ -126,21 +138,25 @@ def send_confirmation(email: str) -> None:
 def _confirmation_content() -> tuple[str, str]:
     """Return the ``(plain_text, html)`` bodies for the confirmation email.
 
-    Pure (no I/O) so it is unit-testable without the network. The HTML uses only
+    Pure (no network) so it is unit-testable. The repo/docs links come from the
+    central config (``branding.repository_url`` / ``ask.docs_base_url``) so they
+    can't drift from the rest of the site, and the shared copy phrases are
+    interpolated into both bodies from single constants. The HTML uses only
     inline styles and a table skeleton for broad email-client support, and leads
     with the open-source / self-host callout so a keen signer can start now.
     """
+    repo = global_config.branding.repository_url
+    docs = global_config.ask.docs_base_url
+    # Bold "open source" in the HTML rendering of the shared callout sentence.
+    callout_html = _CONFIRM_CALLOUT.replace(
+        "open source", "<strong>open source</strong>", 1
+    )
     text = (
-        "You're on the DaySurface waitlist.\n\n"
-        "Thanks for joining. DaySurface puts a ranked inbox, a real reply "
-        "composer, and fill-and-sign PDFs right inside Claude, ChatGPT, or any "
-        "MCP client. We'll email you the moment your invite is ready.\n\n"
-        "Don't want to wait? DaySurface is fully open source - self-host it and "
-        "connect your own client to get started right now:\n"
-        f"  {_GITHUB_URL}\n"
-        f"Docs: {_DOCS_URL}\n\n"
-        "You're getting this because you joined the waitlist at daysurface.com. "
-        "If that wasn't you, you can ignore this email."
+        f"You're on the DaySurface waitlist.\n\n{_CONFIRM_INTRO}\n\n"
+        f"Don't want to wait? {_CONFIRM_CALLOUT}\n"
+        f"  {repo}\n"
+        f"Docs: {docs}\n\n"
+        f"{_CONFIRM_DISCLAIMER}"
     )
     html = f"""\
 <!doctype html><html><body style="margin:0;padding:0;background:#f4f4f5;">
@@ -150,17 +166,17 @@ def _confirmation_content() -> tuple[str, str]:
 <tr><td style="padding:28px 32px 0;"><div style="font-weight:800;font-size:18px;letter-spacing:-0.02em;color:#0a0a0a;">DaySurface</div></td></tr>
 <tr><td style="padding:16px 32px 0;">
 <h1 style="margin:0;font-size:24px;line-height:1.25;color:#0a0a0a;">You're on the list \U0001f389</h1>
-<p style="margin:14px 0 0;font-size:15px;line-height:1.6;color:#3f3f46;">Thanks for joining the DaySurface waitlist. DaySurface puts a ranked inbox, a real reply composer, and fill-and-sign PDFs right inside Claude, ChatGPT, or any MCP client. We'll email you the moment your invite is ready.</p>
+<p style="margin:14px 0 0;font-size:15px;line-height:1.6;color:#3f3f46;">{_CONFIRM_INTRO}</p>
 </td></tr>
 <tr><td style="padding:22px 32px 0;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f0fdfc;border:1px solid #c3fffd;border-radius:10px;"><tr><td style="padding:18px 20px;">
 <div style="font-weight:700;font-size:14px;color:#0a0a0a;">Don't want to wait?</div>
-<p style="margin:6px 0 14px;font-size:14px;line-height:1.55;color:#3f3f46;">DaySurface is fully <strong>open source</strong> - self-host it and connect your own client to get started right now.</p>
-<table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="border-radius:8px;background:#0a0a0a;"><a href="{_GITHUB_URL}" style="display:inline-block;padding:11px 20px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;">Self-host on GitHub &rarr;</a></td></tr></table>
-<a href="{_DOCS_URL}" style="display:inline-block;margin-top:10px;font-size:13px;color:#0a7c78;text-decoration:underline;">Read the docs</a>
+<p style="margin:6px 0 14px;font-size:14px;line-height:1.55;color:#3f3f46;">{callout_html}</p>
+<table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="border-radius:8px;background:#0a0a0a;"><a href="{repo}" style="display:inline-block;padding:11px 20px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;">Self-host on GitHub &rarr;</a></td></tr></table>
+<a href="{docs}" style="display:inline-block;margin-top:10px;font-size:13px;color:#0a7c78;text-decoration:underline;">Read the docs</a>
 </td></tr></table>
 </td></tr>
-<tr><td style="padding:24px 32px 28px;"><p style="margin:0;font-size:12px;line-height:1.5;color:#a1a1aa;">You're getting this because you joined the waitlist at daysurface.com. If that wasn't you, you can ignore this email.</p></td></tr>
+<tr><td style="padding:24px 32px 28px;"><p style="margin:0;font-size:12px;line-height:1.5;color:#a1a1aa;">{_CONFIRM_DISCLAIMER}</p></td></tr>
 </table></td></tr></table></body></html>"""
     return text, html
 
