@@ -130,8 +130,13 @@ const jsonLd = [
                   placeholder={waitlist.emailPlaceholder}
                   class="min-h-12 min-w-0 flex-1 border border-border bg-bg px-3 py-2.5 font-mono text-sm text-fg outline-none transition placeholder:text-fg-subtle focus:border-accent"
                 />
+                <!-- A submit button only when there's a backend to submit to.
+                     Unconfigured, it's type=button so a no-JS click does nothing
+                     (there is no endpoint to reach) rather than firing a pointless
+                     same-page GET; the enhancement script handles the click to
+                     show the local preview confirmation. -->
                 <button
-                  type="submit"
+                  type={configured ? "submit" : "button"}
                   class="flex min-h-12 shrink-0 items-center justify-center gap-2 bg-accent px-5 font-semibold text-accent-fg transition hover:bg-accent-strong disabled:opacity-60"
                   data-submit
                   data-pending-label={waitlist.ctaPending}
@@ -265,7 +270,7 @@ const jsonLd = [
         success.focus();
       };
 
-      form.addEventListener("submit", async (e) => {
+      const handle = async (e: Event) => {
         e.preventDefault();
         errorEl?.classList.add("hidden");
 
@@ -302,7 +307,14 @@ const jsonLd = [
           // Network error or non-2xx: let them retry rather than lose the email.
           showError();
         }
-      });
+      };
+
+      // Configured: the button is type=submit, so the form's submit event covers
+      // both clicks and Enter. Unconfigured: it's type=button and the form never
+      // submits, so bind the click directly (Enter is inert in that preview
+      // state, which is fine - there's no backend to reach anyway).
+      form.addEventListener("submit", handle);
+      if (!endpoint) submit.addEventListener("click", handle);
     });
   }
 
