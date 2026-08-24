@@ -267,12 +267,14 @@ class Config(BaseSettings):
     RESEND_AUDIENCE_ID: str | None = None
     # From identity for waitlist mail, e.g. "DaySurface <hello@daysurface.com>".
     WAITLIST_FROM_EMAIL: str | None = None
-    # Inbox that receives the per-signup notification (used when WAITLIST_NOTIFY).
-    WAITLIST_NOTIFY_TO: str | None = None
-    # Notify you (email to WAITLIST_NOTIFY_TO) on each signup. Default on.
+    # Slack Incoming Webhook URL that gets a message per new signup (used when
+    # WAITLIST_NOTIFY). Sensitive - treated as a secret in the exposed config.
+    WAITLIST_SLACK_WEBHOOK_URL: str | None = None
+    # Post to Slack on each new signup. Default on.
     WAITLIST_NOTIFY: bool = True
-    # Send the signer a confirmation/welcome email. Default OFF - turn on only
-    # once the sending domain is verified in Resend, or mail lands in spam.
+    # Send the signer a confirmation email via Resend. Default OFF - flip to true
+    # once RESEND_API_KEY + WAITLIST_FROM_EMAIL are set and the domain is
+    # verified, so nothing sends before you're ready.
     WAITLIST_CONFIRM_EMAIL: bool = False
 
     # Google OAuth (Gmail integration) - fill in real values in .env
@@ -517,6 +519,7 @@ _SECRET_FIELD_NAMES: frozenset[str] = frozenset(
         "GOOGLE_TOKEN_ENC_KEY",
         "WEBHOOK_RUNNER_TOKEN",
         "RESEND_API_KEY",
+        "WAITLIST_SLACK_WEBHOOK_URL",
     }
 )
 

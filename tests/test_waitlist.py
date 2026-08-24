@@ -102,6 +102,15 @@ class TestWaitlist(TestTemplate):
         assert resp.json() == {"success": True}
         assert _count() == 0
 
+    def test_oversized_body_rejected_413(self):
+        # A body over the route's cap is aborted before parsing, so a giant
+        # honeypot payload can't be pulled into memory.
+        resp = self.client.post(
+            "/waitlist/join", json={"email": "a@b.com", "company": "x" * 20000}
+        )
+        assert resp.status_code == 413
+        assert _count() == 0
+
     def test_invalid_email_rejected(self):
         resp = self.client.post("/waitlist/join", json={"email": "not-an-email"})
         assert resp.status_code == 422

@@ -70,15 +70,22 @@ def sync_to_resend(email: str) -> None:
 
 
 def notify_new_signup(email: str) -> None:
-    """Best-effort: email the operator that someone joined. Never raises."""
+    """Best-effort: post to Slack that someone joined. Never raises."""
     if not global_config.WAITLIST_NOTIFY:
         return
-    key = global_config.RESEND_API_KEY
-    sender = global_config.WAITLIST_FROM_EMAIL
-    to = global_config.WAITLIST_NOTIFY_TO
-    if not (key and sender and to):
+    url = global_config.WAITLIST_SLACK_WEBHOOK_URL
+    if not url:
         return
-    _send_email(key, sender, to, "New waitlist signup", f"New signup: {email}")
+    try:
+        resp = httpx.post(
+            url,
+            json={"text": f"New DaySurface waitlist signup: {email}"},
+            timeout=_HTTP_TIMEOUT,
+        )
+        if resp.status_code >= 400:
+            log.warning("Slack notify failed: {} {}", resp.status_code, resp.text[:200])
+    except httpx.HTTPError as exc:
+        log.warning("Slack notify error: {}", type(exc).__name__)
 
 
 def send_confirmation(email: str) -> None:
