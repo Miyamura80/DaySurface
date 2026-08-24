@@ -8,7 +8,7 @@
  * plus the shared `comparison.pillars` and `features`), so an agent that asks
  * for the markdown gets the same claims without 250KB of markup.
  */
-import { site, product, story, comparison, features } from "../config/landing";
+import { site, product, story, comparison } from "../config/landing";
 import { trimSlash } from "./_shared";
 
 /** /product.md - the how-it-works + why-it's-better document. */
@@ -19,10 +19,8 @@ export function buildProductMd(origin: string): string {
     .map((s, i) => `${i + 1}. **${s.title}** - ${s.body}`)
     .join("\n");
 
-  const capabilities = features.items
-    .map((f) => `### ${f.title}\n${f.body}`)
-    .join("\n\n");
-
+  // The full differentiator prose (not shown on the page, which uses diagrams)
+  // belongs here, where an answer engine has no diagram to read.
   const pillars = comparison.pillars
     .map((p) => `### ${p.title}\n${p.body}`)
     .join("\n\n");
@@ -33,19 +31,9 @@ ${product.subhead}
 
 ## ${product.howHeading}
 
-${product.howSubhead}
-
 ${steps}
 
-## ${product.capabilitiesHeading}
-
-${product.capabilitiesSubhead}
-
-${capabilities}
-
 ## ${product.whyHeading}
-
-${product.whySubhead}
 
 ${pillars}
 
