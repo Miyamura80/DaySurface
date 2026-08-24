@@ -139,3 +139,6 @@ class TestWaitlistHelpers:
         # HTML body carries the styled self-host button + docs link.
         assert "Self-host on GitHub" in html
         assert docs in html
+        # Client + GitHub icons are hosted PNGs referenced by absolute URL.
+        assert "/logos/email/claude.png" in html
+        assert "/logos/email/github.png" in html
