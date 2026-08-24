@@ -20,7 +20,9 @@ export const GET: APIRoute = ({ site: astroSite }) => {
     { loc: `${origin}/compare`, type: "ItemList" },
     { loc: `${origin}/compare`, type: "BreadcrumbList" },
     // /pricing embeds Product (with an Offer per tier) + FAQPage + BreadcrumbList.
-    ...(pricing.enabled
+    // Advertised only when pricing is surfaced; an unlisted-but-live page stays
+    // out of the schema feed the same way it stays out of the sitemap.
+    ...(pricing.enabled && pricing.listed
       ? [
           { loc: `${origin}/pricing`, type: "Product" },
           { loc: `${origin}/pricing`, type: "FAQPage" },
