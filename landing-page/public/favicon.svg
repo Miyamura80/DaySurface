@@ -1,41 +1,46 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Seal inbox mascot inside the DaySurface Hackbox">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="DaySurface seal mascot inside the Hackbox mark">
   <title>DaySurface Seal Mascot</title>
 
+  <!--
+    Edison Hackbox brand mark. Palette narrows to three values:
+      background  #000000  (black, dominant)
+      frame + tag #C3FFFD  (Core Cyan, restrained accent)
+      mascot ink  #F9F9F9 / #9BA4A6 / #5E6575  (Wavelength White + Graphene Grey)
+    Tag follows the 40/10 rule (40% wide, 10% tall) flush inside the top-left
+    stroke; box corners stay square; grid markers at the corners and centre.
+  -->
   <style>
     .outline {
-      stroke: #000000;
+      stroke: #F9F9F9;
       stroke-width: 8;
       stroke-linecap: round;
       stroke-linejoin: round;
     }
     .thin {
-      stroke: #000000;
+      stroke: #F9F9F9;
       stroke-width: 5;
       stroke-linecap: round;
       stroke-linejoin: round;
     }
   </style>
 
-  <!-- Hackbox backdrop: cyan-on-black brand frame -->
+  <!-- Baseline Black backdrop -->
   <rect width="512" height="512" fill="#000000"/>
 
-  <!-- Grid markers - blueprint texture at the box corners + centre -->
+  <!-- Grid markers: blueprint texture at the box corners + centre -->
   <rect x="30" y="30" width="3" height="3" fill="#C3FFFD"/>
   <rect x="479" y="30" width="3" height="3" fill="#C3FFFD"/>
   <rect x="30" y="479" width="3" height="3" fill="#C3FFFD"/>
   <rect x="479" y="479" width="3" height="3" fill="#C3FFFD"/>
   <rect x="254" y="254" width="3" height="3" fill="#C3FFFD"/>
 
-  <!-- Light inner card so the seal's black outlines stay legible on black -->
-  <rect x="46" y="46" width="420" height="420" rx="18" fill="#F9F9F9"/>
-
-  <!-- The seal, scaled to sit on the card -->
-  <g transform="translate(58 58) scale(0.77)">
+  <!-- The seal, drawn on black inside the frame -->
+  <g transform="translate(58 66) scale(0.77)">
     <g transform="translate(-28 0)">
 
     <!-- Left delivery envelope -->
     <g transform="translate(58 190) rotate(-18)">
-      <rect x="0" y="0" width="92" height="58" rx="7" fill="#F9F9F9" class="outline"/>
+      <rect x="0" y="0" width="92" height="58" rx="7" fill="#5E6575" class="outline"/>
       <path d="M6 8 L46 36 L86 8" fill="none" class="thin"/>
     </g>
 
@@ -63,7 +68,7 @@
              C195 270 185 282 167 278 Z"
           fill="#9BA4A6" class="outline"/>
 
-    <!-- Inner inbox cavity: behind the mail -->
+    <!-- Inner inbox cavity: dark slot behind the mail -->
     <path d="M162 194
              C175 165 196 148 222 148
              H332
@@ -80,11 +85,11 @@
           fill="#000000"/>
 
     <!-- Rear card -->
-    <rect x="226" y="106" width="128" height="92" rx="10" fill="#F9F9F9" class="outline"/>
+    <rect x="226" y="106" width="128" height="92" rx="10" fill="#5E6575" class="outline"/>
 
     <!-- Front envelope -->
     <g>
-      <rect x="191" y="136" width="150" height="99" rx="12" fill="#F9F9F9" class="outline"/>
+      <rect x="191" y="136" width="150" height="99" rx="12" fill="#5E6575" class="outline"/>
       <path d="M199 146 L266 195 L333 146" fill="none" class="outline"/>
     </g>
 
@@ -130,7 +135,7 @@
     </g>
   </g>
 
-  <!-- Hackbox wireframe + corner tag, drawn on top so the frame reads crisp -->
+  <!-- Hackbox wireframe + top-left tag (40% x 10%), drawn on top, square corners -->
   <rect x="32" y="32" width="448" height="448" fill="none" stroke="#C3FFFD" stroke-width="3"/>
-  <rect x="33.5" y="33.5" width="176" height="44" fill="#C3FFFD"/>
+  <rect x="33.5" y="33.5" width="179" height="45" fill="#C3FFFD"/>
 </svg>
