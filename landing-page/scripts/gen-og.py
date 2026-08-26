@@ -127,14 +127,31 @@ def draw_tracked(draw, xy, text, font, fill, tracking):
     return x
 
 
-def fit_headline(draw, lines: list[str]) -> ImageFont.FreeTypeFont:
-    """Largest Archivo-800 that keeps every headline line inside the margins."""
-    avail = W - 2 * PAD
-    for size in (86, 80, 74, 68, 62):
+def fit_headline(
+    draw, lines: list[str], avail: int, sizes=(66, 60, 54, 50, 46)
+) -> ImageFont.FreeTypeFont:
+    """Largest Archivo-800 that keeps every headline line inside `avail`."""
+    for size in sizes:
         font = archivo(size, 800)
         if all(draw.textlength(line, font=font) <= avail for line in lines):
             return font
-    return archivo(62, 800)
+    return archivo(sizes[-1], 800)
+
+
+def wrap(draw, text: str, font: ImageFont.FreeTypeFont, avail: int) -> list[str]:
+    """Greedy word-wrap `text` to lines no wider than `avail`."""
+    lines: list[str] = []
+    cur = ""
+    for word in text.split():
+        trial = f"{cur} {word}".strip()
+        if draw.textlength(trial, font=font) <= avail or not cur:
+            cur = trial
+        else:
+            lines.append(cur)
+            cur = word
+    if cur:
+        lines.append(cur)
+    return lines
 
 
 def render(card: Card) -> None:
@@ -147,60 +164,59 @@ def render(card: Card) -> None:
     for gy in range(0, H, 60):
         d.line([(0, gy), (W, gy)], fill=GRID, width=1)
 
-    # Top row: brand lockup (canonical mark + wordmark) left, eyebrow right.
-    # The mark is sized to dominate the lockup; the wordmark and eyebrow are
-    # vertically centred against it.
-    mark_size = 104
-    mark = brand_mark(mark_size)
-    row_y = 58
-    center_y = row_y + mark_size // 2
-    wm_font = archivo(44, 700)
-    if mark is not None:
-        img.paste(mark, (PAD, row_y), mark)
-        wm_x = PAD + mark_size + 24
+    # Hero: the canonical seal mark, large, anchored to the right. This is the
+    # card's dominant visual - the text column sits to its left.
+    hero_size = 404
+    hero = brand_mark(hero_size)
+    hero_x = W - PAD - hero_size
+    hero_y = 82
+    if hero is not None:
+        img.paste(hero, (hero_x, hero_y), hero)
     else:
-        # Fallback: the hero's cyan square if the SVG can't be rasterized.
-        sq = 16
+        # Fallback: an empty Hackbox frame if the SVG can't be rasterized.
         d.rectangle(
-            [PAD, center_y - sq // 2, PAD + sq, center_y + sq // 2], fill=ACCENT
+            [hero_x, hero_y, hero_x + hero_size, hero_y + hero_size],
+            outline=ACCENT,
+            width=3,
         )
-        wm_x = PAD + sq + 18
-    wm_bbox = d.textbbox((0, 0), WORDMARK, font=wm_font)
+    # Repo caption, centred beneath the hero mark.
+    repo_font = archivo(22, 500)
+    rw = d.textlength(REPO, font=repo_font)
     d.text(
-        (wm_x, center_y - (wm_bbox[3] + wm_bbox[1]) // 2),
-        WORDMARK,
-        font=wm_font,
-        fill=FG,
+        (hero_x + hero_size // 2 - rw // 2, hero_y + hero_size + 18),
+        REPO,
+        font=repo_font,
+        fill=FG_MUTED,
     )
 
+    # Left text column runs from the margin to a gutter before the hero.
+    col_w = hero_x - PAD - 44
+
+    # Wordmark + eyebrow, stacked top-left.
+    wm_font = archivo(42, 700)
+    d.text((PAD, PAD), WORDMARK, font=wm_font, fill=FG)
     eb_font = archivo(20, 600)
-    eb_w = sum(d.textlength(c, font=eb_font) + 4 for c in card.eyebrow) - 4
-    eb_bbox = d.textbbox((0, 0), card.eyebrow, font=eb_font)
-    draw_tracked(
-        d,
-        (W - PAD - eb_w, center_y - (eb_bbox[3] + eb_bbox[1]) // 2),
-        card.eyebrow,
-        eb_font,
-        FG_MUTED,
-        4,
-    )
+    draw_tracked(d, (PAD, PAD + 58), card.eyebrow, eb_font, FG_MUTED, 4)
 
-    # Headline (auto-sized to fit the widest line).
-    hl_font = fit_headline(d, card.headline)
-    line_h = hl_font.size + 10
-    y = 168
+    # Headline (auto-sized to the column width).
+    hl_font = fit_headline(d, card.headline, col_w)
+    line_h = hl_font.size + 8
+    y = 216
     for line in card.headline:
         d.text((PAD, y), line, font=hl_font, fill=FG)
         y += line_h
 
-    # Subhead.
-    sh_font = archivo(30, 400)
-    d.text((PAD, y + 24), card.subhead, font=sh_font, fill=FG_MUTED)
+    # Subhead, word-wrapped to the column.
+    sh_font = archivo(28, 400)
+    y += 16
+    for line in wrap(d, card.subhead, sh_font, col_w):
+        d.text((PAD, y), line, font=sh_font, fill=FG_MUTED)
+        y += sh_font.size + 8
 
-    # Bottom row: capability pills (left) + repo (right).
+    # Capability pills, bottom-left.
     pill_font = archivo(26, 600)
     px = PAD
-    py = H - PAD - 44
+    py = H - PAD - 48
     for label in card.pills:
         tw = d.textlength(label, font=pill_font)
         pw = tw + 44
@@ -209,10 +225,6 @@ def render(card: Card) -> None:
         )
         d.text((px + 22, py + 8), label, font=pill_font, fill=ACCENT)
         px += pw + 16
-
-    repo_font = archivo(24, 500)
-    rw = d.textlength(REPO, font=repo_font)
-    d.text((W - PAD - rw, py + 12), REPO, font=repo_font, fill=FG_MUTED)
 
     out = Path(__file__).resolve().parent.parent / "public" / card.out
     img.save(out, "PNG")
