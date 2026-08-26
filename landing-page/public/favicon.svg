@@ -35,7 +35,7 @@
   <rect x="254" y="254" width="3" height="3" fill="#C3FFFD"/>
 
   <!-- The seal, drawn on black inside the frame -->
-  <g transform="translate(58 66) scale(0.77)">
+  <g transform="translate(15 20) scale(0.95)">
     <g transform="translate(-28 0)">
 
     <!-- Left delivery envelope -->
