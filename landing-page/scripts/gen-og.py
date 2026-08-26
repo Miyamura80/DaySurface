@@ -206,17 +206,26 @@ def render(card: Card) -> None:
         d.text((PAD, y), line, font=hl_font, fill=FG)
         y += line_h
 
-    # Subhead, word-wrapped to the column.
-    sh_font = archivo(28, 400)
+    # Subhead, word-wrapped to the column and sized down if needed so it can
+    # never run into the fixed pills row below, whatever the copy length.
+    pills_top = H - PAD - 48
+    subhead_bottom = pills_top - 28  # keep a gap above the pills
     y += 16
-    for line in wrap(d, card.subhead, sh_font, col_w):
+    sh_font = archivo(28, 400)
+    sh_lines = wrap(d, card.subhead, sh_font, col_w)
+    for size in (28, 26, 24, 22):
+        sh_font = archivo(size, 400)
+        sh_lines = wrap(d, card.subhead, sh_font, col_w)
+        if y + len(sh_lines) * (sh_font.size + 8) <= subhead_bottom:
+            break
+    for line in sh_lines:
         d.text((PAD, y), line, font=sh_font, fill=FG_MUTED)
         y += sh_font.size + 8
 
     # Capability pills, bottom-left.
     pill_font = archivo(26, 600)
     px = PAD
-    py = H - PAD - 48
+    py = pills_top
     for label in card.pills:
         tw = d.textlength(label, font=pill_font)
         pw = tw + 44
