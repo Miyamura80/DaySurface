@@ -148,23 +148,42 @@ def render(card: Card) -> None:
         d.line([(0, gy), (W, gy)], fill=GRID, width=1)
 
     # Top row: brand lockup (canonical mark + wordmark) left, eyebrow right.
-    mark_size = 64
+    # The mark is sized to dominate the lockup; the wordmark and eyebrow are
+    # vertically centred against it.
+    mark_size = 104
     mark = brand_mark(mark_size)
-    row_y = PAD - 8
-    wm_font = archivo(40, 700)
+    row_y = 58
+    center_y = row_y + mark_size // 2
+    wm_font = archivo(44, 700)
     if mark is not None:
         img.paste(mark, (PAD, row_y), mark)
-        wm_x = PAD + mark_size + 22
+        wm_x = PAD + mark_size + 24
     else:
         # Fallback: the hero's cyan square if the SVG can't be rasterized.
         sq = 16
-        d.rectangle([PAD, row_y + 8, PAD + sq, row_y + 8 + sq], fill=ACCENT)
+        d.rectangle(
+            [PAD, center_y - sq // 2, PAD + sq, center_y + sq // 2], fill=ACCENT
+        )
         wm_x = PAD + sq + 18
-    d.text((wm_x, row_y + 14), WORDMARK, font=wm_font, fill=FG)
+    wm_bbox = d.textbbox((0, 0), WORDMARK, font=wm_font)
+    d.text(
+        (wm_x, center_y - (wm_bbox[3] + wm_bbox[1]) // 2),
+        WORDMARK,
+        font=wm_font,
+        fill=FG,
+    )
 
     eb_font = archivo(20, 600)
     eb_w = sum(d.textlength(c, font=eb_font) + 4 for c in card.eyebrow) - 4
-    draw_tracked(d, (W - PAD - eb_w, row_y + 24), card.eyebrow, eb_font, FG_MUTED, 4)
+    eb_bbox = d.textbbox((0, 0), card.eyebrow, font=eb_font)
+    draw_tracked(
+        d,
+        (W - PAD - eb_w, center_y - (eb_bbox[3] + eb_bbox[1]) // 2),
+        card.eyebrow,
+        eb_font,
+        FG_MUTED,
+        4,
+    )
 
     # Headline (auto-sized to fit the widest line).
     hl_font = fit_headline(d, card.headline)
