@@ -1,26 +1,142 @@
-<svg viewBox="90 90 520 520" xmlns="http://www.w3.org/2000/svg">
-  <!-- dark backdrop to match the Hackbox aesthetic / keep contrast in browser tabs -->
-  <rect x="90" y="90" width="520" height="520" fill="#000000"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="DaySurface seal mascot inside the Hackbox mark">
+  <title>DaySurface Seal Mascot</title>
 
-  <!-- grid markers -->
-  <rect x="108" y="108" width="2" height="2" fill="#C3FFFD"/>
-  <rect x="590" y="108" width="2" height="2" fill="#C3FFFD"/>
-  <rect x="108" y="590" width="2" height="2" fill="#C3FFFD"/>
-  <rect x="590" y="590" width="2" height="2" fill="#C3FFFD"/>
-  <rect x="349" y="349" width="2" height="2" fill="#C3FFFD"/>
+  <!--
+    Edison Hackbox brand mark. Cyan (#C3FFFD) frame + top-left tag (40/10
+    rule) and grid markers on black; the seal keeps its black outlines on a
+    Wavelength White (#F9F9F9) card so the mascot reads warm and legible.
+    Box corners stay square.
+  -->
+  <style>
+    .outline {
+      stroke: #000000;
+      stroke-width: 8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .thin {
+      stroke: #000000;
+      stroke-width: 5;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+  </style>
 
-  <!-- Hackbox -->
-  <rect x="110" y="110" width="480" height="480" fill="none" stroke="#C3FFFD" stroke-width="3"/>
-  <rect x="111.5" y="111.5" width="192" height="48" fill="#C3FFFD"/>
+  <!-- Baseline Black backdrop -->
+  <rect width="512" height="512" fill="#000000"/>
 
-  <!-- Gmail mark: exact paths, Edison cyan tones -->
-  <g transform="translate(150 145.6) scale(0.78)" fill-rule="evenodd">
-    <g fill-rule="nonzero">
-      <path fill="#7DE6E2" d="M34.91 448.818h81.454V251L0 163.727V413.91c0 19.287 15.622 34.91 34.91 34.91z"/>
-      <path fill="#7DE6E2" d="M395.636 448.818h81.455c19.287 0 34.909-15.622 34.909-34.909V163.727L395.636 251z"/>
-      <path fill="#E0FFFE" d="M395.636 99.727V251L512 163.727v-46.545c0-43.142-49.25-67.782-83.782-41.891z"/>
+  <!-- Light card inside the frame: the seal's field -->
+  <rect x="35" y="35" width="442" height="442" fill="#F9F9F9"/>
+
+  <!-- Grid markers: blueprint texture at the box corners + centre -->
+  <rect x="30" y="30" width="3" height="3" fill="#C3FFFD"/>
+  <rect x="479" y="30" width="3" height="3" fill="#C3FFFD"/>
+  <rect x="30" y="479" width="3" height="3" fill="#C3FFFD"/>
+  <rect x="479" y="479" width="3" height="3" fill="#C3FFFD"/>
+  <rect x="254" y="254" width="3" height="3" fill="#C3FFFD"/>
+
+  <!-- The seal, drawn on the light card inside the frame -->
+  <g transform="translate(15 20) scale(0.95)">
+    <g transform="translate(-28 0)">
+
+    <!-- Left delivery envelope -->
+    <g transform="translate(58 190) rotate(-18)">
+      <rect x="0" y="0" width="92" height="58" rx="7" fill="#F9F9F9" class="outline"/>
+      <path d="M6 8 L46 36 L86 8" fill="none" class="thin"/>
     </g>
-    <path fill="#C3FFFD" d="M116.364 251V99.727L256 204.455 395.636 99.727V251L256 355.727z"/>
-    <path fill="#E0FFFE" fill-rule="nonzero" d="M0 117.182v46.545L116.364 251V99.727L83.782 75.291C49.25 49.4 0 74.04 0 117.18z"/>
+
+    <!-- Tail, behind body -->
+    <path d="M385 280
+             C420 272 437 244 443 212
+             C450 180 470 178 480 198
+             C488 214 479 231 464 243
+             C482 238 503 242 508 258
+             C513 276 495 290 476 294
+             C459 298 444 296 432 291
+             C427 315 416 337 397 351
+             C389 357 379 354 376 345
+             C372 333 379 314 392 298
+             C386 293 383 287 385 280 Z"
+          fill="#9BA4A6" class="outline"/>
+
+    <!-- Left flipper -->
+    <path d="M167 278
+             C137 270 114 252 106 229
+             C98 207 104 189 118 181
+             C134 172 151 180 160 195
+             C170 210 168 226 160 239
+             C174 242 184 249 190 260
+             C195 270 185 282 167 278 Z"
+          fill="#9BA4A6" class="outline"/>
+
+    <!-- Inner inbox cavity: dark slot behind the mail -->
+    <path d="M162 194
+             C175 165 196 148 222 148
+             H332
+             C357 148 377 165 390 194
+             H367
+             C351 194 340 201 330 214
+             L317 231
+             C309 241 299 246 286 246
+             H276
+             C263 246 253 241 245 231
+             L232 214
+             C222 201 211 194 195 194
+             Z"
+          fill="#000000"/>
+
+    <!-- Rear card -->
+    <rect x="226" y="106" width="128" height="92" rx="10" fill="#F9F9F9" class="outline"/>
+
+    <!-- Front envelope -->
+    <g>
+      <rect x="191" y="136" width="150" height="99" rx="12" fill="#F9F9F9" class="outline"/>
+      <path d="M199 146 L266 195 L333 146" fill="none" class="outline"/>
+    </g>
+
+    <!-- Main body: drawn after the mail so the front lip sits on top -->
+    <path d="M156 194
+             H204
+             C218 194 228 200 237 212
+             L250 229
+             C258 240 268 245 281 245
+             H291
+             C304 245 314 240 322 229
+             L335 212
+             C344 200 354 194 368 194
+             H402
+             V317
+             C402 353 376 375 340 375
+             H205
+             C169 375 143 353 143 317
+             V214
+             C143 203 148 197 156 194 Z"
+          fill="#9BA4A6" class="outline"/>
+
+    <!-- Right flipper resting on body -->
+    <path d="M384 321
+             C403 328 420 343 428 360
+             C435 375 431 390 419 397
+             C404 405 387 399 377 385
+             C368 372 366 359 371 348
+             C363 342 362 332 367 326
+             C371 321 377 318 384 321 Z"
+          fill="#9BA4A6" class="outline"/>
+
+    <!-- Face -->
+    <ellipse cx="229" cy="277" rx="13" ry="23" fill="#000000"/>
+    <ellipse cx="307" cy="277" rx="13" ry="23" fill="#000000"/>
+    <circle cx="268" cy="304" r="9" fill="#000000"/>
+    <path d="M252 322 Q268 338 284 322" fill="none" class="thin"/>
+
+    <!-- Whiskers -->
+    <path d="M207 309 H188 M209 321 L190 328" fill="none" class="thin"/>
+    <path d="M319 307 H336 M317 319 L334 325" fill="none" class="thin"/>
+
+    </g>
   </g>
+
+  <!-- Hackbox wireframe + top-left tag (40% x 10%), drawn on top, square corners -->
+  <rect x="32" y="32" width="448" height="448" fill="none" stroke="#C3FFFD" stroke-width="3"/>
+  <rect x="33.5" y="33.5" width="179" height="45" fill="#C3FFFD"/>
 </svg>
