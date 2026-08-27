@@ -25,14 +25,11 @@
     }
   </style>
 
-  <!-- Baseline Black backdrop -->
+  <!-- Baseline Black backdrop (no light card: the seal sits on black) -->
   <rect width="512" height="512" fill="#000000"/>
 
-  <!-- Light card inside the frame: the seal's field (tight margin) -->
-  <rect x="24" y="24" width="464" height="464" fill="#F9F9F9"/>
-
-  <!-- The seal, scaled to fill the light card -->
-  <g transform="translate(256 256) scale(0.96) translate(-279 -251)">
+  <!-- The seal, scaled to fill the frame directly on the black field -->
+  <g transform="translate(256 256) scale(1.0) translate(-279 -251)">
     <g transform="translate(15 20) scale(0.95)">
     <g transform="translate(-28 0)">
 
