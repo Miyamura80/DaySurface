@@ -14,12 +14,12 @@ import GithubMark from "./GithubMark.astro";
       href="/#top"
       class="flex shrink-0 items-center gap-2 py-2 font-semibold tracking-tight"
     >
-      {/* The header-optimized brand mark (logo-mark.svg): same Hackbox system
-          as favicon.svg / og.png, retuned so the seal stays legible at nav
-          size - tighter margin, thicker frame, seal filling the card. It is
-          multi-colour, so it renders as an <img> rather than a CSS mask like
-          the monochrome client logos. */}
-      <img src="/logo-mark.svg" alt="" width="36" height="36" class="size-9 shrink-0" />
+      {/* The header brand mark (logo-mark.svg): the bare seal mascot, no
+          Hackbox frame, scaled to fill the box so it reads large at nav size.
+          favicon.svg / og.png keep the full framed mark. It is multi-colour,
+          so it renders as an <img> rather than a CSS mask like the monochrome
+          client logos. */}
+      <img src="/logo-mark.svg" alt="" width="44" height="44" class="size-11 shrink-0" />
       <span>{site.name}</span>
     </a>
 

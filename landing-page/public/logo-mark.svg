@@ -1,14 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="DaySurface seal mascot inside the Hackbox mark">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="DaySurface seal mascot">
   <title>DaySurface Seal Mascot</title>
 
   <!--
-    Header-optimized variant of public/favicon.svg. Same Edison Hackbox
-    system (cyan frame + top-left tag on black, black-outlined seal on a
-    Wavelength White card), retuned so the mascot stays legible at nav/favicon
-    pixel sizes (~28-40px): the wasted black margin is cropped, the frame is
-    thicker, the invisible grid-marker dots are dropped, and the seal is
-    scaled to fill the card. favicon.svg stays the canonical mark for the
-    og cards and larger contexts.
+    Header/tab mark: the bare seal mascot, no Hackbox frame. Transparent
+    background so it composites onto the nav bar and the browser tab (light
+    or dark). The seal is scaled to fill the viewBox so it reads as large as
+    possible at nav/favicon pixel sizes. favicon.svg keeps the full Hackbox
+    mark (cyan frame + tag on a light card) for the og cards and the MCP
+    server-card icon.
   -->
   <style>
     .outline {
@@ -25,11 +24,8 @@
     }
   </style>
 
-  <!-- Baseline Black backdrop (no light card: the seal sits on black) -->
-  <rect width="512" height="512" fill="#000000"/>
-
-  <!-- The seal, scaled to fill the frame directly on the black field -->
-  <g transform="translate(256 256) scale(1.0) translate(-279 -251)">
+  <!-- The seal, scaled to fill the viewBox (no frame, no card) -->
+  <g transform="translate(256 256) scale(1.13) translate(-253.5 -259)">
     <g transform="translate(15 20) scale(0.95)">
     <g transform="translate(-28 0)">
 
@@ -130,8 +126,4 @@
     </g>
     </g>
   </g>
-
-  <!-- Hackbox wireframe + top-left tag (40% x 10%), thicker for small sizes -->
-  <rect x="20" y="20" width="472" height="472" fill="none" stroke="#C3FFFD" stroke-width="8"/>
-  <rect x="24" y="24" width="189" height="47" fill="#C3FFFD"/>
 </svg>
