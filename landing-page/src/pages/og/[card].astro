@@ -1,0 +1,155 @@
+---
+/*
+ * Off-site OG card renderer. Each of these pages is a single 1200x630 artboard
+ * that reuses the REAL hero chat mock (ClaudeShell -> InboxApp) on the brand
+ * black-grid background, so the social card shows the actual product UI rather
+ * than a hand-drawn approximation.
+ *
+ * These pages are NOT part of the marketing site - they carry no nav/footer and
+ * are noindex. `scripts/gen-og.py` serves the built `dist/` and screenshots each
+ * `#artboard` at 1200x630 into `public/<out>` (og.png, og-product.png,
+ * og-story.png). The committed PNGs are what ship; the build does not rasterize.
+ *
+ * Screenshotting is done with prefers-reduced-motion, which freezes the shell to
+ * its static frame: the curated inbox list + composer, no scroll/pointer loops
+ * (see InboxApp.astro / ConvoScroll.astro reduced-motion rules).
+ */
+import "../../styles/global.css";
+import { site } from "../../config/landing";
+import ClaudeShell from "../../components/chat/ClaudeShell.astro";
+
+interface CardCopy {
+  out: string;
+  eyebrow: string;
+  headline: string;
+  subhead: string;
+  pills: string[];
+}
+
+export function getStaticPaths() {
+  // Copy mirrors the homepage hero and the /product, /story pages. `card` is the
+  // route param; `out` is the public/ filename the generator writes. Defined
+  // inside getStaticPaths - Astro evaluates it in isolation, so it can't close
+  // over module-scope constants.
+  const cards: Record<string, CardCopy> = {
+    default: {
+      out: "og.png",
+      eyebrow: "An MCP server for Gmail",
+      headline: "Triage, draft, sign - without leaving chat.",
+      subhead: "A real composer and a ranked inbox, inside any MCP client.",
+      pills: ["Gmail", "MCP", "Open source"],
+    },
+    product: {
+      out: "og-product.png",
+      eyebrow: "How it works",
+      headline: "An inbox you drive from inside the chat.",
+      subhead: "A composer and a ranked inbox, rendered in any MCP client.",
+      pills: ["Compose", "Triage", "Sign"],
+    },
+    story: {
+      out: "og-story.png",
+      eyebrow: "Our story",
+      headline: "Why we built DaySurface.",
+      subhead: "Agents that run your inbox - without locking you into one.",
+      pills: ["Portable", "Open source", "Yours to host"],
+    },
+  };
+  return Object.entries(cards).map(([card, copy]) => ({
+    params: { card },
+    props: { copy },
+  }));
+}
+
+const { copy } = Astro.props as { copy: CardCopy };
+
+const fontHref =
+  "https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap";
+---
+
+<!doctype html>
+<!-- data-client=claude so the chat CSS tokens resolve to the Claude palette. -->
+<html lang="en" data-client="claude">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="viewport" content="width=1200, initial-scale=1" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href={fontHref} />
+    <title>{`OG card - ${copy.out}`}</title>
+    <style>
+      /* Lock the document to the exact card size so the screenshot clip and the
+         artboard agree, with no page scroll or margin. */
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 1200px;
+        height: 630px;
+        overflow: hidden;
+        background: var(--color-bg);
+      }
+    </style>
+    <!-- Freeze the mock to a clean still: reduced-motion already stops the
+         scroll/tap loops, but the faux pointer + tap ripples have no resting
+         opacity of their own, so hide them for the screenshot. -->
+    <style is:global>
+      #artboard .pointer-cursor,
+      #artboard .tap-ripple,
+      #artboard .ai-ripple,
+      #artboard .status-pill {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="artboard"
+      class="relative flex h-[630px] w-[1200px] items-center overflow-hidden bg-bg"
+    >
+      <!-- brand background: computed-blueprint grid + cyan glow, same as the hero -->
+      <div class="grid-bg pointer-events-none absolute inset-0"></div>
+      <div class="glow pointer-events-none absolute inset-x-0 top-0 h-[420px]"></div>
+
+      <div class="relative grid w-full grid-cols-[1fr_460px] items-center gap-12 px-20">
+        <!-- Left: brand copy -->
+        <div class="min-w-0">
+          <div class="mb-7 flex items-center gap-3">
+            <img src="/logo-mark.svg" alt="" class="size-9" />
+            <span class="text-2xl font-bold tracking-tight text-fg">{site.name}</span>
+          </div>
+
+          <div
+            class="mb-5 inline-flex items-center gap-2 border border-accent/50 bg-surface-1 px-3 py-1.5 font-mono text-xs font-semibold uppercase tracking-[0.2em] text-fg-muted"
+          >
+            <span class="size-1.5 bg-accent"></span>
+            {copy.eyebrow}
+          </div>
+
+          <h1 class="text-pretty text-5xl font-extrabold leading-[1.05] tracking-tight text-fg">
+            {copy.headline}
+          </h1>
+
+          <p class="mt-5 max-w-lg text-pretty text-xl leading-relaxed text-fg-muted">
+            {copy.subhead}
+          </p>
+
+          <div class="mt-8 flex flex-wrap gap-3">
+            {
+              copy.pills.map((label) => (
+                <span class="border-2 border-accent px-4 py-1.5 text-base font-semibold text-accent">
+                  {label}
+                </span>
+              ))
+            }
+          </div>
+        </div>
+
+        <!-- Right: the real hero chat mock (frozen to its static frame) -->
+        <div class="min-w-0">
+          <ClaudeShell />
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
