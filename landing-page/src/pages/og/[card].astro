@@ -114,20 +114,38 @@ const fontHref =
       <div class="relative grid h-[630px] w-full grid-cols-[1fr_520px] items-start gap-14 overflow-hidden px-24">
         <!-- Left: minimal brand copy. At feed scale an OG card is only ~500px
              wide, so this is pared to a clear hierarchy - name, category, one
-             headline. The dense mock on the right carries the rest. -->
-        <div class="min-w-0 self-center">
-          <div class="mb-8 flex items-center gap-3">
-            <img src="/logo-mark.svg" alt="" class="size-11" />
-            <span class="text-3xl font-bold tracking-tight text-fg">{site.name}</span>
+             headline - with the client icons pinned to the bottom. The dense
+             mock on the right carries the rest. -->
+        <div class="flex h-full min-w-0 flex-col py-12">
+          <div class="mb-7 flex items-center gap-4">
+            <img src="/logo-mark.svg" alt="" class="size-16" />
+            <span class="text-5xl font-bold tracking-tight text-fg">{site.name}</span>
           </div>
 
-          <p class="mb-6 font-mono text-lg font-semibold uppercase tracking-[0.18em] text-accent">
+          <p class="mb-5 font-mono text-lg font-semibold uppercase tracking-[0.18em] text-accent">
             {copy.eyebrow}
           </p>
 
-          <h1 class="text-balance text-6xl font-extrabold leading-[1.02] tracking-tight text-fg">
+          <h1 class="text-balance text-6xl font-extrabold leading-[1.0] tracking-tight text-fg">
             {copy.headline}
           </h1>
+
+          <!-- Client logos (eito.me/icons): Claude + ChatGPT sit on white
+               app-icon tiles so their marks read on black; Grok ships its own
+               white squircle, so it renders bare at the same size. -->
+          <div class="mt-auto flex items-center gap-5 pt-10">
+            <span class="grid size-24 place-items-center rounded-[22px] bg-white p-4 shadow-xl shadow-black/40">
+              <img src="/og-icons/claude.svg" alt="Claude" class="size-full object-contain" />
+            </span>
+            <span class="grid size-24 place-items-center rounded-[22px] bg-white p-4 shadow-xl shadow-black/40">
+              <img src="/og-icons/chatgpt.svg" alt="ChatGPT" class="size-full object-contain" />
+            </span>
+            <img
+              src="/og-icons/grokbot.svg"
+              alt="Grok"
+              class="size-24 rounded-[22px] shadow-xl shadow-black/40"
+            />
+          </div>
         </div>
 
         <!-- Right: the real hero chat mock (frozen to its static frame), scaled
