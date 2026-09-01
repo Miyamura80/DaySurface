@@ -111,43 +111,33 @@ const fontHref =
       <div class="grid-bg pointer-events-none absolute inset-0"></div>
       <div class="glow pointer-events-none absolute inset-x-0 top-0 h-[420px]"></div>
 
-      <div class="relative grid w-full grid-cols-[1fr_460px] items-center gap-12 px-20">
-        <!-- Left: brand copy -->
-        <div class="min-w-0">
-          <div class="mb-7 flex items-center gap-3">
-            <img src="/logo-mark.svg" alt="" class="size-9" />
-            <span class="text-2xl font-bold tracking-tight text-fg">{site.name}</span>
+      <div class="relative grid h-[630px] w-full grid-cols-[1fr_520px] items-start gap-14 overflow-hidden px-24">
+        <!-- Left: minimal brand copy. At feed scale an OG card is only ~500px
+             wide, so this is pared to a clear hierarchy - name, category, one
+             headline. The dense mock on the right carries the rest. -->
+        <div class="min-w-0 self-center">
+          <div class="mb-8 flex items-center gap-3">
+            <img src="/logo-mark.svg" alt="" class="size-11" />
+            <span class="text-3xl font-bold tracking-tight text-fg">{site.name}</span>
           </div>
 
-          <div
-            class="mb-5 inline-flex items-center gap-2 border border-accent/50 bg-surface-1 px-3 py-1.5 font-mono text-xs font-semibold uppercase tracking-[0.2em] text-fg-muted"
-          >
-            <span class="size-1.5 bg-accent"></span>
+          <p class="mb-6 font-mono text-lg font-semibold uppercase tracking-[0.18em] text-accent">
             {copy.eyebrow}
-          </div>
-
-          <h1 class="text-pretty text-5xl font-extrabold leading-[1.05] tracking-tight text-fg">
-            {copy.headline}
-          </h1>
-
-          <p class="mt-5 max-w-lg text-pretty text-xl leading-relaxed text-fg-muted">
-            {copy.subhead}
           </p>
 
-          <div class="mt-8 flex flex-wrap gap-3">
-            {
-              copy.pills.map((label) => (
-                <span class="border-2 border-accent px-4 py-1.5 text-base font-semibold text-accent">
-                  {label}
-                </span>
-              ))
-            }
-          </div>
+          <h1 class="text-balance text-6xl font-extrabold leading-[1.02] tracking-tight text-fg">
+            {copy.headline}
+          </h1>
         </div>
 
-        <!-- Right: the real hero chat mock (frozen to its static frame) -->
-        <div class="min-w-0">
-          <ClaudeShell />
+        <!-- Right: the real hero chat mock (frozen to its static frame), scaled
+             up so its structure stays legible when the card is shown small.
+             Anchored to the top with clearance so it bleeds cleanly off the
+             bottom edge (composer) rather than cropping the top chrome. -->
+        <div class="flex min-w-0 justify-center pt-9">
+          <div class="w-[470px] origin-top scale-[1.1]">
+            <ClaudeShell />
+          </div>
         </div>
       </div>
     </div>
