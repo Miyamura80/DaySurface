@@ -161,6 +161,7 @@ exclude = [
     "docs/",
     "node_modules/",
     "scripts/gen_brand_assets.py",
+    "landing-page/scripts/gen-og.py",
     ".agents/skills/goose-gui-e2e/scripts/",
     "tests/test_disconnect_purge.py",
     "tests/test_webhook_ssrf.py",

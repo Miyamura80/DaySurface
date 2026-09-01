@@ -1,0 +1,163 @@
+---
+/*
+ * Off-site OG card renderer. Each of these pages is a single 1200x630 artboard
+ * that reuses the REAL hero chat mock (ClaudeShell -> InboxApp) on the brand
+ * black-grid background, so the social card shows the actual product UI rather
+ * than a hand-drawn approximation.
+ *
+ * These pages are NOT part of the marketing site - they carry no nav/footer and
+ * are noindex. `scripts/gen-og.py` serves the built `dist/` and screenshots each
+ * `#artboard` at 1200x630 into `public/<out>` (og.png, og-product.png,
+ * og-story.png). The committed PNGs are what ship; the build does not rasterize.
+ *
+ * Screenshotting is done with prefers-reduced-motion, which freezes the shell to
+ * its static frame: the curated inbox list + composer, no scroll/pointer loops
+ * (see InboxApp.astro / ConvoScroll.astro reduced-motion rules).
+ */
+import "../../styles/global.css";
+import { site } from "../../config/landing";
+import ClaudeShell from "../../components/chat/ClaudeShell.astro";
+
+interface CardCopy {
+  out: string;
+  eyebrow: string;
+  headline: string;
+  subhead: string;
+  pills: string[];
+}
+
+export function getStaticPaths() {
+  // Copy mirrors the homepage hero and the /product, /story pages. `card` is the
+  // route param; `out` is the public/ filename the generator writes. Defined
+  // inside getStaticPaths - Astro evaluates it in isolation, so it can't close
+  // over module-scope constants.
+  const cards: Record<string, CardCopy> = {
+    default: {
+      out: "og.png",
+      eyebrow: "An MCP server for Gmail",
+      headline: "Triage, draft, sign - without leaving chat.",
+      subhead: "A real composer and a ranked inbox, inside any MCP client.",
+      pills: ["Gmail", "MCP", "Open source"],
+    },
+    product: {
+      out: "og-product.png",
+      eyebrow: "How it works",
+      headline: "An inbox you drive from inside the chat.",
+      subhead: "A composer and a ranked inbox, rendered in any MCP client.",
+      pills: ["Compose", "Triage", "Sign"],
+    },
+    story: {
+      out: "og-story.png",
+      eyebrow: "Our story",
+      headline: "Why we built DaySurface.",
+      subhead: "Agents that run your inbox - without locking you into one.",
+      pills: ["Portable", "Open source", "Yours to host"],
+    },
+  };
+  return Object.entries(cards).map(([card, copy]) => ({
+    params: { card },
+    props: { copy },
+  }));
+}
+
+const { copy } = Astro.props as { copy: CardCopy };
+
+const fontHref =
+  "https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap";
+---
+
+<!doctype html>
+<!-- data-client=claude so the chat CSS tokens resolve to the Claude palette. -->
+<html lang="en" data-client="claude">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="viewport" content="width=1200, initial-scale=1" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href={fontHref} />
+    <title>{`OG card - ${copy.out}`}</title>
+    <style>
+      /* Lock the document to the exact card size so the screenshot clip and the
+         artboard agree, with no page scroll or margin. */
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 1200px;
+        height: 630px;
+        overflow: hidden;
+        background: var(--color-bg);
+      }
+    </style>
+    <!-- Freeze the mock to a clean still: reduced-motion already stops the
+         scroll/tap loops, but the faux pointer + tap ripples have no resting
+         opacity of their own, so hide them for the screenshot. -->
+    <style is:global>
+      #artboard .pointer-cursor,
+      #artboard .tap-ripple,
+      #artboard .ai-ripple,
+      #artboard .status-pill {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="artboard"
+      class="relative flex h-[630px] w-[1200px] items-center overflow-hidden bg-bg"
+    >
+      <!-- brand background: computed-blueprint grid + cyan glow, same as the hero -->
+      <div class="grid-bg pointer-events-none absolute inset-0"></div>
+      <div class="glow pointer-events-none absolute inset-x-0 top-0 h-[420px]"></div>
+
+      <div class="relative grid h-[630px] w-full grid-cols-[1fr_520px] items-start gap-14 overflow-hidden px-24">
+        <!-- Left: minimal brand copy. At feed scale an OG card is only ~500px
+             wide, so this is pared to a clear hierarchy - name, category, one
+             headline - with the client icons pinned to the bottom. The dense
+             mock on the right carries the rest. -->
+        <div class="flex h-full min-w-0 flex-col py-12">
+          <div class="mb-7 flex items-center gap-4">
+            <img src="/logo-mark.svg" alt="" class="size-24" />
+            <span class="text-5xl font-bold tracking-tight text-fg">{site.name} MCP</span>
+          </div>
+
+          <p class="mb-5 font-mono text-lg font-semibold uppercase tracking-[0.18em] text-accent">
+            {copy.eyebrow}
+          </p>
+
+          <h1 class="text-balance text-6xl font-extrabold leading-[1.0] tracking-tight text-fg">
+            {copy.headline}
+          </h1>
+
+          <!-- Client logos (eito.me/icons): Claude + ChatGPT sit on white
+               app-icon tiles so their marks read on black; Grok ships its own
+               white squircle, so it renders bare at the same size. -->
+          <div class="mt-auto flex items-center gap-5 pt-10">
+            <span class="grid size-24 place-items-center rounded-[22px] bg-white p-4 shadow-xl shadow-black/40">
+              <img src="/og-icons/claude.svg" alt="Claude" class="size-full object-contain" />
+            </span>
+            <span class="grid size-24 place-items-center rounded-[22px] bg-white p-4 shadow-xl shadow-black/40">
+              <img src="/og-icons/chatgpt.svg" alt="ChatGPT" class="size-full object-contain" />
+            </span>
+            <img
+              src="/og-icons/grokbot.svg"
+              alt="Grok"
+              class="size-24 rounded-[22px] shadow-xl shadow-black/40"
+            />
+          </div>
+        </div>
+
+        <!-- Right: the real hero chat mock (frozen to its static frame), scaled
+             up so its structure stays legible when the card is shown small.
+             Anchored to the top with clearance so it bleeds cleanly off the
+             bottom edge (composer) rather than cropping the top chrome. -->
+        <div class="flex min-w-0 justify-center pt-6">
+          <div class="w-[470px] origin-top scale-[1.35]">
+            <ClaudeShell />
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
