@@ -18,14 +18,14 @@ Design tokens (colors, fonts, the accent) live in `src/styles/global.css` under 
 
 ### Social-share image (`public/og.png`)
 
-The `og:image` / `twitter:image` cards are committed 1200×630 PNGs in `public/` - `og.png` (default), `og-product.png`, `og-story.png` (the production build does **not** regenerate them). Each card is a real screenshot of the homepage hero chat mock (Claude shell + curated inbox) on the brand background, so the social card shows the actual product UI. After changing the brand copy or the hero mock, regenerate and commit them:
+The `og:image` / `twitter:image` cards are committed 2400×1260 PNGs in `public/` - `og.png` (default), `og-product.png`, `og-story.png` - each a 2× retina render of the 1200×630 artboard (the meta tags still declare 1200×630; crawlers scale the 2× image down). The production build does **not** regenerate them. Each card is a real screenshot of the homepage hero chat mock (Claude shell + curated inbox) on the brand background, so the social card shows the actual product UI. After changing the brand copy or the hero mock, regenerate and commit them:
 
 ```bash
 bun install                       # once, if node_modules is missing
 uv run --with playwright python scripts/gen-og.py
 ```
 
-`scripts/gen-og.py` builds the static site (if `dist/` is stale), serves it, and screenshots the off-site OG pages at `src/pages/og/[card].astro` with Chromium under `prefers-reduced-motion` (which freezes the mock to its static frame). The card copy lives in that page's `getStaticPaths`. To use a different card per page, pass `image="/my-og.png"` (and optionally `imageAlt`) to `Base.astro`.
+`scripts/gen-og.py` rebuilds the static site (`bun run build`, so the shots always reflect current source), serves it, and screenshots the off-site OG pages at `src/pages/og/[card].astro` with Chromium under `prefers-reduced-motion` (which freezes the mock to its static frame). The card copy lives in that page's `getStaticPaths`. To use a different card per page, pass `image="/my-og.png"` (and optionally `imageAlt`) to `Base.astro`.
 
 > Needs Chromium via Playwright. The Claude Code cloud sandbox ships one under `$PLAYWRIGHT_BROWSERS_PATH`; elsewhere run `uv run --with playwright playwright install chromium` first.
 
@@ -67,7 +67,7 @@ src/
 src/pages/og/[card].astro # ← off-site OG artboards (hero mock, noindex)
 scripts/gen-og.py        # ← screenshots them into public/og*.png (dev-only)
 public/favicon.svg
-public/og.png            # ← social-share card (committed, 1200×630 @2x)
+public/og.png            # ← social-share card (committed, 2400×1260 = 2× of 1200×630)
 ```
 
 Sections, in order: Nav → Hero → TrustStrip → GetStarted → Features → Testimonials → Pricing → AskAi → Faq → FinalCta → Footer.

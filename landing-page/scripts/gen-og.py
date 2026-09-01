@@ -15,10 +15,13 @@ brand copy or the hero mock, then commit the new PNGs:
     bun install                       # once, if node_modules is missing
     uv run --with playwright python scripts/gen-og.py
 
-The script builds the static site (`bun run build`) if `dist/` is stale/missing,
-serves it on a local port, and screenshots each `#artboard` with Chromium under
-prefers-reduced-motion (which freezes the mock to its static frame - the curated
-inbox list + composer, no scroll/pointer loops).
+The script rebuilds the static site (`bun run build`, so the shots always reflect
+current source), serves it on a local port, and screenshots each `#artboard` with
+Chromium under prefers-reduced-motion (which freezes the mock to its static frame -
+the curated inbox list + composer, no scroll/pointer loops).
+
+Each card is rendered at device_scale_factor=2, so the committed PNGs are
+2400x1260 (a 2x retina render of the 1200x630 artboard).
 
 Chromium comes from Playwright. In the Claude Code cloud sandbox a browser is
 preinstalled under $PLAYWRIGHT_BROWSERS_PATH; elsewhere run
@@ -66,13 +69,16 @@ def chromium_executable() -> str | None:
 
 
 def ensure_built() -> None:
-    """Build the static site if the OG pages are missing from dist/."""
-    if (DIST / "og" / "default" / "index.html").exists():
-        return
+    """(Re)build the static site so dist/ always reflects current source.
+
+    Always rebuilds rather than reusing an existing dist/: an mtime-based
+    staleness check is easy to get wrong, and screenshotting a stale build is
+    the exact drift these cards exist to avoid. The build is only a few seconds.
+    """
     if not (ROOT / "node_modules").exists():
         print("node_modules missing - running `bun install`...")
         subprocess.run(["bun", "install"], cwd=ROOT, check=True)
-    print("dist/ stale - running `bun run build`...")
+    print("building static site (`bun run build`)...")
     subprocess.run(["bun", "run", "build"], cwd=ROOT, check=True)
 
 
