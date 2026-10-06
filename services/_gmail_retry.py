@@ -13,9 +13,9 @@ work, so retrying is safe even for ``messages.send``. It deliberately does not
 retry 5xx or connection errors the way ``execute(num_retries=...)`` would: a
 5xx on a send may already have delivered the mail.
 
-Batch requests are untouched: per-thread failures inside a batch go to the
-batch callback, and the curation code already reads a missing thread as
-stale rather than fresh.
+Batch requests bypass it: their per-item failures reach a callback instead.
+``retry_rate_limited`` gives batch callers the same backoff for the items
+Gmail refused.
 """
 
 from __future__ import annotations
@@ -24,6 +24,7 @@ import json
 import math
 import random
 import time
+from collections.abc import Callable
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from typing import Any
@@ -143,3 +144,40 @@ class RateLimitRetryingRequest(HttpRequest):
                 record_upstream_write()
             return result
         raise AssertionError("unreachable")  # pragma: no cover
+
+
+def retry_rate_limited[T](
+    items: list[T],
+    run: Callable[[list[T]], list[tuple[T, HttpError]]],
+    *,
+    what: str,
+) -> None:
+    """Call ``run(items)``, then re-run it on the items Gmail rate-limited.
+
+    ``run`` returns each refused item with its error. Backoff and the retry
+    limit match single requests. When they run out this raises
+    ``GmailRateLimitedError`` rather than leave the caller holding a partial
+    result it can't tell apart from a complete one.
+    """
+    pending = items
+    for attempt in range(_MAX_RETRIES + 1):
+        refused = run(pending)
+        if not refused:
+            return
+        exc = refused[-1][1]
+        if attempt == _MAX_RETRIES:
+            raise GmailRateLimitedError(
+                side_effects_possible=upstream_write_done()
+            ) from exc
+        delay = _retry_delay(exc, attempt)
+        log.warning(
+            "Gmail rate limit on {} of {} {}; retry {}/{} in {:.1f}s",
+            len(refused),
+            len(pending),
+            what,
+            attempt + 1,
+            _MAX_RETRIES,
+            delay,
+        )
+        time.sleep(delay)
+        pending = [item for item, _ in refused]

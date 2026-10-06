@@ -42,7 +42,7 @@ from models.curation import (
     ThreadJudgment,
 )
 from models.gmail import GmailDisconnectInput
-from services import discover_services, get_registry
+from services import discover_services, get_registry, inbox_curation_svc
 from services.curation_ledger import (
     LedgerRowStatus,
     list_record_ids,
@@ -124,6 +124,11 @@ def _judgment(thread_id: str, **kw) -> ThreadJudgment:
 
 def _stub(thread_id: str, history_id: str) -> dict:
     return {"id": thread_id, "historyId": history_id}
+
+
+def _full_scan() -> list[dict]:
+    """Enough newer inbox stubs to fill the membership scan."""
+    return [_stub(f"n{i}", "1") for i in range(inbox_curation_svc._SCAN_STUB_CAP)]
 
 
 # ---------------------------------------------------------------------------
@@ -339,11 +344,30 @@ def _msg_at(when: datetime, *labels: str) -> dict:
     return {"labelIds": list(labels), "internalDate": str(int(when.timestamp() * 1000))}
 
 
-class TestGetCuration(TestTemplate):
-    def _run_get(self, stubs, inp=None, threads=None):
-        """``threads`` maps thread id -> messages served by any thread fetch."""
+_HISTORY_GONE = HttpError(resp=MagicMock(status=404, reason="Not Found"), content=b"")
+
+
+def _added(record_id: str, thread_id: str, *labels: str) -> dict:
+    """A users.history.list record adding one message to ``thread_id``."""
+    message = {"id": f"m{record_id}", "threadId": thread_id, "labelIds": list(labels)}
+    return {"id": record_id, "messagesAdded": [{"message": message}]}
+
+
+class CurationReadHarness:
+    """Runs inbox_get_curation over patched Gmail helpers; mix into a test class."""
+
+    def _run_get(self, stubs, inp=None, threads=None, history=None):
+        """``threads`` maps thread id -> messages served by any thread fetch.
+
+        ``history`` maps a startHistoryId to the records history.list returns
+        from it (or to a whole response page); any other start (and every
+        start by default) is a 404, as when Gmail no longer keeps history
+        that old.
+        """
         served: dict[str, list[dict]] = threads or {}
         self.fetched_ids: list[list[str]] = []
+        self.history_starts: list[str] = []
+        pages = history or {}
 
         def fake_batch(svc, ids, **kwargs):
             self.fetched_ids.append(list(ids))
@@ -353,7 +377,21 @@ class TestGetCuration(TestTemplate):
                 if tid in served
             }
 
+        def history_list(**kwargs):
+            start = kwargs["startHistoryId"]
+            self.history_starts.append(start)
+            request = MagicMock()
+            if start in pages:
+                page = pages[start]
+                request.execute.return_value = (
+                    page if isinstance(page, dict) else {"history": page}
+                )
+            else:
+                request.execute.side_effect = _HISTORY_GONE
+            return request
+
         svc = MagicMock()
+        svc.users().history().list.side_effect = history_list
         with (
             patch("services.inbox_curation_svc._get_gmail_client", return_value=svc),
             patch("services.inbox_curation_svc._list_thread_stubs", return_value=stubs),
@@ -369,6 +407,8 @@ class TestGetCuration(TestTemplate):
         ):
             return inbox_get_curation(inp or GetCurationInput(user_id="alice"))
 
+
+class TestGetCuration(CurationReadHarness, TestTemplate):
     def test_empty_ledger_cold_start(self):
         with _patch_db(), _patch_fernet():
             res = self._run_get([_stub("t1", "100"), _stub("t2", "101")])
@@ -498,9 +538,9 @@ class TestGetCuration(TestTemplate):
                 [_judgment("old-open"), _judgment("old-archived")],
                 history_ids={"old-open": "x", "old-archived": "x"},
             )
-            # 200 newer inbox threads fill the scan, so the curated rows fall
+            # Newer inbox threads fill the scan, so the curated rows fall
             # outside it even though one of them is still in the inbox.
-            stubs = [_stub(f"n{i}", "1") for i in range(200)]
+            stubs = _full_scan()
             res = self._run_get(
                 stubs,
                 threads={
@@ -520,12 +560,13 @@ class TestGetCuration(TestTemplate):
                 [*archived, _judgment("open", importance=0.1)],
                 history_ids={},
             )
-            stubs = [_stub(f"n{i}", "1") for i in range(200)]
+            stubs = _full_scan()
             threads = {f"a{i}": [_msg_at(_EARLIER)] for i in range(120)}
             threads["open"] = [_msg_at(_EARLIER, "INBOX")]
-            res = self._run_get(
-                stubs, GetCurationInput(user_id="alice", limit=1), threads=threads
-            )
+            with patch("services._gmail_quota.DEFAULT_CALL_UNITS", 10_000):
+                res = self._run_get(
+                    stubs, GetCurationInput(user_id="alice", limit=1), threads=threads
+                )
             assert [r.thread_id for r in res.records] == ["open"]
             # Three pages of 50 were checked, in batches of at most 50.
             assert [len(ids) for ids in self.fetched_ids] == [50, 50, 21]
@@ -561,7 +602,7 @@ class TestGetCuration(TestTemplate):
     def test_full_scan_fetch_miss_is_surfaced_as_stale(self):
         with _patch_db(), _patch_fernet():
             upsert_judgments("alice", [_judgment("gone")], history_ids={})
-            stubs = [_stub(f"n{i}", "1") for i in range(200)]
+            stubs = _full_scan()
             res = self._run_get(stubs, threads={})  # the fetch returns nothing
             assert [r.thread_id for r in res.records] == ["gone"]
             assert res.records[0].ledger_status == LedgerStatus.stale

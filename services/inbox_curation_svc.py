@@ -40,6 +40,8 @@ from models.curation import (
     SaveCurationResult,
 )
 from services import service
+from services._gmail_history import HistoryGoneError, iter_history_pages
+from services._gmail_quota import QuotaBudget
 from services.curation_ledger import (
     as_utc,
     list_record_ids,
@@ -63,11 +65,16 @@ from services.gmail_curate_svc import (
 from services.gmail_messages_svc import _find_mcp_done_label, _internal_date_to_dt
 from services.gmail_svc import _get_gmail_client, _headers_to_dict
 
-# Bound on how many inbox thread stubs the cheap read scans for coverage. The
-# curated verdicts users care about are recent; scanning the whole mailbox for
-# a coverage count would defeat the "cheap" contract.
+# The coverage count covers the newest this-many inbox threads. The curated
+# verdicts users care about are recent; counting the whole mailbox would
+# defeat the "cheap" contract.
 _COVERAGE_STUB_CAP = 200
-_HISTORY_PAGE_SIZE = 100
+# Inbox membership is read further back than that. threads.list costs 10
+# units for up to 500 stubs, while proving membership one thread at a time
+# (BeyondScan) costs 40 per thread, so a wide scan is the cheap way to know
+# which ledger rows are still in the inbox.
+_SCAN_STUB_CAP = 2_000
+_STUB_PAGE_SIZE = 500
 
 
 # ---------------------------------------------------------------------------
@@ -98,7 +105,7 @@ def _list_thread_stubs(svc: Any, q: str, *, cap: int) -> list[dict[str, Any]]:
             .list(
                 userId="me",
                 q=q,
-                maxResults=min(_HISTORY_PAGE_SIZE, cap - len(stubs)),
+                maxResults=min(_STUB_PAGE_SIZE, cap - len(stubs)),
                 pageToken=page_token,
             )
             .execute()
@@ -150,39 +157,20 @@ def _changed_thread_ids(
     ``messages`` field lists every message it touched, capturing label-only
     changes that ``messagesAdded`` would miss.
     """
-    from googleapiclient.errors import HttpError  # noqa: PLC0415
-
     thread_ids: list[str] = []
     seen: set[str] = set()
-    page_token: str | None = None
     latest = since_history_id
     try:
-        while True:
-            resp = (
-                svc.users()
-                .history()
-                .list(
-                    userId="me",
-                    startHistoryId=since_history_id,
-                    pageToken=page_token,
-                    maxResults=_HISTORY_PAGE_SIZE,
-                )
-                .execute()
-            )
-            latest = _history_str(resp.get("historyId")) or latest
-            for record in resp.get("history", []) or []:
+        for page in iter_history_pages(svc, since_history_id):
+            latest = _history_str(page.get("historyId")) or latest
+            for record in page.get("history", []) or []:
                 for msg in record.get("messages", []) or []:
                     tid = msg.get("threadId")
                     if tid and tid not in seen:
                         seen.add(tid)
                         thread_ids.append(tid)
-            page_token = resp.get("nextPageToken")
-            if not page_token:
-                break
-    except HttpError as exc:
-        if exc.resp.status == 404:
-            return None, None
-        raise
+    except HistoryGoneError:
+        return None, None
     return thread_ids, _history_str(latest)
 
 
@@ -213,35 +201,42 @@ def _changed_thread_ids(
 def inbox_get_curation(input: GetCurationInput) -> GetCurationResult:
     svc = _get_gmail_client(input.user_id)
 
-    stubs = _list_thread_stubs(svc, build_curate_query(), cap=_COVERAGE_STUB_CAP)
+    stubs = _list_thread_stubs(svc, build_curate_query(), cap=_SCAN_STUB_CAP)
     current_hist: dict[str, str | None] = {
         s["id"]: _history_str(s.get("historyId")) for s in stubs if s.get("id")
     }
     inbox_ids = list(current_hist)
+    # One budget for every optional Gmail request below, so a single read
+    # can't spend the user's whole per-minute quota. Stubs are newest first,
+    # so freshness checks go to the coverage window before older threads.
+    budget = QuotaBudget()
     statuses = resolve_statuses(
         svc,
         load_status_map(input.user_id, inbox_ids),
         current_hist,
         check_freshness=input.check_freshness,
+        budget=budget,
     )
 
-    # Coverage over the scanned inbox vs the whole ledger (independent of the
-    # display filter / limit below).
-    counts = [statuses[tid] for tid in inbox_ids]
+    # Coverage over the newest scanned inbox threads vs the whole ledger
+    # (independent of the display filter / limit below).
+    counts = [statuses[tid] for tid in inbox_ids[:_COVERAGE_STUB_CAP]]
     coverage = CoverageSummary(
         curated=counts.count(LedgerStatus.curated),
         stale=counts.count(LedgerStatus.stale),
         uncurated=counts.count(LedgerStatus.uncurated),
     )
 
-    # The scan stops at the newest _COVERAGE_STUB_CAP inbox threads. When it is
+    # The scan stops at the newest _SCAN_STUB_CAP inbox threads. When it is
     # full, a row outside it may still be in the inbox, so membership is
     # checked directly instead of assumed. Rows are read a page at a time so
     # a large ledger of long-archived threads costs only what it takes to fill
     # ``limit``.
-    scan_full = len(stubs) >= _COVERAGE_STUB_CAP
+    scan_full = len(stubs) >= _SCAN_STUB_CAP
     beyond = (
-        BeyondScan(svc, input.user_id, check_freshness=input.check_freshness)
+        BeyondScan(
+            svc, input.user_id, check_freshness=input.check_freshness, budget=budget
+        )
         if scan_full
         else None
     )

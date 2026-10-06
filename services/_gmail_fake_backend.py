@@ -422,20 +422,27 @@ class _FakeBatch:
     does - per-item failures go to the callback, never the caller.
     """
 
-    def __init__(self) -> None:
-        self._queue: list[tuple[_Executable, Any]] = []
+    def __init__(self, callback: Any = None) -> None:
+        self._callback = callback
+        self._queue: list[tuple[_Executable, Any, str | None]] = []
 
-    def add(self, request: _Executable, callback: Any = None) -> None:
-        self._queue.append((request, callback))
+    def add(
+        self, request: _Executable, callback: Any = None, request_id: str | None = None
+    ) -> None:
+        self._queue.append((request, callback, request_id))
 
     def execute(self, *args: Any, **kwargs: Any) -> None:
-        for i, (request, callback) in enumerate(self._queue):
+        for i, (request, callback, request_id) in enumerate(self._queue):
+            # Like the real batch: a per-request callback wins over the
+            # batch-wide one, and ids default to the queue position.
+            callback = callback or self._callback
+            rid = request_id or str(i)
             if callback is None:
                 continue
             try:
-                callback(str(i), request.execute(), None)
+                callback(rid, request.execute(), None)
             except Exception as exc:  # noqa: BLE001 - mirror the real batch: hand per-item errors to the callback, not the caller
-                callback(str(i), None, exc)
+                callback(rid, None, exc)
 
 
 class _FakeGmailResource:
@@ -456,8 +463,8 @@ class _FakeGmailResource:
     def users(self) -> _Users:
         return _Users(self._drafts_store)
 
-    def new_batch_http_request(self) -> _FakeBatch:
-        return _FakeBatch()
+    def new_batch_http_request(self, callback: Any = None) -> _FakeBatch:
+        return _FakeBatch(callback)
 
     def __getattr__(self, name: str) -> Any:
         raise NotImplementedError(
