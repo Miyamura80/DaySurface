@@ -177,8 +177,7 @@ export const connect: {
       note: "Copies the URL and opens ChatGPT Plugins.",
       steps: [
         "Add → Create custom MCP server",
-        "Paste the URL, Authentication → OAuth",
-        "Tick the risk box → Create as a plugin",
+        "Paste the URL, Authentication → OAuth → Create as a plugin",
       ],
     },
     {

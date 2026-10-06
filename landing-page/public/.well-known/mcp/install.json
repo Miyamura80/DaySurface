@@ -36,8 +36,7 @@
       "prefills": false,
       "steps": [
         "Add → Create custom MCP server",
-        "Paste the URL, Authentication → OAuth",
-        "Tick the risk box → Create as a plugin"
+        "Paste the URL, Authentication → OAuth → Create as a plugin"
       ],
       "setup_prompt": null,
       "setup_kind": null,
