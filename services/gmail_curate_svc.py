@@ -112,43 +112,41 @@ def _batch_get_threads(
     )
 
     results: dict[str, dict[str, Any]] = {}
+    refused: list[tuple[str, HttpError]] = []
+
+    def on_reply(tid: str, response: Any, exception: Any) -> None:
+        if exception is None:
+            results[tid] = response
+        elif isinstance(exception, HttpError) and is_rate_limited(exception):
+            refused.append((tid, exception))
+        else:
+            log.warning("Batch thread fetch failed for {}: {}", tid, exception)
 
     def fetch(ids: list[str]) -> list[tuple[str, HttpError]]:
-        refused: list[tuple[str, HttpError]] = []
+        refused.clear()
         for offset in range(0, len(ids), _BATCH_CHUNK_SIZE):
-            chunk = ids[offset : offset + _BATCH_CHUNK_SIZE]
-            batch = svc.new_batch_http_request()
-            for tid in chunk:
+            batch = svc.new_batch_http_request(callback=on_reply)
+            for tid in ids[offset : offset + _BATCH_CHUNK_SIZE]:
                 kwargs: dict[str, Any] = {"userId": "me", "id": tid, "format": fmt}
                 if metadata_headers:
                     kwargs["metadataHeaders"] = metadata_headers
-                req = svc.users().threads().get(**kwargs)
-
-                def _cb(
-                    request_id: str, response: Any, exception: Any, _tid: str = tid
-                ) -> None:
-                    if exception is None:
-                        results[_tid] = response
-                    elif isinstance(exception, HttpError) and is_rate_limited(
-                        exception
-                    ):
-                        refused.append((_tid, exception))
-                    else:
-                        log.warning(
-                            "Batch thread fetch failed for {}: {}", _tid, exception
-                        )
-
-                batch.add(req, callback=_cb)
+                batch.add(svc.users().threads().get(**kwargs), request_id=tid)
             try:
                 batch.execute()
             except HttpError as exc:
-                # The batch request itself was refused, so none of it ran.
                 if not is_rate_limited(exc):
                     raise
-                refused.extend((tid, exc) for tid in chunk)
-        return refused
+                # The batch request itself was refused, so none of it ran.
+                # Sending the remaining chunks now would only be refused too:
+                # back off once for all of them.
+                refused.extend((tid, exc) for tid in ids[offset:])
+                break
+        return list(refused)
 
-    retry_rate_limited(list(thread_ids), fetch, what="batched threads.get")
+    # Batch request ids must be unique.
+    retry_rate_limited(
+        list(dict.fromkeys(thread_ids)), fetch, what="batched threads.get"
+    )
     return results
 
 

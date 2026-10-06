@@ -12,22 +12,28 @@ not incoming, so they never reopen a resolved thread or invalidate a verdict.
   per-thread ``historyId`` moves on any change (read state, labels, drafts),
   so it only serves as the free "nothing changed" fast path.
 
-Gmail quota shapes how freshness is checked. A per-user budget of 6,000
-units a minute (new Cloud projects since May 2026) against 40 units per
-``threads.get`` means one fetch per moved thread can spend the whole minute
-on a single read. So one ``users.history.list`` pass (2 units a page) first
-rules out threads where no message was added since curation, and the
-threads.get calls that remain draw on a per-call ``FetchBudget``.
+Gmail quota shapes how freshness is checked (see ``services._gmail_quota``):
+one ``threads.get`` per moved thread can spend the user's whole minute. So a
+``users.history.list`` pass (2 units a page) first rules out threads with no
+message added since curation, and every request draws on one per-call
+``QuotaBudget``.
 """
 
 from __future__ import annotations
 
+import sys
 from datetime import datetime
 from typing import Any
 
 from loguru import logger as log
 
 from models.curation import CurationState, LedgerStatus
+from services._gmail_history import (
+    HistoryGoneError,
+    HistoryTooLargeError,
+    iter_history_pages,
+)
+from services._gmail_quota import THREADS_GET_UNITS, QuotaBudget
 from services.curation_ledger import LedgerRowStatus, load_status_map
 from services.gmail_curate_svc import (
     _batch_get_threads,
@@ -36,16 +42,9 @@ from services.gmail_curate_svc import (
 )
 from services.gmail_messages_svc import _find_mcp_done_label, _internal_date_to_dt
 
-# ``threads.get`` at the new-tier price; on older projects it is 10, so the
-# budget below only errs toward spending less.
-THREADS_GET_UNITS = 40
-# Units one inbox_get_curation call may spend on thread fetches: a third of
-# the strictest per-user minute, so a follow-up inbox_search still fits.
-CURATION_FETCH_BUDGET_UNITS = 2_000
-_HISTORY_PAGE_SIZE = 500
-# history.list pages one call may read across every probe (2 units each).
-# Past that the delta is too big to rule anything out cheaply.
-_HISTORY_MAX_PAGES = 10
+# Pages one history probe may read (500 records each). A delta past that is
+# too big to rule anything out cheaply, so the search moves to a newer start.
+HISTORY_PROBE_PAGES = 5
 
 _INBOX_LABEL_ID = "INBOX"
 _SENT_LABEL_ID = "SENT"
@@ -56,14 +55,24 @@ _EXCLUDED_CATEGORY_IDS = frozenset(
 )
 
 
-def is_incoming(msg: dict[str, Any]) -> bool:
-    """A message someone else sent, or one the user sent to themselves."""
+def _may_be_incoming(msg: dict[str, Any]) -> bool:
+    """Not a draft, and not the user's own outgoing mail.
+
+    On its own this judges history records: a message can leave a category
+    tab after it arrives, so the labels it was added with can't rule it out.
+    """
     labels = set(msg.get("labelIds") or [])
-    # Drafts aren't mail, and category-tab mail is outside triage (see
-    # is_triageable), so neither can make a verdict stale.
-    if _DRAFT_LABEL_ID in labels or labels & _EXCLUDED_CATEGORY_IDS:
+    if _DRAFT_LABEL_ID in labels:
         return False
     return _SENT_LABEL_ID not in labels or _INBOX_LABEL_ID in labels
+
+
+def is_incoming(msg: dict[str, Any]) -> bool:
+    """A message someone else sent, or one the user sent to themselves."""
+    # Category-tab mail is outside triage (see is_triageable), so it can't
+    # make a verdict stale.
+    labels = set(msg.get("labelIds") or [])
+    return _may_be_incoming(msg) and not labels & _EXCLUDED_CATEGORY_IDS
 
 
 def newest_incoming_at(messages: list[dict[str, Any]]) -> datetime | None:
@@ -131,25 +140,6 @@ def ledger_status_for(
     return LedgerStatus.curated
 
 
-class FetchBudget:
-    """Gmail quota units one tool call may still spend on thread fetches."""
-
-    def __init__(self, units: int) -> None:
-        self.remaining = units
-
-    def take(self, thread_ids: list[str]) -> list[str]:
-        """The leading ``thread_ids`` the budget covers; it is charged for them."""
-        allowed = thread_ids[: max(self.remaining, 0) // THREADS_GET_UNITS]
-        self.remaining -= len(allowed) * THREADS_GET_UNITS
-        if len(allowed) < len(thread_ids):
-            log.info(
-                "Gmail fetch budget spent: {} of {} threads left unchecked",
-                len(thread_ids) - len(allowed),
-                len(thread_ids),
-            )
-        return allowed
-
-
 def _as_int(value: str | None) -> int | None:
     try:
         return None if value is None else int(value)
@@ -157,113 +147,90 @@ def _as_int(value: str | None) -> int | None:
         return None
 
 
-def _may_be_incoming(msg: dict[str, Any]) -> bool:
-    """``is_incoming`` on the labels a message was added with.
-
-    Category tabs are not ruled out here: a message can be moved out of one
-    after it arrives, so only drafts and the user's own sent mail are.
-    """
-    labels = set(msg.get("labelIds") or [])
-    if _DRAFT_LABEL_ID in labels:
-        return False
-    return _SENT_LABEL_ID not in labels or _INBOX_LABEL_ID in labels
-
-
-def _added_since(svc: Any, start: int, pages: list[int]) -> dict[str, int] | None:
+def _added_since(svc: Any, start: int, budget: QuotaBudget) -> dict[str, int]:
     """Per thread, the newest history id that added a possibly incoming message.
 
-    Covers everything after ``start``. ``None`` when Gmail no longer keeps
-    history that old (404), or when the delta outruns the pages left in
-    ``pages[0]`` (shared across probes): either way it can't show that a
-    thread got nothing new.
+    Covers everything after ``start``. Raises ``HistoryGoneError`` or
+    ``HistoryTooLargeError`` when the history can't show a thread got nothing new.
     """
-    from googleapiclient.errors import HttpError  # noqa: PLC0415
-
     newest: dict[str, int] = {}
-    page_token: str | None = None
-    while pages[0] > 0:
-        pages[0] -= 1
-        try:
-            resp = (
-                svc.users()
-                .history()
-                .list(
-                    userId="me",
-                    startHistoryId=str(start),
-                    historyTypes=["messageAdded"],
-                    maxResults=_HISTORY_PAGE_SIZE,
-                    pageToken=page_token,
-                )
-                .execute()
-            )
-        except HttpError as exc:
-            if exc.resp.status == 404:
-                return None
-            raise
-        for record in resp.get("history") or []:
-            # A record without an id can't be placed, so it counts as new.
-            record_id = _as_int(record.get("id"))
+    for page in iter_history_pages(
+        svc,
+        str(start),
+        history_types=["messageAdded"],
+        max_pages=HISTORY_PROBE_PAGES,
+        budget=budget,
+    ):
+        for record in page.get("history") or []:
+            # A record without an id can't be placed, so it is newer than
+            # any verdict.
+            at = _as_int(record.get("id")) or sys.maxsize
             for added in record.get("messagesAdded") or []:
                 msg = added.get("message") or {}
                 tid = msg.get("threadId")
                 if tid and _may_be_incoming(msg):
-                    at = start + 1 if record_id is None else record_id
                     newest[tid] = max(newest.get(tid, at), at)
-        page_token = resp.get("nextPageToken")
-        if not page_token:
-            return newest
-    return None
+    return newest
 
 
 def _oldest_usable_history(
-    svc: Any, starts: list[int]
+    svc: Any, starts: list[int], budget: QuotaBudget
 ) -> tuple[int, dict[str, int]] | None:
-    """History from the oldest of ``starts`` (ascending) that Gmail still serves.
+    """History from the oldest of ``starts`` (ascending) it can be read from.
 
-    Gmail keeps about a week of history, so the oldest start is tried first
-    and, if refused, a binary search finds the oldest one accepted (2 units a
-    probe). All probes share one page allowance, which bounds the latency.
+    A start is unusable when Gmail no longer keeps it (about a week back) or
+    its delta outruns ``HISTORY_PROBE_PAGES``. Both get less likely as the
+    start gets newer, so after the oldest fails a binary search finds the
+    oldest that works. Each probe has its own page cap, so one oversized
+    delta can't starve the newer probes.
     """
-    pages = [_HISTORY_MAX_PAGES]
-    found = _added_since(svc, starts[0], pages)
-    if found is not None:
-        return starts[0], found
-    best: tuple[int, dict[str, int]] | None = None
+
+    def probe(i: int) -> tuple[int, dict[str, int]] | None:
+        try:
+            return starts[i], _added_since(svc, starts[i], budget)
+        except (HistoryGoneError, HistoryTooLargeError) as exc:
+            log.debug("History from {} unusable: {}", starts[i], type(exc).__name__)
+            return None
+
+    # The oldest start first: it is the common case and covers every row.
+    best = probe(0)
+    if best is not None:
+        return best
     lo, hi = 1, len(starts) - 1
     while lo <= hi:
         mid = (lo + hi) // 2
-        found = _added_since(svc, starts[mid], pages)
+        found = probe(mid)
         if found is None:
             lo = mid + 1
         else:
-            best = (starts[mid], found)
-            hi = mid - 1
+            best, hi = found, mid - 1
     return best
 
 
-def _may_have_new_mail(
-    svc: Any, thread_ids: list[str], status_map: dict[str, LedgerRowStatus]
-) -> list[str]:
-    """The subset of ``thread_ids`` that may have mail newer than their verdict.
+def _nothing_new(
+    svc: Any,
+    thread_ids: list[str],
+    status_map: dict[str, LedgerRowStatus],
+    budget: QuotaBudget,
+) -> set[str]:
+    """The ``thread_ids`` with no possibly incoming message since curation.
 
-    A row's ``curated_history_id`` already covers every message its verdict
-    accounts for (``inbox_save_curation`` keeps the older id when mail lands
-    mid-save), so a thread with no message added after it is fresh. Rows the
-    history can't speak for (no stored id, or older than Gmail keeps) stay in.
+    A row's ``curated_history_id`` covers every message its verdict accounts
+    for (``inbox_save_curation`` keeps the older id when mail lands mid-save),
+    so a thread with no message added after it is fresh. Rows the history
+    can't speak for (no stored id, or older than the history read) are not.
     """
     start_of = {tid: _as_int(status_map[tid].curated_history_id) for tid in thread_ids}
     starts = sorted({s for s in start_of.values() if s is not None})
-    usable = _oldest_usable_history(svc, starts) if starts else None
+    usable = _oldest_usable_history(svc, starts, budget) if starts else None
     if usable is None:
-        return thread_ids
+        return set()
     covered_from, added = usable
-    return [
+    return {
         tid
-        for tid in thread_ids
-        if (start := start_of[tid]) is None
-        or start < covered_from
-        or added.get(tid, 0) > start
-    ]
+        for tid, start in start_of.items()
+        if start is not None and start >= covered_from and added.get(tid, 0) <= start
+    }
 
 
 def resolve_statuses(
@@ -272,41 +239,46 @@ def resolve_statuses(
     current_hist: dict[str, str | None],
     *,
     check_freshness: bool,
-    budget: FetchBudget,
+    budget: QuotaBudget,
 ) -> dict[str, LedgerStatus]:
     """Ledger status for every thread in ``current_hist`` (id -> historyId).
 
     Only threads whose historyId moved since curation are checked. The
-    history delta rules out those with no new message; the rest are fetched
-    in batched ``format=minimal`` calls (labels + internalDate, no headers),
-    newest first while the budget lasts. Any left unfetched read as stale.
+    history delta clears those with no new message; the rest are fetched in
+    batched ``format=minimal`` calls (labels + internalDate, no headers) in
+    ``current_hist`` order while the budget lasts. Any left unfetched read as
+    stale.
     """
-    moved = [
-        tid
-        for tid, hist in current_hist.items()
+    moved = (
+        [
+            tid
+            for tid, hist in current_hist.items()
+            if (row := status_map.get(tid)) is not None
+            and row.state != CurationState.pending
+            and _history_moved(row, hist)
+        ]
         if check_freshness
-        and (row := status_map.get(tid)) is not None
-        and row.state != CurationState.pending
-        and _history_moved(row, hist)
-    ]
-    to_fetch = _may_have_new_mail(svc, moved, status_map) if moved else []
-    nothing_new = set(moved) - set(to_fetch)
-    to_fetch = budget.take(to_fetch)
+        else []
+    )
+    cleared = _nothing_new(svc, moved, status_map, budget) if moved else set()
+    # A thread with nothing new reads as if its historyId had not moved.
+    effective_hist = current_hist | {
+        tid: status_map[tid].curated_history_id for tid in cleared
+    }
+    to_fetch = budget.take([t for t in moved if t not in cleared], THREADS_GET_UNITS)
     fetched = _batch_get_threads(svc, to_fetch, fmt="minimal") if to_fetch else {}
     newest = {
         tid: newest_incoming_at(thread.get("messages") or [])
         for tid, thread in fetched.items()
     }
     return {
-        tid: LedgerStatus.curated
-        if tid in nothing_new
-        else ledger_status_for(
+        tid: ledger_status_for(
             status_map.get(tid),
             hist,
             newest.get(tid),
             check_freshness=check_freshness,
         )
-        for tid, hist in current_hist.items()
+        for tid, hist in effective_hist.items()
     }
 
 
@@ -318,7 +290,7 @@ class BeyondScan:
     """
 
     def __init__(
-        self, svc: Any, user_id: str, *, check_freshness: bool, budget: FetchBudget
+        self, svc: Any, user_id: str, *, check_freshness: bool, budget: QuotaBudget
     ) -> None:
         self._svc = svc
         self._user_id = user_id
@@ -327,24 +299,27 @@ class BeyondScan:
         self._labels: tuple[dict[str, str], str | None] | None = None
 
     def statuses(self, thread_ids: list[str]) -> dict[str, LedgerStatus]:
-        """Status per still-triageable thread; threads that left are absent."""
-        if not thread_ids:
+        """Status per still-triageable thread; threads that left are absent.
+
+        So are threads the budget can't pay to check. Past a full inbox scan
+        they are most likely archived, and surfacing them would fill the read
+        with old threads; ``include_inactive`` still returns them, as stale.
+        """
+        to_fetch = self._budget.take(thread_ids, THREADS_GET_UNITS)
+        if not to_fetch:
             return {}
         if self._labels is None:
             label_id_to_name, _ = _build_label_lookups(self._svc)
             self._labels = (label_id_to_name, _find_mcp_done_label(self._svc))
         label_id_to_name, done_label_id = self._labels
-        to_fetch = self._budget.take(thread_ids)
-        fetched = (
-            _batch_get_threads(self._svc, to_fetch, fmt="minimal") if to_fetch else {}
-        )
-        rows = load_status_map(self._user_id, thread_ids)
+        fetched = _batch_get_threads(self._svc, to_fetch, fmt="minimal")
+        rows = load_status_map(self._user_id, to_fetch)
         out: dict[str, LedgerStatus] = {}
-        for tid in thread_ids:
+        for tid in to_fetch:
             thread = fetched.get(tid)
             if thread is None:
-                # Not fetched (failed, or over budget), so membership is
-                # unknown: surface the row for another look rather than hide it.
+                # The fetch failed, so membership is unknown: surface the row
+                # for another look rather than hide it.
                 out[tid] = LedgerStatus.stale
                 continue
             messages = thread.get("messages") or []

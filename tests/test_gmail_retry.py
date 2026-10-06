@@ -228,24 +228,31 @@ class _ScriptedBatch:
         self._refuse_whole = refuse_whole
         self._calls: list = []
 
-    def add(self, req, callback):
-        self._calls.append((req, callback))
+    def __call__(self, callback):
+        # Stands in for new_batch_http_request(callback=...).
+        self._callback = callback
+        return self
+
+    def add(self, req, request_id):
+        self._calls.append((req, request_id))
 
     def execute(self):
         if self._refuse_whole is not None:
             raise self._refuse_whole
-        for req, callback in self._calls:
-            tid = req.kwargs["id"]
+        for _req, tid in self._calls:
             result = self._outcome(tid)
             if isinstance(result, Exception):
-                callback(tid, None, result)
+                self._callback(tid, None, result)
             else:
-                callback(tid, result, None)
+                self._callback(tid, result, None)
 
 
 def _batch_svc(batches):
     """Fake client whose successive batch requests come from ``batches``."""
-    svc = MagicMock(new_batch_http_request=MagicMock(side_effect=batches))
+    pending = iter(batches)
+    svc = MagicMock(
+        new_batch_http_request=lambda callback: next(pending)(callback),
+    )
     svc.users().threads().get = MagicMock(side_effect=lambda **kw: MagicMock(kwargs=kw))
     return svc
 
@@ -266,7 +273,7 @@ class TestBatchRateLimitRetry(TestTemplate):
         assert set(got) == {"t1", "t2"}
         assert sleeps.call_count == 1
         # Only the refused thread went out again.
-        assert [req.kwargs["id"] for req, _ in retry._calls] == ["t2"]
+        assert [tid for _, tid in retry._calls] == ["t2"]
 
     def test_persistent_refusal_raises_instead_of_a_partial_result(self, sleeps):
         batches = [
@@ -300,3 +307,19 @@ class TestBatchRateLimitRetry(TestTemplate):
         with pytest.raises(HttpError):
             _batch_get_threads(svc, ["t1"], fmt="minimal")
         sleeps.assert_not_called()
+
+    def test_refused_batch_holds_back_the_remaining_chunks(self, sleeps):
+        ids = [f"t{i}" for i in range(120)]  # three chunks of up to 50
+        first = _ScriptedBatch(None, refuse_whole=_http_error(429))
+        retries = [_ScriptedBatch(lambda tid: {"id": tid}) for _ in range(3)]
+        got = _batch_get_threads(_batch_svc([first, *retries]), ids, fmt="minimal")
+        assert set(got) == set(ids)
+        # Nothing more was sent until the backoff, then all of it once.
+        assert sleeps.call_count == 1
+        assert [len(b._calls) for b in retries] == [50, 50, 20]
+
+    def test_duplicate_ids_are_requested_once(self, sleeps):
+        batch = _ScriptedBatch(lambda tid: {"id": tid})
+        _batch_get_threads(_batch_svc([batch]), ["t1", "t1"], fmt="minimal")
+        # A batch rejects a repeated request id outright.
+        assert [tid for _, tid in batch._calls] == ["t1"]

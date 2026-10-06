@@ -42,7 +42,6 @@ from models.curation import (
     ThreadJudgment,
 )
 from models.gmail import GmailDisconnectInput
-from services import curation_status as statuses_mod
 from services import discover_services, get_registry, inbox_curation_svc
 from services.curation_ledger import (
     LedgerRowStatus,
@@ -354,7 +353,9 @@ def _added(record_id: str, thread_id: str, *labels: str) -> dict:
     return {"id": record_id, "messagesAdded": [{"message": message}]}
 
 
-class TestGetCuration(TestTemplate):
+class CurationReadHarness:
+    """Runs inbox_get_curation over patched Gmail helpers; mix into a test class."""
+
     def _run_get(self, stubs, inp=None, threads=None, history=None):
         """``threads`` maps thread id -> messages served by any thread fetch.
 
@@ -406,6 +407,8 @@ class TestGetCuration(TestTemplate):
         ):
             return inbox_get_curation(inp or GetCurationInput(user_id="alice"))
 
+
+class TestGetCuration(CurationReadHarness, TestTemplate):
     def test_empty_ledger_cold_start(self):
         with _patch_db(), _patch_fernet():
             res = self._run_get([_stub("t1", "100"), _stub("t2", "101")])
@@ -560,9 +563,7 @@ class TestGetCuration(TestTemplate):
             stubs = _full_scan()
             threads = {f"a{i}": [_msg_at(_EARLIER)] for i in range(120)}
             threads["open"] = [_msg_at(_EARLIER, "INBOX")]
-            with patch(
-                "services.inbox_curation_svc.CURATION_FETCH_BUDGET_UNITS", 10_000
-            ):
+            with patch("services._gmail_quota.DEFAULT_CALL_UNITS", 10_000):
                 res = self._run_get(
                     stubs, GetCurationInput(user_id="alice", limit=1), threads=threads
                 )
@@ -647,131 +648,6 @@ class TestGetCuration(TestTemplate):
             # ...but coverage still reflects the whole inbox vs the whole ledger.
             assert res.coverage.curated == 2
             assert res.coverage.uncurated == 0
-
-    def test_read_or_label_churn_is_ruled_out_by_history(self):
-        with _patch_db(), _patch_fernet():
-            upsert_judgments("alice", [_judgment("t1")], history_ids={"t1": "100"})
-            # historyId moved but no message was added since curation: no
-            # 40-unit thread fetch is needed to know the verdict holds.
-            res = self._run_get([_stub("t1", "150")], history={"100": []})
-            assert res.records[0].ledger_status == LedgerStatus.curated
-            assert self.fetched_ids == []
-            assert self.history_starts == ["100"]
-
-    def test_new_incoming_message_in_history_is_fetched(self):
-        with _patch_db(), _patch_fernet():
-            upsert_judgments("alice", [_judgment("t1")], history_ids={"t1": "100"})
-            res = self._run_get(
-                [_stub("t1", "150")],
-                threads={"t1": [_msg_at(_LATER, "INBOX")]},
-                history={"100": [_added("120", "t1", "INBOX", "UNREAD")]},
-            )
-            assert res.records[0].ledger_status == LedgerStatus.stale
-            assert self.fetched_ids == [["t1"]]
-
-    def test_own_reply_or_draft_in_history_needs_no_fetch(self):
-        with _patch_db(), _patch_fernet():
-            upsert_judgments("alice", [_judgment("t1")], history_ids={"t1": "100"})
-            res = self._run_get(
-                [_stub("t1", "150")],
-                history={
-                    "100": [_added("110", "t1", "DRAFT"), _added("120", "t1", "SENT")]
-                },
-            )
-            assert res.records[0].ledger_status == LedgerStatus.curated
-            assert self.fetched_ids == []
-
-    def test_message_added_before_a_rows_curation_is_ignored(self):
-        with _patch_db(), _patch_fernet():
-            upsert_judgments(
-                "alice",
-                [_judgment("t1"), _judgment("t2")],
-                history_ids={"t1": "100", "t2": "50"},
-            )
-            # One pass from the older start: t1's message (id 80) predates
-            # t1's own verdict (100), so it does not make t1 a candidate.
-            res = self._run_get(
-                [_stub("t1", "150"), _stub("t2", "150")],
-                history={"50": [_added("80", "t1", "INBOX")]},
-            )
-            assert {r.ledger_status for r in res.records} == {LedgerStatus.curated}
-            assert self.fetched_ids == []
-            assert self.history_starts == ["50"]
-
-    def test_history_too_old_falls_back_to_the_oldest_usable_start(self):
-        with _patch_db(), _patch_fernet():
-            upsert_judgments(
-                "alice",
-                [_judgment("old"), _judgment("mid"), _judgment("new")],
-                history_ids={"old": "10", "mid": "60", "new": "100"},
-            )
-            res = self._run_get(
-                [_stub("old", "150"), _stub("mid", "150"), _stub("new", "150")],
-                threads={"old": [_msg_at(_EARLIER, "INBOX")]},
-                history={"60": [], "100": []},
-            )
-            assert {r.ledger_status for r in res.records} == {LedgerStatus.curated}
-            # Gmail refused 10, the search settled on 60: only the row older
-            # than any history Gmail still keeps needed a thread fetch.
-            assert self.history_starts == ["10", "60"]
-            assert self.fetched_ids == [["old"]]
-
-    def test_history_too_large_to_page_falls_back_to_fetching(self):
-        with _patch_db(), _patch_fernet():
-            upsert_judgments("alice", [_judgment("t1")], history_ids={"t1": "100"})
-            endless = {"history": [], "nextPageToken": "more"}
-            res = self._run_get(
-                [_stub("t1", "150")],
-                threads={"t1": [_msg_at(_EARLIER, "INBOX")]},
-                history={"100": endless},
-            )
-            assert res.records[0].ledger_status == LedgerStatus.curated
-            assert len(self.history_starts) == statuses_mod._HISTORY_MAX_PAGES
-            assert self.fetched_ids == [["t1"]]
-
-    def test_freshness_fetches_stop_at_the_budget(self):
-        with _patch_db(), _patch_fernet():
-            ids = [f"t{i}" for i in range(60)]
-            upsert_judgments(
-                "alice",
-                [_judgment(t) for t in ids],
-                history_ids=dict.fromkeys(ids, "100"),
-            )
-            # History is gone, so every moved row is a fetch candidate.
-            res = self._run_get(
-                [_stub(t, "150") for t in ids],
-                GetCurationInput(user_id="alice", limit=100),
-                threads={t: [_msg_at(_EARLIER, "INBOX")] for t in ids},
-            )
-            budget = statuses_mod.CURATION_FETCH_BUDGET_UNITS
-            allowed = budget // statuses_mod.THREADS_GET_UNITS
-            # The newest threads were checked; the rest read as stale.
-            assert self.fetched_ids == [ids[:allowed]]
-            assert res.coverage.curated == allowed
-            assert res.coverage.stale == len(ids) - allowed
-
-    def test_beyond_scan_fetches_share_the_budget(self):
-        with _patch_db(), _patch_fernet():
-            old = [f"a{i}" for i in range(60)]
-            upsert_judgments(
-                "alice",
-                [_judgment(t, importance=0.9 - i / 1000) for i, t in enumerate(old)],
-                history_ids={},
-            )
-            res = self._run_get(
-                _full_scan(),
-                GetCurationInput(user_id="alice", limit=100),
-                threads={t: [_msg_at(_EARLIER)] for t in old},  # all archived
-            )
-            allowed = (
-                statuses_mod.CURATION_FETCH_BUDGET_UNITS
-                // statuses_mod.THREADS_GET_UNITS
-            )
-            assert sum(len(ids) for ids in self.fetched_ids) == allowed
-            # Rows past the budget were never fetched, so they surface as
-            # stale for another look instead of being hidden.
-            assert [r.thread_id for r in res.records] == old[allowed:]
-            assert {r.ledger_status for r in res.records} == {LedgerStatus.stale}
 
 
 # ---------------------------------------------------------------------------

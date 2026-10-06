@@ -40,6 +40,8 @@ from models.curation import (
     SaveCurationResult,
 )
 from services import service
+from services._gmail_history import HistoryGoneError, iter_history_pages
+from services._gmail_quota import QuotaBudget
 from services.curation_ledger import (
     as_utc,
     list_record_ids,
@@ -48,9 +50,7 @@ from services.curation_ledger import (
     upsert_judgments,
 )
 from services.curation_status import (
-    CURATION_FETCH_BUDGET_UNITS,
     BeyondScan,
-    FetchBudget,
     is_triageable,
     ledger_status_for,
     newest_incoming_at,
@@ -75,7 +75,6 @@ _COVERAGE_STUB_CAP = 200
 # which ledger rows are still in the inbox.
 _SCAN_STUB_CAP = 2_000
 _STUB_PAGE_SIZE = 500
-_HISTORY_PAGE_SIZE = 100
 
 
 # ---------------------------------------------------------------------------
@@ -158,39 +157,20 @@ def _changed_thread_ids(
     ``messages`` field lists every message it touched, capturing label-only
     changes that ``messagesAdded`` would miss.
     """
-    from googleapiclient.errors import HttpError  # noqa: PLC0415
-
     thread_ids: list[str] = []
     seen: set[str] = set()
-    page_token: str | None = None
     latest = since_history_id
     try:
-        while True:
-            resp = (
-                svc.users()
-                .history()
-                .list(
-                    userId="me",
-                    startHistoryId=since_history_id,
-                    pageToken=page_token,
-                    maxResults=_HISTORY_PAGE_SIZE,
-                )
-                .execute()
-            )
-            latest = _history_str(resp.get("historyId")) or latest
-            for record in resp.get("history", []) or []:
+        for page in iter_history_pages(svc, since_history_id):
+            latest = _history_str(page.get("historyId")) or latest
+            for record in page.get("history", []) or []:
                 for msg in record.get("messages", []) or []:
                     tid = msg.get("threadId")
                     if tid and tid not in seen:
                         seen.add(tid)
                         thread_ids.append(tid)
-            page_token = resp.get("nextPageToken")
-            if not page_token:
-                break
-    except HttpError as exc:
-        if exc.resp.status == 404:
-            return None, None
-        raise
+    except HistoryGoneError:
+        return None, None
     return thread_ids, _history_str(latest)
 
 
@@ -226,9 +206,10 @@ def inbox_get_curation(input: GetCurationInput) -> GetCurationResult:
         s["id"]: _history_str(s.get("historyId")) for s in stubs if s.get("id")
     }
     inbox_ids = list(current_hist)
-    # One budget for every thread fetch below, so a single read can't spend
-    # the user's whole per-minute Gmail quota.
-    budget = FetchBudget(CURATION_FETCH_BUDGET_UNITS)
+    # One budget for every optional Gmail request below, so a single read
+    # can't spend the user's whole per-minute quota. Stubs are newest first,
+    # so freshness checks go to the coverage window before older threads.
+    budget = QuotaBudget()
     statuses = resolve_statuses(
         svc,
         load_status_map(input.user_id, inbox_ids),
