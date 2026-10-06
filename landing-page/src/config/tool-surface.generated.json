@@ -89,7 +89,7 @@
   },
   {
     "name": "inbox_get_curation",
-    "description": "Read banked inbox triage from the curation ledger. Cheap: no email bodies are fetched and no reasoning is run - it returns judgments the assistant already made (bucket, importance, summary, suggested action) plus a coverage count of curated / stale / uncurated threads in the inbox. Only threads still in the inbox are returned: threads the user resolved (gmail_mark_thread_done) or archived are omitted until someone sends a new message on them. 'stale' means someone else wrote since the verdict. Call this FIRST for any 'what's important / triage my inbox' request. If coverage shows many uncurated or stale threads and the user wants a thorough pass, go deeper with inbox_search + inbox_save_curation; otherwise answer directly from these banked verdicts."
+    "description": "Read banked inbox triage from the curation ledger. Cheap: no email bodies are fetched and no reasoning is run - it returns judgments the assistant already made (bucket, importance, summary, suggested action) plus a coverage count of curated / stale / uncurated threads in the inbox. By default only threads still in the inbox are returned: threads the user resolved (gmail_mark_thread_done) or archived are omitted until someone sends a new message on them (include_inactive=true also returns them, flagged stale). For inbox threads, 'stale' means someone else wrote since the verdict. Call this FIRST for any 'what's important / triage my inbox' request. If coverage shows many uncurated or stale threads and the user wants a thorough pass, go deeper with inbox_search + inbox_save_curation; otherwise answer directly from these banked verdicts."
   },
   {
     "name": "inbox_save_curation",

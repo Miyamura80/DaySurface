@@ -117,17 +117,17 @@ class GetCurationInput(BaseModel):
     check_freshness: bool = Field(
         default=True,
         description=(
-            "Flag rows stale when a new message arrived after they were curated. "
-            "Uses one ids-only threads.list plus a metadata fetch for threads "
-            "that changed (no message bodies, no inference)."
+            "Flag rows stale when someone else wrote after the verdict. Uses one "
+            "ids-only threads.list plus a labels-only fetch for threads that "
+            "changed (no message bodies, no inference)."
         ),
     )
     include_inactive: bool = Field(
         default=False,
         description=(
             "Also return rows for threads no longer in the triageable inbox "
-            "(marked done or archived). Off by default so resolved threads "
-            "stay hidden."
+            "(marked done or archived), flagged stale. Off by default so "
+            "resolved threads stay hidden."
         ),
     )
     limit: int = Field(default=50, ge=1, le=500)
