@@ -38,8 +38,10 @@ _EXCLUDED_CATEGORY_IDS = frozenset(
 
 def is_incoming(msg: dict[str, Any]) -> bool:
     """A message someone else sent, or one the user sent to themselves."""
-    labels = msg.get("labelIds") or []
-    if _DRAFT_LABEL_ID in labels:
+    labels = set(msg.get("labelIds") or [])
+    # Drafts aren't mail, and category-tab mail is outside triage (see
+    # is_triageable), so neither can make a verdict stale.
+    if _DRAFT_LABEL_ID in labels or labels & _EXCLUDED_CATEGORY_IDS:
         return False
     return _SENT_LABEL_ID not in labels or _INBOX_LABEL_ID in labels
 

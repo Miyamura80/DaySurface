@@ -544,6 +544,8 @@ class TestGetCuration(TestTemplate):
                 [{"id": "t1"}], threads={"t1": [_msg_at(_LATER, "INBOX")]}
             )
             assert res.records[0].ledger_status == LedgerStatus.stale
+            # The fallback actually fetched the thread's messages.
+            assert self.fetched_ids == [["t1"]]
 
     def test_check_freshness_false_treats_all_as_curated(self):
         with _patch_db(), _patch_fernet():
@@ -1074,6 +1076,18 @@ class TestIsTriageableDoneSemantics(TestTemplate):
 
 
 class TestFreshnessHelpers(TestTemplate):
+    def test_newest_incoming_ignores_category_tab_mail(self):
+        got = newest_incoming_at(
+            [
+                {"labelIds": ["INBOX"], "internalDate": "1700000000000"},
+                {
+                    "labelIds": ["INBOX", "CATEGORY_PROMOTIONS"],
+                    "internalDate": "1800000000000",
+                },
+            ]
+        )
+        assert got == datetime.fromtimestamp(1700000000, tz=UTC)
+
     def test_newest_incoming_ignores_drafts_and_own_replies(self):
         got = newest_incoming_at(
             [

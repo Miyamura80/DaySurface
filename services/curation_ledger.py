@@ -18,7 +18,7 @@ from __future__ import annotations
 from collections.abc import Generator, Iterable
 from contextlib import contextmanager
 from datetime import UTC, datetime
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 from loguru import logger as log
 from sqlalchemy.exc import SQLAlchemyError
@@ -110,31 +110,62 @@ def list_records(
     state: str | None = None,
     thread_ids: Iterable[str] | None = None,
     limit: int | None = 50,
-    offset: int = 0,
 ) -> list[CurationRecord]:
     """Return decrypted curation records for a user, optionally filtered.
 
     ``thread_ids`` restricts the result to those threads (an empty iterable
-    returns nothing). ``limit=None`` returns every match; ``offset`` pages
-    through them in importance order.
+    returns nothing). ``limit=None`` returns every match.
     """
-    ids = None if thread_ids is None else list(thread_ids)
-    if ids is not None and not ids:
-        return []
     with _session() as session:
-        query = session.query(ThreadCuration).filter(ThreadCuration.user_id == user_id)
-        if ids is not None:
-            query = query.filter(ThreadCuration.thread_id.in_(ids))
-        if bucket is not None:
-            query = query.filter(ThreadCuration.bucket == bucket)
-        if state is not None:
-            query = query.filter(ThreadCuration.state == state)
-        query = query.order_by(
-            ThreadCuration.importance.desc().nullslast(), ThreadCuration.thread_id
-        ).offset(offset)
+        query = _filtered(session, ThreadCuration, user_id, bucket, state, thread_ids)
+        if query is None:
+            return []
         if limit is not None:
             query = query.limit(limit)
         return [row_to_record(r) for r in query.all()]
+
+
+def list_record_ids(
+    user_id: str,
+    *,
+    bucket: str | None = None,
+    state: str | None = None,
+    thread_ids: Iterable[str] | None = None,
+) -> list[str]:
+    """Thread ids ``list_records`` would return, in the same order, undecrypted.
+
+    One cheap snapshot to page through, so a save that changes a row's
+    importance mid-read can't make the pages skip or repeat it.
+    """
+    with _session() as session:
+        query = _filtered(
+            session, ThreadCuration.thread_id, user_id, bucket, state, thread_ids
+        )
+        return [] if query is None else [tid for (tid,) in query.all()]
+
+
+def _filtered(
+    session: Session,
+    entity: Any,
+    user_id: str,
+    bucket: str | None,
+    state: str | None,
+    thread_ids: Iterable[str] | None,
+):  # noqa: ANN202 - SQLAlchemy Query typing varies with the selected entity
+    """Shared filters + importance ordering; ``None`` for an empty id filter."""
+    ids = None if thread_ids is None else list(thread_ids)
+    if ids is not None and not ids:
+        return None
+    query = session.query(entity).filter(ThreadCuration.user_id == user_id)
+    if ids is not None:
+        query = query.filter(ThreadCuration.thread_id.in_(ids))
+    if bucket is not None:
+        query = query.filter(ThreadCuration.bucket == bucket)
+    if state is not None:
+        query = query.filter(ThreadCuration.state == state)
+    return query.order_by(
+        ThreadCuration.importance.desc().nullslast(), ThreadCuration.thread_id
+    )
 
 
 def as_utc(value: datetime | None) -> datetime | None:

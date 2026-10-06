@@ -42,6 +42,7 @@ from models.curation import (
 from services import service
 from services.curation_ledger import (
     as_utc,
+    list_record_ids,
     list_records,
     load_status_map,
     upsert_judgments,
@@ -244,18 +245,20 @@ def inbox_get_curation(input: GetCurationInput) -> GetCurationResult:
         if scan_full
         else None
     )
+    ordered_ids = list_record_ids(
+        input.user_id,
+        bucket=input.bucket.value if input.bucket else None,
+        state=input.state.value if input.state else None,
+        thread_ids=None if input.include_inactive or scan_full else inbox_ids,
+    )
     kept = []
-    offset = 0
-    while len(kept) < input.limit:
-        page = list_records(
-            input.user_id,
-            bucket=input.bucket.value if input.bucket else None,
-            state=input.state.value if input.state else None,
-            thread_ids=None if input.include_inactive or scan_full else inbox_ids,
-            limit=_RECORD_PAGE,
-            offset=offset,
-        )
-        offset += len(page)
+    for start in range(0, len(ordered_ids), _RECORD_PAGE):
+        page_ids = ordered_ids[start : start + _RECORD_PAGE]
+        by_id = {
+            r.thread_id: r
+            for r in list_records(input.user_id, thread_ids=page_ids, limit=None)
+        }
+        page = [by_id[tid] for tid in page_ids if tid in by_id]
         if beyond is not None:
             unknown = [r.thread_id for r in page if r.thread_id not in statuses]
             statuses.update(beyond.statuses(unknown))
@@ -273,7 +276,7 @@ def inbox_get_curation(input: GetCurationInput) -> GetCurationResult:
             kept.append(rec)
             if len(kept) >= input.limit:
                 break
-        if len(page) < _RECORD_PAGE:
+        if len(kept) >= input.limit:
             break
 
     return GetCurationResult(records=kept, coverage=coverage)
