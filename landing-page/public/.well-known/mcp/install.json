@@ -32,18 +32,15 @@
       "name": "ChatGPT",
       "method": "deeplink",
       "effort": "dialog-only",
-      "install_url": "https://chatgpt.com/plugins#settings/Connectors?create-connector=true&redirectAfter=%2Fplugins",
+      "install_url": "https://chatgpt.com/plugins",
       "prefills": false,
       "steps": [
-        "Settings → Connectors → Advanced settings → Developer mode on",
-        "Back on Connectors, click Create",
-        "Paste the URL, name it, Authentication → OAuth",
-        "Tick the risk box, click Create",
-        "New chat, so the tools menu refreshes"
+        "Add → Create custom MCP server",
+        "Paste the URL, Authentication → OAuth → Create as a plugin"
       ],
       "setup_prompt": null,
       "setup_kind": null,
-      "note": "Copies the URL, then opens the empty dialog - just paste. Needs Developer mode on first."
+      "note": "Copies the URL and opens ChatGPT Plugins."
     },
     {
       "id": "claude-code",

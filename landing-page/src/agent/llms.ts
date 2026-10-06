@@ -91,9 +91,10 @@ export function buildLlmsFullTxt(origin: string): string {
           break;
         case "dialog-only":
           // The steps are the REMAINING work here, not a fallback: the link has
-          // opened a dialog that is still empty. An agent reading them as a
-          // fallback would report an install the visitor never completed.
-          how = `Install link on the site opens the setup dialog; the fields come up empty, so paste the server URL there and confirm.\n${meta.stepsLabel}:\n${numbered(c.steps)}`;
+          // only opened the setup page and filled nothing in. An agent reading
+          // them as a fallback would report an install the visitor never
+          // completed.
+          how = `Install link on the site opens the setup page but fills nothing in, so follow the steps and paste the server URL.\n${meta.stepsLabel}:\n${numbered(c.steps)}`;
           break;
         case "command":
           how = `Run this in a terminal:\n\n${c.setup_prompt}`;

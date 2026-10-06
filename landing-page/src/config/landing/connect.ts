@@ -54,9 +54,10 @@ export const compatibility: { heading: string; hosts: Host[] } = {
  * method "manual" → no deep link exists, so we show the server URL to copy plus
  *   the click-path to paste it. `steps` are those.
  *
- * A deep link does not always mean one click: ChatGPT's opens the create-
- * connector dialog but prefills nothing, so it carries `prefills: false` and
- * keeps its full click-path in `steps`. See `prefills` below.
+ * A deep link does not always mean one click: ChatGPT's opens the page where
+ * custom MCP apps are created but prefills nothing, so it carries
+ * `prefills: false` and keeps its full click-path in `steps`. See `prefills`
+ * below.
  *
  * Deep-link formats verified against official docs (cursor.com, code.visualstudio.com,
  * goose docs) and by clicking them.
@@ -82,11 +83,11 @@ export interface InstallTarget {
   method: "deeplink" | "manual" | "prompt";
   /**
    * Deep-link targets only; defaults to true. `false` means the link navigates
-   * to the right dialog but leaves every field blank (ChatGPT), so the visitor
+   * to the right screen but fills nothing in (ChatGPT), so the visitor
    * still copies the server URL. The UI drops its "1-click" promise and the
    * agent-facing copy says the URL has to be pasted. Getting this wrong is
    * worse than having no deep link: it tells someone the job is done when the
-   * dialog in front of them is empty.
+   * form in front of them is empty.
    */
   prefills?: boolean;
   /**
@@ -162,26 +163,21 @@ export const connect: {
       name: "ChatGPT",
       logo: "/logos/chatgpt.svg",
       // OpenAI publishes no install URL *scheme* - there is no name/url pair to
-      // hand it - but the Connectors settings route does take a
-      // `create-connector` flag, which is enough to open the New Plugin dialog
-      // directly. That is a navigation shortcut, not an install: the dialog
-      // opens empty, so `prefills` is false and every field below still has to
-      // be filled in.
+      // hand it, and no route that opens the create form directly - so the
+      // link just lands on the Plugins page where custom MCP apps are added.
+      // That is a navigation shortcut, not an install: nothing is filled in,
+      // so `prefills` is false and every step below still has to be done.
       method: "deeplink",
       prefills: false,
-      // The note carries ONLY what the button doesn't do: the dialog is empty,
-      // and it needs Developer mode to exist at all. Everything else - which
-      // auth to pick, the risk checkbox, the plan requirement - is either in
-      // the collapsed steps or on the docs page. Spelling the flow out here as
-      // well left the panel saying the same thing twice, once as a paragraph
-      // and once as a numbered list.
-      note: "Copies the URL, then opens the empty dialog - just paste. Needs Developer mode on first.",
+      // The note carries ONLY what the button doesn't do: the two clicks and
+      // the paste. Everything else - which auth to pick, the risk checkbox,
+      // the plan requirement - is either in the collapsed steps or on the docs
+      // page. Spelling the flow out here as well left the panel saying the
+      // same thing twice, once as a paragraph and once as a numbered list.
+      note: "Copies the URL and opens ChatGPT Plugins.",
       steps: [
-        "Settings → Connectors → Advanced settings → Developer mode on",
-        "Back on Connectors, click Create",
-        "Paste the URL, name it, Authentication → OAuth",
-        "Tick the risk box, click Create",
-        "New chat, so the tools menu refreshes",
+        "Add → Create custom MCP server",
+        "Paste the URL, Authentication → OAuth → Create as a plugin",
       ],
     },
     {

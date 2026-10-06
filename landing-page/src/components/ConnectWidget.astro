@@ -102,9 +102,9 @@ const selected = enriched.find((t) => t.id === defaultId) ?? enriched[0];
         <div data-panel={t.id} hidden={t.id !== selected.id}>
           {t.install_url ? (
             <>
-              {/* A link that prefills nothing drops the visitor into an empty
-                  dialog, so data-copy-on-open puts the URL on their clipboard
-                  on the way out - the paste is the only step left. Astro omits
+              {/* A link that prefills nothing drops the visitor onto a setup
+                  page with nothing filled in, so data-copy-on-open puts the
+                  URL on their clipboard on the way out, ready to paste. Astro omits
                   the attribute entirely when the value is undefined. */}
               <a
                 href={t.install_url}
@@ -116,14 +116,14 @@ const selected = enriched.find((t) => t.id === defaultId) ?? enriched[0];
                   style={`-webkit-mask:url('${t.logo}') center/contain no-repeat;mask:url('${t.logo}') center/contain no-repeat;`}
                   aria-hidden="true"
                 />
-                {t.effort === "dialog-only" ? `Open ${t.name} connector setup` : `Add to ${t.name}`}
+                {t.effort === "dialog-only" ? (t.id === "chatgpt" ? "Open ChatGPT Plugins" : `Open ${t.name} setup page`) : `Add to ${t.name}`}
               </a>
               {t.note && <p class="mt-2.5 text-xs leading-relaxed text-fg-subtle">{t.note}</p>}
               {/* A deep-link target may ALSO carry steps: the manual fallback
                   when the link is blocked, and - for a link that prefills
                   nothing - the rest of the flow, so the summary says so. */}
               {t.steps && t.steps.length > 0 && (
-                <details class="mt-3 group">
+                <details class="mt-3 group" open={t.effort === "dialog-only"}>
                   <summary class="cursor-pointer list-none text-xs text-fg-subtle transition hover:text-accent">
                     <span class="underline decoration-dotted underline-offset-4">
                       {effortMeta[t.effort].stepsLabel}

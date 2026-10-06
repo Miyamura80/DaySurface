@@ -42,35 +42,32 @@ export function deepLink(
       return `https://claude.ai/new?${params.toString()}#settings/customize-connectors`;
     }
     case "chatgpt": {
-      // https://chatgpt.com/plugins#settings/Connectors?create-connector=true&redirectAfter=%2Fplugins
+      // https://chatgpt.com/plugins
       //
-      // Lands on Settings → Connectors with the "New Plugin" dialog already
-      // open, skipping the two clicks that used to be steps 1 and 3 of the
-      // manual path. `redirectAfter` is where ChatGPT returns the user once the
-      // dialog closes - /plugins, i.e. back where they started.
+      // A plain navigation link to ChatGPT's Plugins page, where custom MCP
+      // servers are added via Add → Create custom MCP server. It prefills NOTHING,
+      // hence `prefills: false` in connect.ts - do not relabel this "1-click".
+      // ConnectWidget copies the server URL to the clipboard as it navigates,
+      // so the remaining work is two clicks and a paste.
       //
-      // Unlike Claude's link this prefills NOTHING: the dialog opens with empty
-      // fields. Hence `prefills: false` in connect.ts - do not relabel this
-      // "1-click". ConnectWidget copies the server URL to the clipboard as it
-      // navigates, so the remaining step is a paste.
+      // History: until mid-2026 custom connectors lived under Settings →
+      // Connectors behind a personal "Developer mode" toggle, and this link was
+      // `/plugins#settings/Connectors?create-connector=true&redirectAfter=%2Fplugins`,
+      // which opened the create dialog directly. OpenAI then renamed
+      // Connectors to Apps, moved them into the Plugins directory and removed
+      // the personal Developer mode toggle (business workspaces still gate it
+      // behind an admin permission), so that hash route targets a flow that no
+      // longer exists. Verified October 2026.
       //
       // Prefill params were click-tested July 2026 and none exist. Tried, both
       // inside the hash and ahead of it: name/url, connectorName/connectorUrl
       // (Claude's spelling), connector-name/connector-url, server_label/
       // server_url (OpenAI's own Responses API MCP naming), serverUrl, mcp_url,
-      // mcpUrl, description. Every one is ignored - the dialog still opens
+      // mcpUrl, description. Every one was ignored - the dialog still opened
       // blank. Don't re-run this matrix without new evidence; the absence of
       // any "Add to ChatGPT" badge across the MCP ecosystem is the corroborating
       // signal that OpenAI ships no prefill surface at all.
-      //
-      // Shape: unlike Claude, BOTH the route and its flags live in the hash
-      // (`#settings/Connectors?create-connector=true`). Hoisting the query
-      // ahead of the `#` opens plain /plugins with no dialog.
-      //
-      // Developer mode remains a prerequisite - without it the Connectors
-      // screen has no create surface for the link to open - which is why the
-      // note names it and the full click-path stays in `steps`.
-      return "https://chatgpt.com/plugins#settings/Connectors?create-connector=true&redirectAfter=%2Fplugins";
+      return "https://chatgpt.com/plugins";
     }
     case "cursor": {
       // cursor://anysphere.cursor-deeplink/mcp/install?name=&config=<base64({url})>

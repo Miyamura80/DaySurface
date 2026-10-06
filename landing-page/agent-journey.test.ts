@@ -157,21 +157,20 @@ describe("intent aliases answer the signup question", () => {
     }
   });
 
-  test("dialog-only steps are labelled a fallback, not remaining work", async () => {
-    // ChatGPT's `steps` are the FULL path from scratch - the deep link already
-    // performs the first two. Labelling them as what is left tells the reader to
-    // turn on Developer mode and click Create again, both already done.
+  test("dialog-only steps start after the link, not from scratch", async () => {
+    // The link already opens chatgpt.com/plugins, so the steps must not tell
+    // the reader to open it again; they are labelled as the remaining work.
     const body = await (await fetch(`${BASE}/connect.md`)).text();
-    const idx = body.indexOf("Settings → Connectors → Advanced settings");
+    const idx = body.indexOf("Add → Create custom MCP server");
     expect(idx).toBeGreaterThan(-1);
     const label = body.slice(Math.max(0, idx - 120), idx);
-    expect(label).toContain("if the link does not work");
-    expect(body).not.toContain("The rest of the flow");
+    expect(label).toContain("Then, in ChatGPT");
+    expect(body).not.toContain("Open chatgpt.com/plugins");
   });
 
   test("ChatGPT is never presented as one-click", async () => {
-    // connect.ts and deeplink.ts both warn that ChatGPT's link opens an EMPTY
-    // dialog. Telling an agent the install is done while the form is blank is
+    // connect.ts and deeplink.ts both warn that ChatGPT's link fills NOTHING
+    // in. Telling an agent the install is done while the form is blank is
     // worse than shipping no link, so the grouping must keep them apart.
     const body = await (await fetch(`${BASE}/connect.md`)).text();
     const oneClick = body.slice(
@@ -179,7 +178,7 @@ describe("intent aliases answer the signup question", () => {
       body.indexOf("## One command"),
     );
     expect(oneClick).not.toContain("ChatGPT");
-    expect(body).toContain("Opens the dialog, but you still paste the URL");
+    expect(body).toContain("Opens the setup page, but you still paste the URL");
   });
 });
 
@@ -392,7 +391,7 @@ describe("discovery documents", () => {
     const oneClick = doc.clients.filter((c) => c.effort === "one-click");
     expect(oneClick.length).toBeGreaterThanOrEqual(4);
     expect(oneClick.every((c) => Boolean(c.install_url))).toBe(true);
-    // ChatGPT opens an empty dialog - it must never be classified one-click.
+    // ChatGPT's link fills nothing in - it must never be classified one-click.
     expect(doc.clients.find((c) => c.id === "chatgpt")?.effort).toBe("dialog-only");
   });
 

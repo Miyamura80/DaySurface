@@ -180,17 +180,14 @@ const payloadJson = JSON.stringify(payload).replace(/</g, "\\u003c");
           if (client.install_url) {
             const note = client.note ? `\nNote: ${client.note}` : "";
             // A link that prefills nothing is half the answer: without the URL
-            // the agent hands over a blank dialog. The steps come along as an
-            // explicitly labelled FALLBACK - the link already performs the
-            // first two, so presenting them as remaining work would have the
-            // agent navigate to a dialog that is already open.
+            // the agent hands over a blank form. So the steps come along too,
+            // and they are the remaining work: they start AFTER the page the
+            // link opens.
             const rest =
               client.effort !== "dialog-only"
                 ? ""
-                : `\nThis link only opens the setup dialog - the fields come up empty.` +
-                  `\nAfter it opens: paste ${data.mcpUrl} as the server URL, then confirm.` +
-                  // The steps are the full path from scratch, NOT what is left
-                  // to do - the link already performed the first two of them.
+                : `\nThis link only opens the setup page - nothing is filled in.` +
+                  `\nAfter it opens: follow the remaining steps and paste ${data.mcpUrl} as the server URL.` +
                   `\n${data.effortMeta[client.effort].stepsLabel}:\n` +
                   (client.steps ?? []).map((s, i) => `${i + 1}. ${s}`).join("\n");
             return textResult(
