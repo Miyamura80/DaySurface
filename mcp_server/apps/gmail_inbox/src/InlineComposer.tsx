@@ -16,6 +16,7 @@ import {
   isPreviewable,
 } from "./helpers";
 import { useComposerAttachments } from "./useComposerAttachments";
+import { reportComposerAction } from "./modelContext";
 import { ComposerThreadPanel, renderComposerStatus } from "./ComposerThread";
 import { PreviewModal } from "./AttachmentPreview";
 import { attachmentChipStyle, attachmentRejectedChipStyle } from "./messageStyles";
@@ -236,6 +237,7 @@ export function InlineComposer({
       const msgId = inner?.message_id ?? "";
       if (!msgId) throw new Error("the server did not confirm the send");
       setSaveStatus({ kind: "sent", message_id: msgId });
+      void reportComposerAction(mcpApp, "sent", draft, msgId);
       setTimeout(onSent, 1500);
     } catch (err) {
       // The send did not land, so the composer stays editable: reopen it to
@@ -256,6 +258,7 @@ export function InlineComposer({
         name: "gmail_composer.discard",
         arguments: { draft_id: draft.draft_id },
       });
+      void reportComposerAction(mcpApp, "discarded", draft);
     } catch { /* discard is best-effort */ }
   };
 

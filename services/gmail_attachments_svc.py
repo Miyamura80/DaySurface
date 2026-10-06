@@ -23,6 +23,7 @@ from services.gmail_draft_helpers import (
     _existing_to_upload,
     _rebuild_draft,
     _resolve_inline_images,
+    execute_on_draft,
 )
 from services.gmail_svc import _get_gmail_client, _parse_message_resource
 
@@ -31,8 +32,8 @@ def _load_draft_for_attachment_edit(
     svc: Any, draft_id: str
 ) -> tuple[dict[str, Any], str]:
     """Fetch a draft and return its parsed message plus the message id."""
-    current = (
-        svc.users().drafts().get(userId="me", id=draft_id, format="full").execute()
+    current = execute_on_draft(
+        svc.users().drafts().get(userId="me", id=draft_id, format="full"), draft_id
     )
     message = current.get("message") or {}
     parsed = _parse_message_resource(message)

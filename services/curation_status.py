@@ -75,6 +75,20 @@ def is_incoming(msg: dict[str, Any]) -> bool:
     return _may_be_incoming(msg) and not labels & _EXCLUDED_CATEGORY_IDS
 
 
+def own_reply(messages: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """The thread's newest message, if it is the user's answer to incoming mail.
+
+    ``messages`` is the thread oldest first; drafts are skipped.
+    """
+    sent = [m for m in messages if _DRAFT_LABEL_ID not in (m.get("labelIds") or [])]
+    if not sent:
+        return None
+    *earlier, newest = sent
+    if _may_be_incoming(newest) or not any(map(_may_be_incoming, earlier)):
+        return None
+    return newest
+
+
 def newest_incoming_at(messages: list[dict[str, Any]]) -> datetime | None:
     """Arrival time of the thread's newest incoming message."""
     times = [

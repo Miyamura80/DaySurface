@@ -91,6 +91,11 @@ export type McpAppLike = {
     role: string;
     content: { type: string; text: string }[];
   }) => Promise<unknown>;
+  updateModelContext?: (params: {
+    content?: { type: "text"; text: string }[];
+    structuredContent?: Record<string, unknown>;
+  }) => Promise<unknown>;
+  getHostCapabilities?: () => { updateModelContext?: unknown } | undefined;
 };
 
 export type ComposerDraft = {

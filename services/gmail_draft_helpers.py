@@ -18,6 +18,11 @@ Two concerns share the module:
   ``_iter_drafts`` scan (consumed by ``find_draft_id_for_thread`` and
   ``draft_thread_map``) follows ``nextPageToken`` so a draft past the first
   page is never silently missed.
+
+A third, smaller one: a draft the user sent or discarded in the composer UI
+is gone from Gmail, and the model can't see that (the composer's tools are
+app-only). ``execute_on_draft`` turns the resulting 404 into
+``DraftGoneError``, which tells the model so instead of a raw Google error.
 """
 
 from __future__ import annotations
@@ -26,6 +31,7 @@ import base64
 from collections.abc import Iterator
 from typing import Any
 
+from googleapiclient.errors import HttpError
 from loguru import logger as log
 
 from models.gmail import (
@@ -38,6 +44,32 @@ from models.gmail import (
     _UnsetType,
 )
 from services.gmail_svc import _build_raw_message, _parse_message_resource
+
+
+class DraftGoneError(ValueError):
+    """The draft no longer exists in Gmail (HTTP 404).
+
+    Almost always because the user sent or discarded it from the composer.
+    The message is the tool error the model reads, so it says what to do next.
+    """
+
+    def __init__(self, draft_id: str) -> None:
+        super().__init__(
+            f"Draft {draft_id!r} no longer exists: the user has most likely "
+            "already sent or discarded it from the composer. Do not edit, "
+            "resend, or recreate it. To see what was sent, read the thread "
+            "with gmail_get_thread."
+        )
+
+
+def execute_on_draft(request: Any, draft_id: str) -> Any:
+    """``request.execute()`` for a call on ``draft_id``; a 404 is ``DraftGoneError``."""
+    try:
+        return request.execute()
+    except HttpError as exc:
+        if exc.resp.status == 404:
+            raise DraftGoneError(draft_id) from exc
+        raise
 
 
 def _iter_drafts(svc: Any) -> Iterator[tuple[str, str]]:
@@ -140,7 +172,9 @@ def _fetch_draft_model(svc: Any, draft_id: str) -> GmailDraft:
     recipients, subject, body, and current attachment ids that every draft
     mutation's response contract promises.
     """
-    full = svc.users().drafts().get(userId="me", id=draft_id, format="full").execute()
+    full = execute_on_draft(
+        svc.users().drafts().get(userId="me", id=draft_id, format="full"), draft_id
+    )
     return _draft_resource_to_model(full)
 
 
@@ -317,7 +351,10 @@ def _rebuild_draft(
         inline_images=inline_images or None,
     )
     body_dict = draft_message_body(raw, parsed.get("thread_id"))
-    svc.users().drafts().update(userId="me", id=draft_id, body=body_dict).execute()
+    execute_on_draft(
+        svc.users().drafts().update(userId="me", id=draft_id, body=body_dict),
+        draft_id,
+    )
     # The update response omits the message payload and its post-replace
     # attachment ids; re-fetch at format=full for the true saved state.
     return _fetch_draft_model(svc, draft_id)

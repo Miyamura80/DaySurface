@@ -41,6 +41,7 @@ from models.gmail import (
 )
 from services import service
 from services.curation_ledger import mark_state_best_effort
+from services.curation_status import own_reply
 from services.gmail_draft_helpers import (
     _draft_resource_to_model,
     _fetch_draft_model,
@@ -48,7 +49,9 @@ from services.gmail_draft_helpers import (
     _resolve_inline_images,
     _resolve_update_attachments,
     draft_message_body,
+    execute_on_draft,
 )
+from services.gmail_messages_svc import _internal_date_to_dt
 from services.gmail_svc import (
     _account_email,
     _addresses,
@@ -156,11 +159,9 @@ def gmail_list_drafts(input: GmailListDraftsInput) -> GmailListDraftsResult:
 )
 def gmail_get_draft(input: GmailGetDraftInput) -> GmailDraft:
     svc = _get_gmail_client(input.user_id)
-    draft = (
-        svc.users()
-        .drafts()
-        .get(userId="me", id=input.draft_id, format="full")
-        .execute()
+    draft = execute_on_draft(
+        svc.users().drafts().get(userId="me", id=input.draft_id, format="full"),
+        input.draft_id,
     )
     return _draft_resource_to_model(draft)
 
@@ -200,11 +201,9 @@ def gmail_update_draft(input: GmailUpdateDraftInput) -> GmailDraft:
     caller explicitly clears or overrides them.
     """
     svc = _get_gmail_client(input.user_id)
-    current = (
-        svc.users()
-        .drafts()
-        .get(userId="me", id=input.draft_id, format="full")
-        .execute()
+    current = execute_on_draft(
+        svc.users().drafts().get(userId="me", id=input.draft_id, format="full"),
+        input.draft_id,
     )
     message = current.get("message") or {}
     parsed = _parse_message_resource(message)
@@ -298,7 +297,10 @@ def gmail_compose(input: GmailComposeInput) -> GmailDraft:
 )
 def gmail_send(input: GmailSendInput) -> GmailSendResult:
     svc = _get_gmail_client(input.user_id)
-    sent = svc.users().drafts().send(userId="me", body={"id": input.draft_id}).execute()
+    sent = execute_on_draft(
+        svc.users().drafts().send(userId="me", body={"id": input.draft_id}),
+        input.draft_id,
+    )
     return GmailSendResult(
         message_id=sent.get("id") or "",
         thread_id=sent.get("threadId"),
@@ -316,7 +318,9 @@ def gmail_send(input: GmailSendInput) -> GmailSendResult:
 def gmail_discard_draft(input: GmailDiscardDraftInput) -> GmailDiscardDraftResult:
     """Delete a draft. Gmail's ``drafts().delete`` returns no body on success."""
     svc = _get_gmail_client(input.user_id)
-    svc.users().drafts().delete(userId="me", id=input.draft_id).execute()
+    execute_on_draft(
+        svc.users().drafts().delete(userId="me", id=input.draft_id), input.draft_id
+    )
     log.debug("Discarded Gmail draft id={}", input.draft_id)
     return GmailDiscardDraftResult(discarded=True)
 
@@ -376,9 +380,24 @@ def _select_reply_recipient(
     return ", ".join(recipients)
 
 
+def _refuse_duplicate_reply(thread_id: str, messages: list[dict[str, Any]]) -> None:
+    """Raise when the user already answered (the composer's send is app-only,
+    so the model can be a step behind). Threads with no incoming mail pass."""
+    if (reply := own_reply(messages)) is None:
+        return
+    at = _internal_date_to_dt(reply.get("internalDate"))
+    when = f" at {at:%Y-%m-%d %H:%M} UTC" if at else ""
+    raise ValueError(
+        f"The user already replied to thread {thread_id!r}{when}: their message "
+        "is the newest one, likely sent from the composer. Don't draft "
+        "another reply. If the user asked for a follow-up, call again with "
+        "follow_up=true."
+    )
+
+
 @service(
     name="gmail_reply_to_thread",
-    description="Create a reply draft on an existing Gmail thread. ALWAYS use this tool instead of composing reply text in chat - it creates a real Gmail draft and opens an interactive composer UI where the user can review, edit, and send. Pass your drafted reply in the 'body' parameter. Recipients are yours to control: pass 'to', 'cc', and/or 'bcc' (each a comma-separated address list) to set them explicitly. If you omit 'to', it defaults to the other party in the thread (never the account owner); omitted 'cc'/'bcc' are left unset. If every message in the thread is yours (no other participant to reply to), you must pass 'to' explicitly or the call errors. When an interactive UI is rendered alongside the result, keep your text response brief since the user can edit in the UI.",
+    description="Create a reply draft on an existing Gmail thread. ALWAYS use this tool instead of composing reply text in chat - it creates a real Gmail draft and opens an interactive composer UI where the user can review, edit, and send. Pass your drafted reply in the 'body' parameter. Recipients are yours to control: pass 'to', 'cc', and/or 'bcc' (each a comma-separated address list) to set them explicitly. If you omit 'to', it defaults to the other party in the thread (never the account owner); omitted 'cc'/'bcc' are left unset. If every message in the thread is yours (no other participant to reply to), you must pass 'to' explicitly or the call errors. If the user's own reply is already the newest message (they likely just sent it from the composer), the call errors instead of drafting a duplicate; pass follow_up=true only when the user asked for a follow-up. When an interactive UI is rendered alongside the result, keep your text response brief since the user can edit in the UI.",
     input_model=GmailReplyInput,
     output_model=GmailDraft,
     mutating=True,
@@ -409,6 +428,8 @@ def gmail_reply_to_thread(input: GmailReplyInput) -> GmailDraft:
     messages = thread.get("messages") or []
     if not messages:
         raise ValueError(f"Thread {input.thread_id!r} has no messages to reply to")
+    if not input.follow_up:
+        _refuse_duplicate_reply(input.thread_id, messages)
     last_msg = messages[-1]
     headers = _headers_to_dict((last_msg.get("payload") or {}).get("headers"))
     # Caller-supplied recipients win; only compute the default (and pay the
