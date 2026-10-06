@@ -97,7 +97,7 @@ export const clientGuides: ClientGuide[] = [
     steps: [
       {
         title: "Open the Plugins page",
-        body: "Go to chatgpt.com/plugins in a browser. Custom MCP apps are added from the web, not from the desktop or mobile apps.",
+        body: "Go to chatgpt.com/plugins in a browser; that is where custom MCP servers are created.",
       },
       {
         title: "Create a custom MCP server",
