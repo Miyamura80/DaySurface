@@ -6,7 +6,7 @@ a later wiring step (we deliberately do not use ContextVars).
 """
 
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
@@ -333,10 +333,24 @@ class GmailDiscardDraftResult(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+# Which part of the mailbox ``gmail_list_inbox`` searches. Gmail's
+# ``messages.list`` applies ``in:inbox`` per *message*, and the user's own sent
+# copies carry only the SENT label - so the inbox scope never returns them, not
+# even replies inside an inbox thread. ``sent`` / ``all`` reach those copies.
+GmailMailbox = Literal["inbox", "sent", "all"]
+
+
 class GmailListInboxInput(BaseModel):
     user_id: str = ""
     query: str | None = None
     limit: int = Field(default=25, ge=1, le=500)
+    mailbox: GmailMailbox = Field(
+        default="inbox",
+        description=(
+            "Where to search: 'inbox' (received mail in the inbox), 'sent' "
+            "(messages you sent), or 'all' (everything except spam/trash)."
+        ),
+    )
 
 
 class GmailMessageSummary(BaseModel):

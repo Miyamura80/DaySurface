@@ -670,6 +670,75 @@ class TestGmailListInbox(TestTemplate):
         dumped = result.messages[0].model_dump(by_alias=True)
         assert dumped["from"] == "sender1@example.com"
 
+    def _list_with_label_filter(self, mailbox, query=None):
+        """Run gmail_list_inbox against a fake that scopes per message.
+
+        Mirrors Gmail's messages.list: ``in:inbox`` / ``in:sent`` match a
+        message only if *that message* carries the label. The thread holds a
+        received message (INBOX) and the user's sent reply (SENT only).
+        """
+        labels = {"m-recv": ["INBOX", "UNREAD"], "m-sent": ["SENT"]}
+        seen_q: list[str | None] = []
+
+        def fake_list(**kwargs):
+            q = kwargs.get("q")
+            seen_q.append(q)
+            ids = list(labels)
+            if q and q.startswith("in:inbox"):
+                ids = [m for m in ids if "INBOX" in labels[m]]
+            elif q and q.startswith("in:sent"):
+                ids = [m for m in ids if "SENT" in labels[m]]
+            req = MagicMock()
+            req.execute.return_value = {"messages": [{"id": m} for m in ids]}
+            return req
+
+        def fake_batch_get_messages(svc, ids, **kwargs):
+            return {
+                mid: {"id": mid, "threadId": "t-1", "payload": {"headers": []}}
+                for mid in ids
+            }
+
+        with _patch_db() as factory:
+            _seed_token(factory)
+            mock = _make_mock_service()
+            mock.users().messages().list.side_effect = fake_list
+            patches = _patch_client(mock)
+            _apply(patches)
+            with patch(
+                "services.gmail_messages_svc._batch_get_messages",
+                side_effect=fake_batch_get_messages,
+            ):
+                try:
+                    result = gmail_list_inbox(
+                        GmailListInboxInput(
+                            user_id="alice", mailbox=mailbox, query=query
+                        )
+                    )
+                finally:
+                    _stop(patches)
+        return [m.message_id for m in result.messages], seen_q[-1]
+
+    def test_inbox_scope_omits_own_sent_copy(self):
+        # The reported bug: the user's sent reply has no INBOX label, so the
+        # default inbox listing can never surface it.
+        ids, q = self._list_with_label_filter("inbox")
+        assert ids == ["m-recv"]
+        assert q == "in:inbox"
+
+    def test_sent_mailbox_returns_own_sent_copy(self):
+        ids, q = self._list_with_label_filter("sent", query="from:me")
+        assert ids == ["m-sent"]
+        assert q == "in:sent (from:me)"
+
+    def test_all_mailbox_sends_no_scope(self):
+        ids, q = self._list_with_label_filter("all")
+        assert ids == ["m-recv", "m-sent"]
+        assert q is None
+
+    def test_all_mailbox_passes_query_through(self):
+        _, q = self._list_with_label_filter("all", query="subject:hello")
+        assert q == "subject:hello"
+
 
 class TestGmailGetThread(TestTemplate):
     def test_thread_with_two_messages_and_attachment(self):
