@@ -7,6 +7,8 @@ read itself runs through ``CurationReadHarness`` with Gmail patched out.
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from models.curation import GetCurationInput, LedgerStatus
 from services._gmail_quota import (
     DEFAULT_CALL_UNITS,
@@ -200,3 +202,27 @@ class TestQuotaBudget(CurationReadHarness, TestTemplate):
             unchecked = [r for r in res.records if r.thread_id in old[allowed:]]
             assert len(unchecked) == len(old) - allowed
             assert {r.ledger_status for r in unchecked} == {LedgerStatus.stale}
+
+    def test_budget_cut_short_inside_a_beyond_scan_page(self):
+        with _patch_db(), _patch_fernet():
+            # Enough for 30 of the first page's 50 rows.
+            with patch(
+                "services._gmail_quota.DEFAULT_CALL_UNITS", 30 * THREADS_GET_UNITS
+            ):
+                old, res = self._beyond_scan(
+                    GetCurationInput(user_id="alice", limit=100)
+                )
+            assert self.fetched_ids == [old[:30]]
+            assert [r.thread_id for r in res.records] == old[:30]
+
+    def test_history_probe_the_budget_cannot_pay_for_is_not_sent(self):
+        with _patch_db(), _patch_fernet():
+            upsert_judgments("alice", [_judgment("t1")], history_ids={"t1": "100"})
+            with patch(
+                "services._gmail_quota.DEFAULT_CALL_UNITS", HISTORY_LIST_UNITS - 1
+            ):
+                res = self._run_get([_stub("t1", "150")], history={"100": []})
+            # No probe and no fetch fit, so the moved row reads as stale.
+            assert self.history_starts == []
+            assert self.fetched_ids == []
+            assert res.records[0].ledger_status == LedgerStatus.stale
