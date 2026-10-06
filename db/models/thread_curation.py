@@ -55,6 +55,12 @@ class ThreadCuration(Base):
     # future prompt/model bump can be reasoned about (or bulk-invalidated).
     curated_history_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     curator_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Newest message the verdict accounts for: it goes stale only when a
+    # message from someone else arrives after this. NULL on older rows, which
+    # fall back to ``curated_at``.
+    seen_through: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     curated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

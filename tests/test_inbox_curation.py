@@ -43,13 +43,19 @@ from models.curation import (
 )
 from models.gmail import GmailDisconnectInput
 from services import discover_services, get_registry
-from services.curation_freshness import last_message_at, ledger_status_for
 from services.curation_ledger import (
+    LedgerRowStatus,
     list_records,
+    load_status_map,
     mark_state,
     mark_state_best_effort,
     purge_user,
     upsert_judgments,
+)
+from services.curation_status import (
+    is_triageable,
+    ledger_status_for,
+    newest_incoming_at,
 )
 from services.gmail_drafts_svc import GmailReplyInput, gmail_reply_to_thread
 from services.gmail_messages_svc import (
@@ -60,7 +66,6 @@ from services.gmail_messages_svc import (
 from services.gmail_svc import gmail_disconnect
 from services.inbox_curation_svc import (
     _changed_thread_ids,
-    _is_triageable,
     _list_thread_stubs,
     _mailbox_history_id,
     _search_thread_ids,
@@ -329,16 +334,39 @@ _LATER = datetime.now(UTC) + timedelta(days=1)
 _EARLIER = datetime(2020, 1, 1, tzinfo=UTC)
 
 
+def _msg_at(when: datetime, *labels: str) -> dict:
+    return {"labelIds": list(labels), "internalDate": str(int(when.timestamp() * 1000))}
+
+
 class TestGetCuration(TestTemplate):
-    def _run_get(self, stubs, inp=None, last_at=None):
+    def _run_get(self, stubs, inp=None, threads=None):
+        """``threads`` maps thread id -> messages served by any thread fetch."""
+        served: dict[str, list[dict]] = threads or {}
+        self.fetched_ids: list[list[str]] = []
+
+        def fake_batch(svc, ids, **kwargs):
+            self.fetched_ids.append(list(ids))
+            return {
+                tid: {"id": tid, "historyId": "x", "messages": served[tid]}
+                for tid in ids
+                if tid in served
+            }
+
         svc = MagicMock()
-        fetch = MagicMock(return_value=last_at or {})
         with (
             patch("services.inbox_curation_svc._get_gmail_client", return_value=svc),
             patch("services.inbox_curation_svc._list_thread_stubs", return_value=stubs),
-            patch("services.inbox_curation_svc.fetch_last_message_times", fetch),
+            patch("services.curation_status._batch_get_threads", fake_batch),
+            patch("services.inbox_curation_svc._batch_get_threads", fake_batch),
+            patch(
+                "services.inbox_curation_svc._build_label_lookups",
+                return_value=({}, {}),
+            ),
+            patch(
+                "services.inbox_curation_svc._find_mcp_done_label",
+                return_value="DONE",
+            ),
         ):
-            self.fetch_calls = fetch.call_args_list
             return inbox_get_curation(inp or GetCurationInput(user_id="alice"))
 
     def test_empty_ledger_cold_start(self):
@@ -363,19 +391,23 @@ class TestGetCuration(TestTemplate):
         with _patch_db(), _patch_fernet():
             upsert_judgments("alice", [_judgment("t1")], history_ids={"t1": "100"})
             # historyId advanced AND a message arrived after curation -> stale.
-            res = self._run_get([_stub("t1", "999")], last_at={"t1": _LATER})
+            res = self._run_get(
+                [_stub("t1", "999")], threads={"t1": [_msg_at(_LATER, "INBOX")]}
+            )
             assert res.coverage.stale == 1
             assert res.coverage.curated == 0
             assert res.records[0].ledger_status == LedgerStatus.stale
-            # Only the changed thread's newest-message time was fetched.
-            assert self.fetch_calls[0].args[1] == ["t1"]
+            # Only the changed thread was fetched.
+            assert self.fetched_ids == [["t1"]]
 
     def test_label_or_read_change_is_not_stale(self):
         with _patch_db(), _patch_fernet():
             upsert_judgments("alice", [_judgment("t1")], history_ids={"t1": "100"})
             # historyId moved (e.g. marked read), but the newest message
             # predates the verdict: the conversation hasn't moved on.
-            res = self._run_get([_stub("t1", "999")], last_at={"t1": _EARLIER})
+            res = self._run_get(
+                [_stub("t1", "999")], threads={"t1": [_msg_at(_EARLIER, "INBOX")]}
+            )
             assert res.coverage.stale == 0
             assert res.coverage.curated == 1
             assert res.records[0].ledger_status == LedgerStatus.curated
@@ -385,7 +417,26 @@ class TestGetCuration(TestTemplate):
             upsert_judgments("alice", [_judgment("t1")], history_ids={"t1": "100"})
             res = self._run_get([_stub("t1", "100")])
             assert res.records[0].ledger_status == LedgerStatus.curated
-            assert self.fetch_calls[0].args[1] == []
+            assert self.fetched_ids == []
+
+    def test_own_reply_after_curation_is_not_stale(self):
+        with _patch_db(), _patch_fernet():
+            upsert_judgments("alice", [_judgment("t1")], history_ids={"t1": "100"})
+            # The user replied after the verdict: handled, not new attention.
+            res = self._run_get(
+                [_stub("t1", "999")],
+                threads={"t1": [_msg_at(_EARLIER, "INBOX"), _msg_at(_LATER, "SENT")]},
+            )
+            assert res.records[0].ledger_status == LedgerStatus.curated
+
+    def test_mail_to_self_counts_as_incoming(self):
+        with _patch_db(), _patch_fernet():
+            upsert_judgments("alice", [_judgment("t1")], history_ids={"t1": "100"})
+            res = self._run_get(
+                [_stub("t1", "999")],
+                threads={"t1": [_msg_at(_LATER, "SENT", "INBOX")]},
+            )
+            assert res.records[0].ledger_status == LedgerStatus.stale
 
     def test_fresh_only_filters_stale(self):
         with _patch_db(), _patch_fernet():
@@ -393,7 +444,7 @@ class TestGetCuration(TestTemplate):
             res = self._run_get(
                 [_stub("t1", "999")],
                 GetCurationInput(user_id="alice", fresh_only=True),
-                last_at={"t1": _LATER},
+                threads={"t1": [_msg_at(_LATER, "INBOX")]},
             )
             assert res.records == []
             assert res.coverage.stale == 1
@@ -418,14 +469,47 @@ class TestGetCuration(TestTemplate):
             assert [r.thread_id for r in res.records] == ["t1"]
             assert res.records[0].ledger_status == LedgerStatus.stale
 
-    def test_done_thread_back_in_inbox_is_stale(self):
+    def test_done_thread_reopened_by_reply_is_stale(self):
         with _patch_db(), _patch_fernet():
             upsert_judgments("alice", [_judgment("t1")], history_ids={"t1": "100"})
             mark_state("alice", "t1", CurationState.dismissed)
-            # Someone replied, so the done thread matches the triage query again.
-            res = self._run_get([_stub("t1", "100")])
+            # Someone replied after it was marked done, so it is back in triage.
+            res = self._run_get(
+                [_stub("t1", "200")], threads={"t1": [_msg_at(_LATER, "INBOX")]}
+            )
             assert res.coverage.stale == 1
             assert res.records[0].ledger_status == LedgerStatus.stale
+
+    def test_undo_done_without_new_message_is_curated(self):
+        with _patch_db(), _patch_fernet():
+            upsert_judgments("alice", [_judgment("t1")], history_ids={"t1": "100"})
+            mark_state("alice", "t1", CurationState.dismissed)
+            # gmail_unmark_thread_done / un-archive: back in the inbox, nobody wrote.
+            res = self._run_get(
+                [_stub("t1", "200")], threads={"t1": [_msg_at(_EARLIER, "INBOX")]}
+            )
+            assert res.coverage.stale == 0
+            assert res.records[0].ledger_status == LedgerStatus.curated
+
+    def test_full_scan_checks_membership_of_older_rows(self):
+        with _patch_db(), _patch_fernet():
+            upsert_judgments(
+                "alice",
+                [_judgment("old-open"), _judgment("old-archived")],
+                history_ids={"old-open": "x", "old-archived": "x"},
+            )
+            # 200 newer inbox threads fill the scan, so the curated rows fall
+            # outside it even though one of them is still in the inbox.
+            stubs = [_stub(f"n{i}", "1") for i in range(200)]
+            res = self._run_get(
+                stubs,
+                threads={
+                    "old-open": [_msg_at(_EARLIER, "INBOX")],
+                    "old-archived": [_msg_at(_EARLIER)],
+                },
+            )
+            assert [r.thread_id for r in res.records] == ["old-open"]
+            assert res.records[0].ledger_status == LedgerStatus.curated
 
     def test_check_freshness_false_treats_all_as_curated(self):
         with _patch_db(), _patch_fernet():
@@ -932,7 +1016,7 @@ def _labelled(*labels: str) -> dict:
 
 class TestIsTriageableDoneSemantics(TestTemplate):
     def _triageable(self, *messages: dict) -> bool:
-        return _is_triageable(list(messages), done_label_id="DONE", label_id_to_name={})
+        return is_triageable(list(messages), done_label_id="DONE", label_id_to_name={})
 
     def test_done_thread_is_hidden(self):
         assert not self._triageable(_labelled("INBOX", "DONE"))
@@ -949,24 +1033,72 @@ class TestIsTriageableDoneSemantics(TestTemplate):
 
 
 class TestFreshnessHelpers(TestTemplate):
-    def test_last_message_at_ignores_drafts(self):
-        got = last_message_at(
+    def test_newest_incoming_ignores_drafts_and_own_replies(self):
+        got = newest_incoming_at(
             [
                 {"labelIds": ["INBOX"], "internalDate": "1700000000000"},
                 {"labelIds": ["DRAFT"], "internalDate": "1800000000000"},
+                {"labelIds": ["SENT"], "internalDate": "1900000000000"},
             ]
         )
         assert got == datetime.fromtimestamp(1700000000, tz=UTC)
 
-    def test_naive_curated_at_is_treated_as_utc(self):
-        row = {
-            "state": CurationState.curated.value,
-            "curated_history_id": "1",
-            "curated_at": datetime(2026, 1, 1),  # SQLite returns naive
-        }
-        newer = datetime(2026, 1, 2, tzinfo=UTC)
-        older = datetime(2025, 12, 31, tzinfo=UTC)
-        assert ledger_status_for(row, "2", newer) == LedgerStatus.stale
-        assert ledger_status_for(row, "2", older) == LedgerStatus.curated
-        # Changed thread, unknown newest message: re-reason rather than hide it.
-        assert ledger_status_for(row, "2", None) == LedgerStatus.stale
+    def test_naive_db_timestamps_are_read_as_utc(self):
+        with _patch_db() as factory, _patch_fernet():
+            upsert_judgments("alice", [_judgment("t1")], history_ids={"t1": "1"})
+            with factory() as session:
+                row = session.get(ThreadCuration, ("alice", "t1"))
+                row.seen_through = datetime(2026, 1, 1)  # SQLite returns naive
+                session.commit()
+            status = load_status_map("alice", ["t1"])["t1"]
+        assert status.watermark == datetime(2026, 1, 1, tzinfo=UTC)
+        assert isinstance(status, LedgerRowStatus)
+
+
+class TestSeenThrough(TestTemplate):
+    def _save(self, judgment, messages):
+        svc = MagicMock()
+        with (
+            patch("services.inbox_curation_svc._get_gmail_client", return_value=svc),
+            patch(
+                "services.inbox_curation_svc._batch_get_threads",
+                return_value={
+                    judgment.thread_id: {
+                        "id": judgment.thread_id,
+                        "historyId": "1",
+                        "messages": messages,
+                    }
+                },
+            ),
+        ):
+            inbox_save_curation(
+                SaveCurationInput(user_id="alice", judgments=[judgment])
+            )
+        return load_status_map("alice", [judgment.thread_id])[judgment.thread_id]
+
+    def test_reply_landing_between_read_and_save_stays_stale(self):
+        read_at = datetime(2026, 5, 1, tzinfo=UTC)
+        race = read_at + timedelta(minutes=2)
+        with _patch_db(), _patch_fernet():
+            row = self._save(
+                _judgment("t1", seen_through=read_at),
+                [_msg_at(read_at, "INBOX"), _msg_at(race, "INBOX")],
+            )
+            assert row.watermark == read_at
+            # Later the thread changes; the reply the host never read counts.
+            assert ledger_status_for(row, "2", race) == LedgerStatus.stale
+
+    def test_future_seen_through_is_capped_at_save_time(self):
+        newest = datetime(2026, 5, 1, tzinfo=UTC)
+        with _patch_db(), _patch_fernet():
+            row = self._save(
+                _judgment("t1", seen_through=datetime(2099, 1, 1, tzinfo=UTC)),
+                [_msg_at(newest, "INBOX")],
+            )
+            assert row.watermark == newest
+
+    def test_omitted_seen_through_uses_save_time_newest(self):
+        newest = datetime(2026, 5, 1, tzinfo=UTC)
+        with _patch_db(), _patch_fernet():
+            row = self._save(_judgment("t1"), [_msg_at(newest, "INBOX")])
+            assert row.watermark == newest

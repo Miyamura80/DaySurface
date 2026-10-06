@@ -18,6 +18,7 @@ from __future__ import annotations
 from collections.abc import Generator, Iterable
 from contextlib import contextmanager
 from datetime import UTC, datetime
+from typing import NamedTuple
 
 from loguru import logger as log
 from sqlalchemy.exc import SQLAlchemyError
@@ -108,12 +109,12 @@ def list_records(
     bucket: str | None = None,
     state: str | None = None,
     thread_ids: Iterable[str] | None = None,
-    limit: int = 50,
+    limit: int | None = 50,
 ) -> list[CurationRecord]:
     """Return decrypted curation records for a user, optionally filtered.
 
     ``thread_ids`` restricts the result to those threads (an empty iterable
-    returns nothing).
+    returns nothing). ``limit=None`` returns every match.
     """
     ids = None if thread_ids is None else list(thread_ids)
     if ids is not None and not ids:
@@ -126,16 +127,34 @@ def list_records(
             query = query.filter(ThreadCuration.bucket == bucket)
         if state is not None:
             query = query.filter(ThreadCuration.state == state)
-        rows = (
-            query.order_by(ThreadCuration.importance.desc().nullslast())
-            .limit(limit)
-            .all()
-        )
-        return [row_to_record(r) for r in rows]
+        query = query.order_by(ThreadCuration.importance.desc().nullslast())
+        if limit is not None:
+            query = query.limit(limit)
+        return [row_to_record(r) for r in query.all()]
 
 
-def load_status_map(user_id: str, thread_ids: Iterable[str]) -> dict[str, dict]:
-    """Return ``{thread_id: {state, curated_history_id, curated_at}}`` for threads.
+def as_utc(value: datetime | None) -> datetime | None:
+    # SQLite hands timezone-aware columns back naive; they were written as UTC.
+    if value is not None and value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value
+
+
+class LedgerRowStatus(NamedTuple):
+    """The slice of a ledger row that freshness needs (no decryption)."""
+
+    state: CurationState
+    curated_history_id: str | None
+    # Newest message the verdict accounts for. A message from someone else
+    # after this makes the row stale. For a dismissed row it is never earlier
+    # than the dismissal, so undoing mark-done does not resurface the thread.
+    watermark: datetime | None
+
+
+def load_status_map(
+    user_id: str, thread_ids: Iterable[str]
+) -> dict[str, LedgerRowStatus]:
+    """Return ``{thread_id: LedgerRowStatus}`` for the given threads.
 
     Cheap lookup (no decryption) used to annotate search results with their
     ledger status without materializing full records.
@@ -149,7 +168,9 @@ def load_status_map(user_id: str, thread_ids: Iterable[str]) -> dict[str, dict]:
                 ThreadCuration.thread_id,
                 ThreadCuration.state,
                 ThreadCuration.curated_history_id,
+                ThreadCuration.seen_through,
                 ThreadCuration.curated_at,
+                ThreadCuration.updated_at,
             )
             .filter(
                 ThreadCuration.user_id == user_id,
@@ -157,10 +178,17 @@ def load_status_map(user_id: str, thread_ids: Iterable[str]) -> dict[str, dict]:
             )
             .all()
         )
-    return {
-        tid: {"state": state, "curated_history_id": hist, "curated_at": at}
-        for tid, state, hist, at in rows
-    }
+    out: dict[str, LedgerRowStatus] = {}
+    for tid, state, hist, seen_through, curated_at, updated_at in rows:
+        # Rows written before seen_through existed fall back to curated_at.
+        watermark = as_utc(seen_through) or as_utc(curated_at)
+        dismissed_at = as_utc(updated_at)
+        if state == CurationState.dismissed.value and dismissed_at is not None:
+            # updated_at of a dismissed row is the dismissal: a re-save would
+            # have set the state back to curated.
+            watermark = max(filter(None, (watermark, dismissed_at)))
+        out[tid] = LedgerRowStatus(CurationState(state), hist, watermark)
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -173,15 +201,19 @@ def upsert_judgments(
     judgments: list[ThreadJudgment],
     *,
     history_ids: dict[str, str | None] | None = None,
+    seen_through: dict[str, datetime | None] | None = None,
     curator_version: str | None = None,
 ) -> list[str]:
     """Insert or update ledger rows from host judgments. Returns saved thread ids.
 
-    ``history_ids`` maps ``thread_id -> current Gmail historyId`` so each written
-    row's freshness watermark advances to the moment of curation. A re-curated
-    thread advances its ``curated_history_id`` (freshening it).
+    ``history_ids`` maps ``thread_id -> current Gmail historyId`` (the cheap
+    "nothing changed" marker); a re-curated thread advances it. ``seen_through``
+    maps ``thread_id -> newest message the verdict accounts for`` (the real
+    freshness watermark); a missing entry stores NULL, so reads fall back to
+    ``curated_at``.
     """
     history_ids = history_ids or {}
+    seen_through = seen_through or {}
     saved: list[str] = []
     with _session() as session:
         for j in judgments:
@@ -215,6 +247,7 @@ def upsert_judgments(
             new_history_id = history_ids.get(j.thread_id)
             if new_history_id is not None:
                 row.curated_history_id = new_history_id
+            row.seen_through = seen_through.get(j.thread_id)
             row.curator_version = curator_version
             row.curated_at = datetime.now(UTC)
             saved.append(j.thread_id)

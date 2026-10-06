@@ -55,10 +55,9 @@ class LedgerStatus(StrEnum):
     """Per-thread freshness annotation computed on read (not stored).
 
     - ``curated``   - a fresh ledger row exists for the thread.
-    - ``stale``     - a ledger row exists but a new message arrived after the
-      verdict was banked, or a thread marked done / archived came back to the
-      inbox (needs re-reasoning). Read/label changes alone never make a row
-      stale.
+    - ``stale``     - a ledger row exists but someone else sent a message
+      after the verdict was banked (needs re-reasoning). Read/label changes,
+      drafts and the user's own replies never make a row stale.
     - ``uncurated`` - no ledger row (or a ``pending`` one); never judged.
     """
 
@@ -110,7 +109,10 @@ class GetCurationInput(BaseModel):
     state: CurationState | None = None
     fresh_only: bool = Field(
         default=False,
-        description="Drop rows whose thread has changed since it was curated.",
+        description=(
+            "Drop stale rows: someone wrote since the verdict, or (with "
+            "include_inactive) the thread left the inbox."
+        ),
     )
     check_freshness: bool = Field(
         default=True,
@@ -152,6 +154,14 @@ class ThreadJudgment(BaseModel):
     suggested_action: SuggestedAction = SuggestedAction.none
     draft_id: str | None = None
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    seen_through: datetime | None = Field(
+        default=None,
+        description=(
+            "The thread's last_message_at from the inbox_search result you "
+            "judged. Pins the verdict to what you read, so a message arriving "
+            "before the save still marks it stale. Omit if unknown."
+        ),
+    )
 
 
 class SaveCurationInput(BaseModel):
