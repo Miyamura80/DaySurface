@@ -4,6 +4,7 @@ from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 from cryptography.fernet import Fernet
+from fastapi.routing import iter_route_contexts
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -112,7 +113,7 @@ class TestAPIServer(TestTemplate):
 
     def test_service_routes_registered(self):
         """Ordinary services get API routes; CLI-only admin services do not."""
-        routes = [r.path for r in app.routes if hasattr(r, "path")]
+        routes = [r.path for r in iter_route_contexts(app.routes)]
         assert "/api/v1/services/greet" in routes
         # All five config/doctor admin services are CLI-only - no HTTP route.
         for name in ("config_get", "config_set", "config_show", "doctor", "doctor_fix"):
@@ -152,7 +153,7 @@ class TestAPIServer(TestTemplate):
 
     def test_billing_routes_registered(self):
         """Billing routes should be registered."""
-        routes = [r.path for r in app.routes if hasattr(r, "path")]
+        routes = [r.path for r in iter_route_contexts(app.routes)]
         assert "/api/v1/billing/checkout/create" in routes
         assert "/api/v1/billing/usage/current" in routes
         assert "/api/v1/billing/subscription/status" in routes

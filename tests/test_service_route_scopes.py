@@ -13,7 +13,7 @@ gated by the single ``services:execute`` scope.
 from contextlib import contextmanager
 from unittest.mock import patch
 
-from fastapi.routing import APIRoute
+from fastapi.routing import APIRoute, iter_route_contexts
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -61,9 +61,8 @@ _PREFIX = "/api/v1/services/"
 
 def _service_routes() -> list[APIRoute]:
     """Every registered ``/api/v1/services/{name}`` route."""
-    return [
-        r for r in app.routes if isinstance(r, APIRoute) and r.path.startswith(_PREFIX)
-    ]
+    routes = (c.original_route for c in iter_route_contexts(app.routes))
+    return [r for r in routes if isinstance(r, APIRoute) and r.path.startswith(_PREFIX)]
 
 
 def _service_route_names() -> set[str]:
