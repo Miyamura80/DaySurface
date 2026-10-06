@@ -245,10 +245,13 @@ def inbox_get_curation(input: GetCurationInput) -> GetCurationResult:
         if scan_full
         else None
     )
+    filters = {
+        "bucket": input.bucket.value if input.bucket else None,
+        "state": input.state.value if input.state else None,
+    }
     ordered_ids = list_record_ids(
         input.user_id,
-        bucket=input.bucket.value if input.bucket else None,
-        state=input.state.value if input.state else None,
+        **filters,
         thread_ids=None if input.include_inactive or scan_full else inbox_ids,
     )
     kept = []
@@ -256,7 +259,10 @@ def inbox_get_curation(input: GetCurationInput) -> GetCurationResult:
         page_ids = ordered_ids[start : start + _RECORD_PAGE]
         by_id = {
             r.thread_id: r
-            for r in list_records(input.user_id, thread_ids=page_ids, limit=None)
+            # Filters re-applied: a row changed since the snapshot drops out.
+            for r in list_records(
+                input.user_id, **filters, thread_ids=page_ids, limit=None
+            )
         }
         page = [by_id[tid] for tid in page_ids if tid in by_id]
         if beyond is not None:

@@ -45,6 +45,7 @@ from models.gmail import GmailDisconnectInput
 from services import discover_services, get_registry
 from services.curation_ledger import (
     LedgerRowStatus,
+    list_record_ids,
     list_records,
     load_status_map,
     mark_state,
@@ -528,6 +529,34 @@ class TestGetCuration(TestTemplate):
             assert [r.thread_id for r in res.records] == ["open"]
             # Three pages of 50 were checked, in batches of at most 50.
             assert [len(ids) for ids in self.fetched_ids] == [50, 50, 21]
+
+    def test_row_changed_after_snapshot_is_refiltered(self):
+        with _patch_db(), _patch_fernet():
+            upsert_judgments(
+                "alice",
+                [_judgment("t1", bucket=CurationBucket.fyi)],
+                history_ids={"t1": "1"},
+            )
+            real_ids = list_record_ids
+
+            def snapshot_then_change(*args, **kwargs):
+                ids = real_ids(*args, **kwargs)
+                # A save lands between the snapshot and the page load.
+                upsert_judgments(
+                    "alice",
+                    [_judgment("t1", bucket=CurationBucket.noise)],
+                    history_ids={"t1": "1"},
+                )
+                return ids
+
+            with patch(
+                "services.inbox_curation_svc.list_record_ids", snapshot_then_change
+            ):
+                res = self._run_get(
+                    [_stub("t1", "1")],
+                    GetCurationInput(user_id="alice", bucket=CurationBucket.fyi),
+                )
+            assert res.records == []
 
     def test_full_scan_fetch_miss_is_surfaced_as_stale(self):
         with _patch_db(), _patch_fernet():
