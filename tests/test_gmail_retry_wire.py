@@ -21,7 +21,7 @@ from googleapiclient.discovery import build
 from common import token_encryption
 from common.token_encryption import FernetEncryption
 from models.curation import CurationBucket, ThreadJudgment
-from services import _gmail_retry
+from services import _gmail_retry, get_registry
 from services._gmail_retry import RateLimitRetryingRequest
 from services.curation_ledger import upsert_judgments
 from tests.test_mcp_e2e import _wire_session
@@ -270,3 +270,22 @@ class TestRateLimitIdempotency(TestTemplate):
         assert [h for h in hits if h.startswith("POST")] == [
             "POST /gmail/v1/users/me/drafts"
         ]
+
+    def test_settled_payment_keeps_the_key_claimed(self):
+        # The payment settled before Gmail refused: releasing the key would let
+        # a retry be charged again for one draft.
+        quota = {"create": True, "read": True}
+        entry = next(e for e in get_registry() if e.name == "gmail_compose")
+        with (
+            patch.object(_gmail_retry.time, "sleep"),
+            _fake_gmail(_compose_responder(quota)) as (client, _hits),
+            _wire_session("u-idem-paid") as session,
+            patch("services.gmail_drafts_svc._get_gmail_client", return_value=client),
+            patch.object(entry, "price", "0.01"),
+            patch("api_server.routes.services.enforce_payment", return_value=True),
+        ):
+            assert _compose(session, "k-paid").status_code == 429
+            quota.update(create=False, read=False)
+            retry = _compose(session, "k-paid")
+
+        assert retry.status_code == 409

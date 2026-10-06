@@ -71,8 +71,9 @@ class RetryLaterError(Exception):
         self.side_effects_possible = side_effects_possible
 
 
-# Whether an upstream write succeeded in the current context. Integrations set
-# it on each successful write; the idempotency layer scopes it to one call.
+# Whether an upstream write succeeded in the current context: a Gmail write, or
+# a settled payment. Each records itself; the idempotency layer scopes it to
+# one call and keeps the key claimed when a refusal followed a write.
 _upstream_write_done: ContextVar[bool] = ContextVar(
     "upstream_write_done", default=False
 )
