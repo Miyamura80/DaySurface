@@ -165,6 +165,8 @@ exclude = [
     ".agents/skills/goose-gui-e2e/scripts/",
     "tests/test_disconnect_purge.py",
     "tests/test_webhook_ssrf.py",
+    # http.server dispatches do_GET / log_message by name.
+    "tests/test_gmail_retry_wire.py",
     "tests/test_service_route_scopes.py",
     "tests/test_logging_security.py",
     "tests/test_logging_thread_safety.py",

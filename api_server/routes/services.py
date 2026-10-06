@@ -23,7 +23,12 @@ from api_server.auth.scopes import SERVICES_EXECUTE, require_scopes
 from api_server.billing.limits import ensure_daily_limit
 from api_server.billing.paywall import enforce_payment
 from api_server.idempotency import execute_idempotent
-from services import ServiceEntry, discover_services, get_registry
+from services import (
+    ServiceEntry,
+    discover_services,
+    get_registry,
+    record_upstream_write,
+)
 
 router = APIRouter(prefix="/api/v1/services", tags=["services"])
 
@@ -104,7 +109,11 @@ def _make_route(entry: ServiceEntry) -> None:
                     payment_header=request.headers.get("X-PAYMENT"),
                     mutating=entry.mutating,
                 )
-            if not charged:
+            if charged:
+                # A settled payment can't be replayed into a mutating service,
+                # so a later refusal must keep the Idempotency-Key claimed.
+                record_upstream_write()
+            else:
                 ensure_daily_limit(_user.user_id)
             return func(body)
 

@@ -217,3 +217,15 @@ async def attachment_too_large_handler(request: Request, exc: Exception) -> Resp
     """
     request_id = getattr(request.state, "request_id", uuid.uuid4().hex)
     return _build_error_response(413, str(exc), request_id)
+
+
+async def retry_later_handler(request: Request, exc: Exception) -> Response:
+    """Map ``RetryLaterError`` (an upstream rate limit that outlasted retries) to 429.
+
+    The message already says when to retry; ``Retry-After`` gives clients a
+    machine-readable back-off instead of a generic 500.
+    """
+    request_id = getattr(request.state, "request_id", uuid.uuid4().hex)
+    response = _build_error_response(429, str(exc), request_id)
+    response.headers["Retry-After"] = "60"
+    return response

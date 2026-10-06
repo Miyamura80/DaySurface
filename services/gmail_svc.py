@@ -568,11 +568,18 @@ def _get_gmail_client(user_id: str):  # noqa: ANN202 - googleapiclient Resource 
 
     # Call-time import: tests patch common.token_encryption.require_encryption.
     from common.token_encryption import require_encryption  # noqa: PLC0415
+    from services._gmail_retry import RateLimitRetryingRequest  # noqa: PLC0415
 
     refresh_token = require_encryption().decrypt(encrypted)
     access_token = _mint_access_token(refresh_token)
     creds = Credentials(token=access_token)
-    client = build("gmail", "v1", credentials=creds, cache_discovery=False)
+    client = build(
+        "gmail",
+        "v1",
+        credentials=creds,
+        cache_discovery=False,
+        requestBuilder=RateLimitRetryingRequest,
+    )
     _store_client(user_id, client)
     return client
 
