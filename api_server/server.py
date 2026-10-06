@@ -15,6 +15,7 @@ from api_server.middleware.error_handler import (
     ErrorHandlerMiddleware,
     RequestIdMiddleware,
     attachment_too_large_handler,
+    client_refusal_handler,
     retry_later_handler,
 )
 from api_server.middleware.mcp_auth import MCPAuthMiddleware
@@ -37,7 +38,7 @@ from api_server.runner import runner_lifespan
 from common import global_config
 from mcp_server.server import lifespan as mcp_lifespan
 from mcp_server.server import mount_on as mount_mcp_server
-from services import RetryLaterError
+from services import ClientRefusalError, RetryLaterError
 from services.gmail_svc import GmailAttachmentTooLargeError
 
 try:
@@ -169,6 +170,8 @@ app.add_middleware(
 app.add_exception_handler(GmailAttachmentTooLargeError, attachment_too_large_handler)
 # An upstream rate limit that outlasted the retries is a back-off, not a 500.
 app.add_exception_handler(RetryLaterError, retry_later_handler)
+# A deliberate refusal (draft gone, duplicate reply) is the caller's 4xx.
+app.add_exception_handler(ClientRefusalError, client_refusal_handler)
 
 # --- Routes ---------------------------------------------------------------
 

@@ -25,6 +25,7 @@ from models.gmail import (
     GmailUpdateDraftInput,
     _UnsetType,
 )
+from services.gmail_draft_helpers import DraftGoneError
 from services.gmail_drafts_svc import (
     gmail_discard_draft as _gmail_discard_draft,
 )
@@ -137,19 +138,26 @@ def send(
     # UNSET defaults preserve omitted fields (see save_draft); the composer's
     # send path saves the visible fields then sends, leaving files intact.
     uid = guard_user_id(user_id)
-    _gmail_update_draft(
-        GmailUpdateDraftInput(
-            user_id=uid,
-            draft_id=draft_id,
-            to=to,
-            subject=subject,
-            body=body,
-            cc=cc,
-            bcc=bcc,
-            attachments=_patch_attachments(attachments),
+    try:
+        _gmail_update_draft(
+            GmailUpdateDraftInput(
+                user_id=uid,
+                draft_id=draft_id,
+                to=to,
+                subject=subject,
+                body=body,
+                cc=cc,
+                bcc=bcc,
+                attachments=_patch_attachments(attachments),
+            )
         )
-    )
-    return _gmail_send(GmailSendInput(user_id=uid, draft_id=draft_id))
+        return _gmail_send(GmailSendInput(user_id=uid, draft_id=draft_id))
+    except DraftGoneError as exc:
+        # DraftGoneError's text is written for the model; the user sees this.
+        raise ValueError(
+            "This draft no longer exists in Gmail. It was probably already sent "
+            "or discarded."
+        ) from exc
 
 
 @mcp.tool(

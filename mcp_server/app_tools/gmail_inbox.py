@@ -26,19 +26,14 @@ from models.gmail import (
     GmailDraft,
     GmailFetchImageResult,
     GmailGetThreadInput,
+    GmailReplyInput,
     GmailThread,
 )
 from services.gmail_curate_svc import (
     gmail_curate_inbox as _gmail_curate_inbox,
 )
 from services.gmail_drafts_svc import (
-    GmailReplyInput,
-)
-from services.gmail_drafts_svc import (
     gmail_compose as _gmail_compose,
-)
-from services.gmail_drafts_svc import (
-    gmail_reply_to_thread as _gmail_reply_to_thread,
 )
 from services.gmail_messages_svc import (
     GmailArchiveResult,
@@ -61,6 +56,9 @@ from services.gmail_messages_svc import (
 )
 from services.gmail_messages_svc import (
     gmail_unmark_thread_done as _gmail_unmark_thread_done,
+)
+from services.gmail_reply_svc import (
+    gmail_reply_to_thread as _gmail_reply_to_thread,
 )
 from services.image_proxy import (
     fetch_remote_image as _fetch_remote_image,

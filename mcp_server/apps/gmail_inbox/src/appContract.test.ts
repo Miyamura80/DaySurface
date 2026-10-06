@@ -20,6 +20,11 @@ describe("McpAppLike contract vs real ext-apps App", () => {
     expect(typeof app.sendMessage).toBe("function");
   });
 
+  it("exposes updateModelContext and getHostCapabilities as methods", () => {
+    expect(typeof app.updateModelContext).toBe("function");
+    expect(typeof app.getHostCapabilities).toBe("function");
+  });
+
   it("ontoolresult is a settable callback property", () => {
     const cb = () => undefined;
     app.ontoolresult = cb;

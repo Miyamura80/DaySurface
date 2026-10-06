@@ -18,17 +18,26 @@ Two concerns share the module:
   ``_iter_drafts`` scan (consumed by ``find_draft_id_for_thread`` and
   ``draft_thread_map``) follows ``nextPageToken`` so a draft past the first
   page is never silently missed.
+
+A third, smaller one: a draft the user sent or discarded in the composer UI
+is gone from Gmail, and the model can't see that (the composer's tools are
+app-only). ``on_draft`` (whole services) and ``draft_gone_on_404`` (single
+calls) turn the resulting 404 into ``DraftGoneError``, which tells the model
+so instead of a raw Google error.
 """
 
 from __future__ import annotations
 
 import base64
-from collections.abc import Iterator
-from typing import Any
+import functools
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from typing import Any, Protocol
 
 from loguru import logger as log
 
 from models.gmail import (
+    AttachmentInput,
     AttachmentReference,
     AttachmentUpload,
     GmailDraft,
@@ -37,7 +46,83 @@ from models.gmail import (
     InlineImageUpload,
     _UnsetType,
 )
+from services import ClientRefusalError
 from services.gmail_svc import _build_raw_message, _parse_message_resource
+
+
+class DraftGoneError(ClientRefusalError):
+    """No draft with this id in Gmail (HTTP 404).
+
+    Usually the user sent or discarded it from the composer, whose tools the
+    model never sees; but a wrong id reads the same, so the message leaves
+    both open and says how to tell them apart.
+    """
+
+    http_status = 404
+
+    def __init__(self, draft_id: str) -> None:
+        super().__init__(
+            f"Draft {draft_id!r} was not found. Either the user already sent or "
+            "discarded it from the composer, or the id is wrong. Check "
+            "gmail_list_drafts or the thread (gmail_get_thread) before drafting "
+            "again."
+        )
+
+
+@contextmanager
+def draft_gone_on_404(draft_id: str) -> Iterator[None]:
+    """Inside, a Gmail 404 means the draft (or its message) is gone."""
+    # Deferred like gmail_messages_svc: load the SDK on a Gmail call only.
+    from googleapiclient.errors import HttpError  # noqa: PLC0415
+
+    try:
+        yield
+    except HttpError as exc:
+        if exc.resp.status == 404:
+            raise DraftGoneError(draft_id) from exc
+        raise
+
+
+class _OnDraft(Protocol):
+    draft_id: str
+
+
+def on_draft[I: _OnDraft, O](func: Callable[[I], O]) -> Callable[[I], O]:
+    """Run a draft service with any Gmail 404 read as ``DraftGoneError``.
+
+    Every request such a service makes (the draft, its message's attachment
+    bytes, the update, the re-read) is about ``input.draft_id``, so a 404 from
+    any of them, even mid-edit, means the draft went away.
+    """
+
+    @functools.wraps(func)
+    def wrapper(input: I) -> O:
+        with draft_gone_on_404(input.draft_id):
+            return func(input)
+
+    return wrapper
+
+
+def _get_draft_resource(svc: Any, draft_id: str) -> dict[str, Any]:
+    """``drafts.get(format=full)`` for ``draft_id``; ``DraftGoneError`` if missing."""
+    with draft_gone_on_404(draft_id):
+        return (
+            svc.users().drafts().get(userId="me", id=draft_id, format="full").execute()
+        )
+
+
+def _inputs_to_uploads(
+    attachments: list[AttachmentInput] | None,
+) -> list[AttachmentUpload] | None:
+    """Normalize caller-supplied ``AttachmentInput``s to the upload shape."""
+    if not attachments:
+        return None
+    return [
+        AttachmentUpload(
+            filename=a.filename, mime_type=a.mime_type, data_base64=a.data_base64
+        )
+        for a in attachments
+    ]
 
 
 def _iter_drafts(svc: Any) -> Iterator[tuple[str, str]]:
@@ -140,7 +225,7 @@ def _fetch_draft_model(svc: Any, draft_id: str) -> GmailDraft:
     recipients, subject, body, and current attachment ids that every draft
     mutation's response contract promises.
     """
-    full = svc.users().drafts().get(userId="me", id=draft_id, format="full").execute()
+    full = _get_draft_resource(svc, draft_id)
     return _draft_resource_to_model(full)
 
 

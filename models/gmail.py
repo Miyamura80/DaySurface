@@ -286,16 +286,12 @@ class GmailReplyInput(BaseModel):
     """Input for ``gmail_reply_to_thread``: create a reply draft on a thread.
 
     ``body`` defaults to an empty placeholder so the composer UI can populate
-    it on the next turn. ``subject`` defaults to ``Re: <orig>`` derived from
-    the thread's last message.
+    it on the next turn; ``subject`` to ``Re: <orig>`` from the last message.
 
-    Recipients are caller-controlled: ``to``, ``cc``, and ``bcc`` each accept a
-    comma-separated address list and are used verbatim when provided. Only
-    ``to`` has a default - when omitted it is derived from the thread (the other
-    party in the conversation, never the account owner). ``cc``/``bcc`` are set
-    only when the caller passes them; the reply carries none otherwise. Supplied
-    addresses are used as-is - they are NOT de-duplicated against the thread's
-    existing participants or the derived ``to`` default.
+    Recipients are caller-controlled: ``to``, ``cc``, and ``bcc`` each take a
+    comma-separated address list, used verbatim (NOT de-duplicated against the
+    thread's participants). Only ``to`` has a default, derived from the thread
+    (the other party, never the account owner).
     """
 
     user_id: str = ""
@@ -306,6 +302,9 @@ class GmailReplyInput(BaseModel):
     cc: str | None = None
     bcc: str | None = None
     attachments: list[AttachmentInput] = Field(default_factory=list)
+    follow_up: bool = Field(
+        False, description="Set true only to follow up on a reply the user just sent."
+    )
 
 
 class GmailSendInput(BaseModel):

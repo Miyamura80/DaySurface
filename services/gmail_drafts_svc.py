@@ -13,15 +13,11 @@ user has no active token row; the FastMCP factory surfaces it as
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from email.utils import formataddr
 from typing import Any
 
 from loguru import logger as log
 
-from models.curation import CurationState
 from models.gmail import (
-    AttachmentInput,
-    AttachmentUpload,
     GmailComposeInput,
     GmailDiscardDraftInput,
     GmailDiscardDraftResult,
@@ -29,7 +25,6 @@ from models.gmail import (
     GmailGetDraftInput,
     GmailListDraftsInput,
     GmailListDraftsResult,
-    GmailReplyInput,
     GmailSendInput,
     GmailSendResult,
     GmailUpdateDraftInput,
@@ -40,18 +35,19 @@ from models.gmail import (
     GmailDraftSummary as _DraftSummary,
 )
 from services import service
-from services.curation_ledger import mark_state_best_effort
 from services.gmail_draft_helpers import (
-    _draft_resource_to_model,
+    DraftGoneError,
     _fetch_draft_model,
+    _get_draft_resource,
+    _inputs_to_uploads,
     _rebuild_draft,
     _resolve_inline_images,
     _resolve_update_attachments,
+    draft_gone_on_404,
     draft_message_body,
+    on_draft,
 )
 from services.gmail_svc import (
-    _account_email,
-    _addresses,
     _build_raw_message,
     _get_gmail_client,
     _headers_to_dict,
@@ -61,20 +57,6 @@ from services.gmail_svc import (
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
-
-
-def _inputs_to_uploads(
-    attachments: list[AttachmentInput] | None,
-) -> list[AttachmentUpload] | None:
-    """Normalize caller-supplied ``AttachmentInput``s to the upload shape."""
-    if not attachments:
-        return None
-    return [
-        AttachmentUpload(
-            filename=a.filename, mime_type=a.mime_type, data_base64=a.data_base64
-        )
-        for a in attachments
-    ]
 
 
 def _draft_summary_from_metadata(draft: dict[str, Any]) -> _DraftSummary:
@@ -154,15 +136,9 @@ def gmail_list_drafts(input: GmailListDraftsInput) -> GmailListDraftsResult:
     input_model=GmailGetDraftInput,
     output_model=GmailDraft,
 )
+@on_draft
 def gmail_get_draft(input: GmailGetDraftInput) -> GmailDraft:
-    svc = _get_gmail_client(input.user_id)
-    draft = (
-        svc.users()
-        .drafts()
-        .get(userId="me", id=input.draft_id, format="full")
-        .execute()
-    )
-    return _draft_resource_to_model(draft)
+    return _fetch_draft_model(_get_gmail_client(input.user_id), input.draft_id)
 
 
 @service(
@@ -189,6 +165,7 @@ def gmail_get_draft(input: GmailGetDraftInput) -> GmailDraft:
     output_model=GmailDraft,
     mutating=True,
 )
+@on_draft
 def gmail_update_draft(input: GmailUpdateDraftInput) -> GmailDraft:
     """Patch a draft non-destructively: omitted fields stay, null clears them.
 
@@ -200,12 +177,7 @@ def gmail_update_draft(input: GmailUpdateDraftInput) -> GmailDraft:
     caller explicitly clears or overrides them.
     """
     svc = _get_gmail_client(input.user_id)
-    current = (
-        svc.users()
-        .drafts()
-        .get(userId="me", id=input.draft_id, format="full")
-        .execute()
-    )
+    current = _get_draft_resource(svc, input.draft_id)
     message = current.get("message") or {}
     parsed = _parse_message_resource(message)
     message_id = message.get("id") or parsed.get("message_id") or ""
@@ -296,6 +268,7 @@ def gmail_compose(input: GmailComposeInput) -> GmailDraft:
     output_model=GmailSendResult,
     mutating=True,
 )
+@on_draft
 def gmail_send(input: GmailSendInput) -> GmailSendResult:
     svc = _get_gmail_client(input.user_id)
     sent = svc.users().drafts().send(userId="me", body={"id": input.draft_id}).execute()
@@ -314,165 +287,17 @@ def gmail_send(input: GmailSendInput) -> GmailSendResult:
     mutating=True,
 )
 def gmail_discard_draft(input: GmailDiscardDraftInput) -> GmailDiscardDraftResult:
-    """Delete a draft. Gmail's ``drafts().delete`` returns no body on success."""
+    """Delete a draft. Gmail's ``drafts().delete`` returns no body on success.
+
+    A draft that is already gone (sent or discarded from the composer) counts
+    as discarded: the caller's goal state holds either way.
+    """
     svc = _get_gmail_client(input.user_id)
-    svc.users().drafts().delete(userId="me", id=input.draft_id).execute()
-    log.debug("Discarded Gmail draft id={}", input.draft_id)
+    try:
+        with draft_gone_on_404(input.draft_id):
+            svc.users().drafts().delete(userId="me", id=input.draft_id).execute()
+    except DraftGoneError:
+        log.debug("Draft id={} was already gone", input.draft_id)
+    else:
+        log.debug("Discarded Gmail draft id={}", input.draft_id)
     return GmailDiscardDraftResult(discarded=True)
-
-
-# ---------------------------------------------------------------------------
-# Reply helper (creates a draft for an existing thread)
-# ---------------------------------------------------------------------------
-
-
-def _select_reply_recipient(
-    messages: list[dict[str, Any]], self_email: str | None
-) -> str:
-    """Choose the default ``To`` for a reply to ``messages`` (thread order).
-
-    A reply should reach the other party, not the account owner. Walk the
-    thread newest-first and reply to the sender (``Reply-To`` falling back to
-    ``From``, RFC 5322 5.2.2) of the most recent message NOT sent by the owner.
-    If every message was sent by the owner - e.g. they sent the last message
-    and are now following up - fall back to the recipients (``To`` + ``Cc``) of
-    the latest message with the owner removed, so the reply still addresses the
-    people in the conversation rather than the owner themselves.
-
-    When ``self_email`` is unknown (None) no address matches "self", so this
-    reduces to the historical behavior: reply to the last message's sender.
-    """
-    self_norm = self_email.strip().lower() if self_email else None
-
-    def _is_self(addr: str) -> bool:
-        return self_norm is not None and addr.strip().lower() == self_norm
-
-    for msg in reversed(messages):
-        headers = _headers_to_dict((msg.get("payload") or {}).get("headers"))
-        # Ownership is decided by ``From`` - who actually sent the message - not
-        # ``Reply-To``. An owner-sent message may carry a non-self ``Reply-To``
-        # (e.g. "reply to my assistant"); it must still count as the owner's so
-        # the loop skips past it to the real other party. Messages with no
-        # attributable sender are skipped too.
-        from_addresses = _addresses(headers.get("from"))
-        if not from_addresses or all(_is_self(addr) for _, addr in from_addresses):
-            continue
-        # Incoming message: reply to the address its sender asked for - the
-        # ``Reply-To`` if present (RFC 5322 5.2.2), else ``From`` - verbatim.
-        return headers.get("reply-to") or headers.get("from") or ""
-
-    # Every message in the thread was sent by the account owner: reply to the
-    # people the latest message was addressed to (To + Cc), minus self.
-    last_headers = _headers_to_dict((messages[-1].get("payload") or {}).get("headers"))
-    recipients: list[str] = []
-    seen: set[str] = set()
-    for field in ("to", "cc"):
-        for name, addr in _addresses(last_headers.get(field)):
-            key = addr.lower()
-            if _is_self(addr) or key in seen:
-                continue
-            seen.add(key)
-            recipients.append(formataddr((name, addr)))
-    return ", ".join(recipients)
-
-
-@service(
-    name="gmail_reply_to_thread",
-    description="Create a reply draft on an existing Gmail thread. ALWAYS use this tool instead of composing reply text in chat - it creates a real Gmail draft and opens an interactive composer UI where the user can review, edit, and send. Pass your drafted reply in the 'body' parameter. Recipients are yours to control: pass 'to', 'cc', and/or 'bcc' (each a comma-separated address list) to set them explicitly. If you omit 'to', it defaults to the other party in the thread (never the account owner); omitted 'cc'/'bcc' are left unset. If every message in the thread is yours (no other participant to reply to), you must pass 'to' explicitly or the call errors. When an interactive UI is rendered alongside the result, keep your text response brief since the user can edit in the UI.",
-    input_model=GmailReplyInput,
-    output_model=GmailDraft,
-    mutating=True,
-)
-def gmail_reply_to_thread(input: GmailReplyInput) -> GmailDraft:
-    """Create a reply draft attached to the given thread.
-
-    Recipients are caller-controlled: ``to``/``cc``/``bcc`` are used verbatim
-    when supplied. When ``to`` is omitted it defaults to the sender (``Reply-To``
-    falling back to ``From``, RFC 5322 5.2.2) of the most recent message the
-    account owner did NOT send, so a bare reply reaches the other party rather
-    than the owner's own address. If ``to`` is omitted and the thread has no
-    other participant to derive one from (every message is the owner's), raises
-    ``ValueError`` rather than creating a blank-``To`` draft - pass ``to``
-    explicitly for such threads. Prefixes the subject with ``Re:`` unless the
-    originating subject already starts with ``Re:``. Propagates the parent's
-    ``Message-ID`` as ``In-Reply-To`` and appends to ``References`` so non-Gmail
-    MUAs also thread the conversation; Gmail itself uses the ``threadId`` on the
-    API wrapper.
-    """
-    svc = _get_gmail_client(input.user_id)
-    thread = (
-        svc.users()
-        .threads()
-        .get(userId="me", id=input.thread_id, format="metadata")
-        .execute()
-    )
-    messages = thread.get("messages") or []
-    if not messages:
-        raise ValueError(f"Thread {input.thread_id!r} has no messages to reply to")
-    last_msg = messages[-1]
-    headers = _headers_to_dict((last_msg.get("payload") or {}).get("headers"))
-    # Caller-supplied recipients win; only compute the default (and pay the
-    # token-row lookup) when the caller left ``to`` unset.
-    if input.to is not None:
-        to = input.to
-    else:
-        to = _select_reply_recipient(messages, _account_email(input.user_id))
-        if not to:
-            # Every message is from the owner and the thread names no other
-            # participant, so there is nobody to reply to. Fail clearly instead
-            # of creating a draft with a blank (malformed) To header.
-            raise ValueError(
-                f"Cannot determine a reply recipient for thread "
-                f"{input.thread_id!r}: every message is from you and the thread "
-                "has no other participants. Pass 'to' explicitly."
-            )
-    orig_subject = headers.get("subject") or ""
-    if input.subject is not None:
-        subject = input.subject
-    elif orig_subject.lower().startswith("re:"):
-        subject = orig_subject
-    else:
-        subject = f"Re: {orig_subject}" if orig_subject else "Re:"
-    body = input.body if input.body is not None else ""
-
-    parent_message_id = headers.get("message-id")
-    parent_references = headers.get("references")
-    in_reply_to = parent_message_id
-    if parent_message_id and parent_references:
-        references = f"{parent_references} {parent_message_id}"
-    else:
-        references = parent_references or parent_message_id
-
-    raw = _build_raw_message(
-        to=to,
-        subject=subject,
-        body=body,
-        cc=input.cc,
-        bcc=input.bcc,
-        in_reply_to_thread_id=input.thread_id,
-        in_reply_to=in_reply_to,
-        references=references,
-        attachments=_inputs_to_uploads(input.attachments),
-    )
-    created = (
-        svc.users()
-        .drafts()
-        .create(
-            userId="me",
-            body={"message": {"raw": raw, "threadId": input.thread_id}},
-        )
-        .execute()
-    )
-    log.debug("Created Gmail reply draft id={}", created.get("id"))
-    # A reply draft is an action on the thread: reflect it in the ledger so the
-    # triage view shows the thread as handled (with its draft) rather than still
-    # needing a reply. Best-effort - a DB hiccup must not fail draft creation.
-    mark_state_best_effort(
-        input.user_id,
-        input.thread_id,
-        CurationState.acted,
-        draft_id=created.get("id"),
-    )
-    # Re-fetch at format=full: the create response omits the saved recipients,
-    # subject, and body, so echoing it directly would return all-null.
-    return _fetch_draft_model(svc, created.get("id") or "")

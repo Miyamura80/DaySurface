@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import base64
 import json
-from contextlib import contextmanager
 from datetime import UTC, datetime
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
@@ -12,15 +11,10 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from api_server.server import app
 from common import global_config
 from common.token_encryption import PlaintextEncryption
-from db import engine as db_engine
-from db.base import Base
 from db.models.google_tokens import GoogleToken
 from models.gmail import (
     GmailConnectInput,
@@ -35,31 +29,8 @@ from services.gmail_svc import (
     gmail_disconnect,
     gmail_status,
 )
+from tests.gmail_fakes import patch_db as _patch_db
 from tests.test_template import TestTemplate
-
-# ---------------------------------------------------------------------------
-# DB fixture: in-memory SQLite wired into db.engine for the duration of a test
-# ---------------------------------------------------------------------------
-
-
-@contextmanager
-def _patch_db():
-    orig_engine = db_engine._engine
-    orig_session = db_engine._SessionLocal
-    eng = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(eng)
-    session_factory = sessionmaker(bind=eng, autoflush=False, expire_on_commit=False)
-    db_engine._engine = eng
-    db_engine._SessionLocal = session_factory
-    try:
-        yield session_factory
-    finally:
-        db_engine._engine = orig_engine
-        db_engine._SessionLocal = orig_session
 
 
 def _fake_id_token(email: str) -> str:

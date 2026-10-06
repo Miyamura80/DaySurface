@@ -16,6 +16,7 @@ import {
   isPreviewable,
 } from "./helpers";
 import { useComposerAttachments } from "./useComposerAttachments";
+import { reportComposerAction } from "./modelContext";
 import { ComposerThreadPanel, renderComposerStatus } from "./ComposerThread";
 import { PreviewModal } from "./AttachmentPreview";
 import { attachmentChipStyle, attachmentRejectedChipStyle } from "./messageStyles";
@@ -232,10 +233,11 @@ export function InlineComposer({
       // callServerTool resolves on a tool-level failure (isError) too, so only a
       // server-confirmed message_id counts as sent. Since "sent" is terminal, a
       // false positive here would be unrecoverable.
-      const inner = extractStructuredContent<{ message_id?: string }>(raw);
+      const inner = extractStructuredContent<{ message_id?: string; thread_id?: string }>(raw);
       const msgId = inner?.message_id ?? "";
       if (!msgId) throw new Error("the server did not confirm the send");
       setSaveStatus({ kind: "sent", message_id: msgId });
+      void reportComposerAction(mcpApp, "sent", draft, { message_id: msgId, thread_id: inner?.thread_id });
       setTimeout(onSent, 1500);
     } catch (err) {
       // The send did not land, so the composer stays editable: reopen it to
@@ -252,10 +254,15 @@ export function InlineComposer({
     if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null; }
     onDiscard();
     try {
-      await mcpApp.callServerTool({
+      const raw = await mcpApp.callServerTool({
         name: "gmail_composer.discard",
         arguments: { draft_id: draft.draft_id },
       });
+      // Like send, a tool-level failure still resolves: only a confirmed
+      // discard may tell the model the draft is gone.
+      if (extractStructuredContent<{ discarded?: boolean }>(raw)?.discarded) {
+        void reportComposerAction(mcpApp, "discarded", draft);
+      }
     } catch { /* discard is best-effort */ }
   };
 

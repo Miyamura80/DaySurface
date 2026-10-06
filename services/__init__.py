@@ -71,6 +71,23 @@ class RetryLaterError(Exception):
         self.side_effects_possible = side_effects_possible
 
 
+class ClientRefusalError(ValueError):
+    """The service refused the call for a reason the caller can act on.
+
+    Raised before the call's own write, so nothing changed upstream unless an
+    earlier write in the same call already landed; ``side_effects_possible``
+    records that at raise time, as ``RetryLaterError`` does. The message is
+    what the model or client reads, so it says what to do next. ``http_status``
+    is the code the HTTP transport answers with.
+    """
+
+    http_status = 400
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.side_effects_possible = upstream_write_done()
+
+
 # Whether an upstream write succeeded in the current context: a Gmail write, or
 # a settled payment. Each records itself; the idempotency layer scopes it to
 # one call and keeps the key claimed when a refusal followed a write.

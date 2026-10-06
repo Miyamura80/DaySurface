@@ -31,7 +31,7 @@ from sqlalchemy.exc import IntegrityError
 
 from db.engine import use_db_session
 from db.models.idempotency_keys import IdempotencyRecord
-from services import RetryLaterError, upstream_write_scope
+from services import ClientRefusalError, RetryLaterError, upstream_write_scope
 
 # Mirror the DB column width and (loosely) Stripe's own key-length guidance.
 _KEY_MAX_LEN = 255
@@ -191,6 +191,12 @@ def execute_idempotent(
             # An upstream rate limit is a refusal, so the key is safe to retry
             # unless an earlier write in this call already landed (a draft
             # created, then its re-read refused): then it stays ambiguous.
+            if not exc.side_effects_possible:
+                _release(session, user_id, route, key)
+            raise
+        except ClientRefusalError as exc:
+            # Refused before this call's write: release for a clean retry,
+            # unless an earlier write in the same call already landed.
             if not exc.side_effects_possible:
                 _release(session, user_id, route, key)
             raise
