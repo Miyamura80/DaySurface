@@ -16,7 +16,8 @@ from unittest.mock import patch
 
 import httplib2
 from cryptography.fernet import Fernet
-from googleapiclient.discovery import build
+from googleapiclient.discovery import build_from_document
+from googleapiclient.discovery_cache import get_static_doc
 
 from common import token_encryption
 from common.token_encryption import FernetEncryption
@@ -53,7 +54,9 @@ _THREADS_OK = json.dumps({"threads": [{"id": "t1", "historyId": "100"}]}).encode
 def _curation_responder(rate_limited_requests: int):
     """``threads.list``: the first N calls get the quota 403, then 200."""
 
-    def respond(_method: str, _path: str, hits: list[str]) -> tuple[int, bytes]:
+    def respond(
+        _method: str, _path: str, hits: list[str], _body: bytes
+    ) -> tuple[int, bytes]:
         if len(hits) <= rate_limited_requests:
             return 403, _QUOTA_BODY
         return 200, _THREADS_OK
@@ -63,17 +66,25 @@ def _curation_responder(rate_limited_requests: int):
 
 @contextmanager
 def _fake_gmail(respond):
-    """Local stand-in for gmail.googleapis.com; ``respond`` scripts each reply."""
+    """Local stand-in for gmail.googleapis.com; ``respond`` scripts each reply.
+
+    ``respond(method, path, hits, body)`` returns ``(status, body)``, or
+    ``(status, body, content_type)`` for a non-JSON reply.
+    """
     hits: list[str] = []
 
     class Handler(BaseHTTPRequestHandler):
         def _reply(self) -> None:
             length = int(self.headers.get("Content-Length") or 0)
-            self.rfile.read(length)
+            request_body = self.rfile.read(length)
             hits.append(f"{self.command} {self.path.split('?')[0]}")
-            status, body = respond(self.command, self.path, hits)
+            status, body, *content_type = respond(
+                self.command, self.path, hits, request_body
+            )
             self.send_response(status)
-            self.send_header("Content-Type", "application/json")
+            self.send_header(
+                "Content-Type", content_type[0] if content_type else "application/json"
+            )
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
@@ -91,13 +102,14 @@ def _fake_gmail(respond):
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
-        client = build(
-            "gmail",
-            "v1",
+        # rootUrl in the document, not client_options: batch requests take
+        # their URL from it and would otherwise go to the real Gmail.
+        doc = json.loads(get_static_doc("gmail", "v1"))
+        doc["rootUrl"] = f"http://127.0.0.1:{server.server_port}/"
+        client = build_from_document(
+            doc,
             http=httplib2.Http(proxy_info=None),
             requestBuilder=RateLimitRetryingRequest,
-            static_discovery=True,
-            client_options={"api_endpoint": f"http://127.0.0.1:{server.server_port}"},
         )
         yield client, hits
     finally:
@@ -214,7 +226,9 @@ _DRAFT_FULL = json.dumps(
 def _compose_responder(quota: dict[str, bool]):
     """``drafts.create`` + its re-read, each refused while its flag is set."""
 
-    def respond(method: str, _path: str, _hits: list[str]) -> tuple[int, bytes]:
+    def respond(
+        method: str, _path: str, _hits: list[str], _body: bytes
+    ) -> tuple[int, bytes]:
         if method == "POST":
             return (403, _QUOTA_BODY) if quota["create"] else (200, _DRAFT_CREATED)
         return (403, _QUOTA_BODY) if quota["read"] else (200, _DRAFT_FULL)

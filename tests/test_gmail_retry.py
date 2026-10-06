@@ -8,7 +8,7 @@ import json
 import math
 from datetime import UTC, datetime, timedelta
 from email.utils import format_datetime
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from googleapiclient.discovery import build
@@ -17,6 +17,7 @@ from googleapiclient.http import HttpMockSequence
 
 from services import _gmail_retry, gmail_svc, upstream_write_scope
 from services._gmail_retry import GmailRateLimitedError, RateLimitRetryingRequest
+from services.gmail_curate_svc import _batch_get_threads
 from tests.test_template import TestTemplate
 
 _OK = ({"status": "200"}, json.dumps({"threads": [{"id": "t1"}]}))
@@ -211,3 +212,91 @@ class TestGmailRateLimitRetry(TestTemplate):
         with upstream_write_scope(), pytest.raises(GmailRateLimitedError) as info:
             client.users().drafts().create(userId="me", body={}).execute()
         assert info.value.side_effects_possible is False
+
+
+def _http_error(status: int, content: bytes = b"{}") -> HttpError:
+    return HttpError(
+        resp=MagicMock(status=status, get=lambda *_: None), content=content
+    )
+
+
+class _ScriptedBatch:
+    """Batch stand-in: ``outcome(tid)`` decides each sub-request's result."""
+
+    def __init__(self, outcome, refuse_whole=None):
+        self._outcome = outcome
+        self._refuse_whole = refuse_whole
+        self._calls: list = []
+
+    def add(self, req, callback):
+        self._calls.append((req, callback))
+
+    def execute(self):
+        if self._refuse_whole is not None:
+            raise self._refuse_whole
+        for req, callback in self._calls:
+            tid = req.kwargs["id"]
+            result = self._outcome(tid)
+            if isinstance(result, Exception):
+                callback(tid, None, result)
+            else:
+                callback(tid, result, None)
+
+
+def _batch_svc(batches):
+    """Fake client whose successive batch requests come from ``batches``."""
+    svc = MagicMock(new_batch_http_request=MagicMock(side_effect=batches))
+    svc.users().threads().get = MagicMock(side_effect=lambda **kw: MagicMock(kwargs=kw))
+    return svc
+
+
+_RATE_LIMITED = _http_error(403, _QUOTA_403[1].encode())
+
+
+class TestBatchRateLimitRetry(TestTemplate):
+    def test_refused_sub_requests_are_retried(self, sleeps):
+        refused_once = {"t2"}
+
+        def first(tid):
+            return _RATE_LIMITED if tid in refused_once else {"id": tid}
+
+        retry = _ScriptedBatch(lambda tid: {"id": tid})
+        svc = _batch_svc([_ScriptedBatch(first), retry])
+        got = _batch_get_threads(svc, ["t1", "t2"], fmt="minimal")
+        assert set(got) == {"t1", "t2"}
+        assert sleeps.call_count == 1
+        # Only the refused thread went out again.
+        assert [req.kwargs["id"] for req, _ in retry._calls] == ["t2"]
+
+    def test_persistent_refusal_raises_instead_of_a_partial_result(self, sleeps):
+        batches = [
+            _ScriptedBatch(lambda tid: _RATE_LIMITED)
+            for _ in range(_gmail_retry._MAX_RETRIES + 1)
+        ]
+        with pytest.raises(GmailRateLimitedError):
+            _batch_get_threads(_batch_svc(batches), ["t1"], fmt="minimal")
+        assert sleeps.call_count == _gmail_retry._MAX_RETRIES
+
+    def test_other_sub_request_errors_are_skipped_without_retry(self, sleeps):
+        svc = _batch_svc([_ScriptedBatch(lambda tid: _http_error(404))])
+        assert _batch_get_threads(svc, ["gone"], fmt="minimal") == {}
+        sleeps.assert_not_called()
+
+    def test_refused_batch_request_is_retried_whole(self, sleeps):
+        svc = _batch_svc(
+            [
+                _ScriptedBatch(None, refuse_whole=_http_error(429)),
+                _ScriptedBatch(lambda tid: {"id": tid}),
+            ]
+        )
+        assert set(_batch_get_threads(svc, ["t1", "t2"], fmt="minimal")) == {
+            "t1",
+            "t2",
+        }
+        assert sleeps.call_count == 1
+
+    def test_failed_batch_request_is_not_retried(self, sleeps):
+        svc = _batch_svc([_ScriptedBatch(None, refuse_whole=_http_error(500))])
+        with pytest.raises(HttpError):
+            _batch_get_threads(svc, ["t1"], fmt="minimal")
+        sleeps.assert_not_called()

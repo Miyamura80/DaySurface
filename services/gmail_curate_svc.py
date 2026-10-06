@@ -97,33 +97,58 @@ def _batch_get_threads(
     fmt: str = "metadata",
     metadata_headers: list[str] | None = None,
 ) -> dict[str, dict[str, Any]]:
-    """Fetch multiple threads in a single batched HTTP request.
+    """Fetch multiple threads in batched HTTP requests.
 
     Returns a dict mapping thread_id → thread payload. Threads that fail
-    (deleted between list and get) are silently skipped.
+    (deleted between list and get) are silently skipped. Threads Gmail
+    rate-limits are retried with backoff, and if it keeps refusing them the
+    call raises ``GmailRateLimitedError`` instead of returning a short result.
     """
+    from googleapiclient.errors import HttpError  # noqa: PLC0415
+
+    from services._gmail_retry import (  # noqa: PLC0415
+        is_rate_limited,
+        retry_rate_limited,
+    )
+
     results: dict[str, dict[str, Any]] = {}
 
-    for offset in range(0, len(thread_ids), _BATCH_CHUNK_SIZE):
-        chunk = thread_ids[offset : offset + _BATCH_CHUNK_SIZE]
-        batch = svc.new_batch_http_request()
-        for tid in chunk:
-            kwargs: dict[str, Any] = {"userId": "me", "id": tid, "format": fmt}
-            if metadata_headers:
-                kwargs["metadataHeaders"] = metadata_headers
-            req = svc.users().threads().get(**kwargs)
+    def fetch(ids: list[str]) -> list[tuple[str, HttpError]]:
+        refused: list[tuple[str, HttpError]] = []
+        for offset in range(0, len(ids), _BATCH_CHUNK_SIZE):
+            chunk = ids[offset : offset + _BATCH_CHUNK_SIZE]
+            batch = svc.new_batch_http_request()
+            for tid in chunk:
+                kwargs: dict[str, Any] = {"userId": "me", "id": tid, "format": fmt}
+                if metadata_headers:
+                    kwargs["metadataHeaders"] = metadata_headers
+                req = svc.users().threads().get(**kwargs)
 
-            def _cb(
-                request_id: str, response: Any, exception: Any, _tid: str = tid
-            ) -> None:
-                if exception is not None:
-                    log.warning("Batch thread fetch failed for {}: {}", _tid, exception)
-                    return
-                results[_tid] = response
+                def _cb(
+                    request_id: str, response: Any, exception: Any, _tid: str = tid
+                ) -> None:
+                    if exception is None:
+                        results[_tid] = response
+                    elif isinstance(exception, HttpError) and is_rate_limited(
+                        exception
+                    ):
+                        refused.append((_tid, exception))
+                    else:
+                        log.warning(
+                            "Batch thread fetch failed for {}: {}", _tid, exception
+                        )
 
-            batch.add(req, callback=_cb)
-        batch.execute()
+                batch.add(req, callback=_cb)
+            try:
+                batch.execute()
+            except HttpError as exc:
+                # The batch request itself was refused, so none of it ran.
+                if not is_rate_limited(exc):
+                    raise
+                refused.extend((tid, exc) for tid in chunk)
+        return refused
 
+    retry_rate_limited(list(thread_ids), fetch, what="batched threads.get")
     return results
 
 
