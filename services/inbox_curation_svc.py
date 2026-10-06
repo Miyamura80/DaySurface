@@ -13,8 +13,9 @@ maintained state instead of a from-scratch recompute:
 
 Effort is emergent, not partitioned: the host reads coverage, decides how much
 of the unknown delta to process, searches + reasons over it, and records the
-result. Freshness is tracked against Gmail's ``historyId`` so a deep pass only
-re-reasons over new/changed threads.
+result. A verdict goes stale only when a new message arrives after it was
+banked (see ``services.curation_status``), so a deep pass re-reasons over
+threads where someone wrote, not over read/label churn or the user's replies.
 
 The deterministic score from ``gmail_curate_svc`` is reused only as a
 provisional prior for *uncurated* threads, subordinate to LLM judgments.
@@ -29,7 +30,6 @@ from loguru import logger as log
 
 from models.curation import (
     CoverageSummary,
-    CurationState,
     GetCurationInput,
     GetCurationResult,
     InboxSearchInput,
@@ -41,23 +41,27 @@ from models.curation import (
 )
 from services import service
 from services.curation_ledger import (
+    as_utc,
+    list_record_ids,
     list_records,
     load_status_map,
     upsert_judgments,
+)
+from services.curation_status import (
+    BeyondScan,
+    is_triageable,
+    ledger_status_for,
+    newest_incoming_at,
+    resolve_statuses,
 )
 from services.gmail_curate_svc import (
     _batch_get_threads,
     _build_label_lookups,
     _score_thread,
-    _thread_has_noise_labels,
     build_curate_query,
 )
 from services.gmail_messages_svc import _find_mcp_done_label, _internal_date_to_dt
 from services.gmail_svc import _get_gmail_client, _headers_to_dict
-
-# Gmail's system label id for the inbox. A thread archived out of band loses it,
-# so an incremental history delta (which is unfiltered) must re-check it.
-_INBOX_LABEL_ID = "INBOX"
 
 # Bound on how many inbox thread stubs the cheap read scans for coverage. The
 # curated verdicts users care about are recent; scanning the whole mailbox for
@@ -76,17 +80,6 @@ def _history_str(value: Any) -> str | None:
     if value is None:
         return None
     return str(value)
-
-
-def _is_stale(current: str | None, stored: str | None) -> bool:
-    """A thread is stale iff we can compare watermarks and they differ.
-
-    A missing watermark (either side) means we cannot verify, so we do not
-    fabricate staleness - the row is treated as fresh.
-    """
-    if current is None or stored is None:
-        return False
-    return current != stored
 
 
 def _list_thread_stubs(svc: Any, q: str, *, cap: int) -> list[dict[str, Any]]:
@@ -149,9 +142,11 @@ def _changed_thread_ids(
     incremental sync from permanently skipping overflow threads.
 
     No ``historyTypes`` filter is applied: a thread's ``historyId`` advances on
-    *any* change (new message, label add/remove, read/unread), and the ledger's
-    freshness check treats any such advance as stale - so the delta must surface
-    every changed thread, not just ones with a new message. Each record's
+    *any* change (new message, label add/remove, read/unread), and a label-only
+    change can move a thread into or out of the triageable inbox (archive,
+    mark-done) - so the delta must surface every changed thread, not just ones
+    with a new message. Freshness is then judged per thread on message arrival
+    (``services.curation_status``). Each record's
     ``messages`` field lists every message it touched, capturing label-only
     changes that ``messagesAdded`` would miss.
     """
@@ -203,7 +198,11 @@ def _changed_thread_ids(
         "bodies are fetched and no reasoning is run - it returns judgments the "
         "assistant already made (bucket, importance, summary, suggested action) "
         "plus a coverage count of curated / stale / uncurated threads in the "
-        "inbox. Call this FIRST for any 'what's important / triage my inbox' "
+        "inbox. By default only threads still in the inbox are returned: threads "
+        "the user resolved (gmail_mark_thread_done) or archived are omitted until "
+        "someone sends a new message on them (include_inactive=true also returns "
+        "them, flagged stale). For inbox threads, 'stale' means someone else "
+        "wrote since the verdict. Call this FIRST for any 'what's important / triage my inbox' "
         "request. If coverage shows many uncurated or stale threads and the user "
         "wants a thorough pass, go deeper with inbox_search + inbox_save_curation; "
         "otherwise answer directly from these banked verdicts."
@@ -219,58 +218,78 @@ def inbox_get_curation(input: GetCurationInput) -> GetCurationResult:
         s["id"]: _history_str(s.get("historyId")) for s in stubs if s.get("id")
     }
     inbox_ids = list(current_hist)
-
-    # Coverage over the whole current inbox vs the whole ledger (independent of
-    # the display filter / limit below).
-    status_map = load_status_map(input.user_id, inbox_ids)
-    curated_ct = stale_ct = uncurated_ct = 0
-    for tid in inbox_ids:
-        row = status_map.get(tid)
-        if row is None or row["state"] == CurationState.pending.value:
-            uncurated_ct += 1
-        elif input.check_freshness and _is_stale(
-            current_hist.get(tid), row["curated_history_id"]
-        ):
-            stale_ct += 1
-        else:
-            curated_ct += 1
-    coverage = CoverageSummary(
-        curated=curated_ct, stale=stale_ct, uncurated=uncurated_ct
+    statuses = resolve_statuses(
+        svc,
+        load_status_map(input.user_id, inbox_ids),
+        current_hist,
+        check_freshness=input.check_freshness,
     )
 
-    # Display records (filtered / limited), each annotated with freshness.
-    records = list_records(
+    # Coverage over the scanned inbox vs the whole ledger (independent of the
+    # display filter / limit below).
+    counts = [statuses[tid] for tid in inbox_ids]
+    coverage = CoverageSummary(
+        curated=counts.count(LedgerStatus.curated),
+        stale=counts.count(LedgerStatus.stale),
+        uncurated=counts.count(LedgerStatus.uncurated),
+    )
+
+    # The scan stops at the newest _COVERAGE_STUB_CAP inbox threads. When it is
+    # full, a row outside it may still be in the inbox, so membership is
+    # checked directly instead of assumed. Rows are read a page at a time so
+    # a large ledger of long-archived threads costs only what it takes to fill
+    # ``limit``.
+    scan_full = len(stubs) >= _COVERAGE_STUB_CAP
+    beyond = (
+        BeyondScan(svc, input.user_id, check_freshness=input.check_freshness)
+        if scan_full
+        else None
+    )
+    filters = {
+        "bucket": input.bucket.value if input.bucket else None,
+        "state": input.state.value if input.state else None,
+    }
+    ordered_ids = list_record_ids(
         input.user_id,
-        bucket=input.bucket.value if input.bucket else None,
-        state=input.state.value if input.state else None,
-        limit=input.limit,
+        **filters,
+        thread_ids=None if input.include_inactive or scan_full else inbox_ids,
     )
     kept = []
-    for rec in records:
-        if rec.thread_id not in current_hist:
-            # Thread left the triageable inbox (archived / done, possibly out of
-            # band): the row can't be trusted as current.
-            rec.ledger_status = LedgerStatus.stale
-        elif input.check_freshness and _is_stale(
-            current_hist.get(rec.thread_id), rec.curated_history_id
-        ):
-            rec.ledger_status = LedgerStatus.stale
-        else:
-            rec.ledger_status = LedgerStatus.curated
-        if input.fresh_only and rec.ledger_status == LedgerStatus.stale:
-            continue
-        kept.append(rec)
+    for start in range(0, len(ordered_ids), _RECORD_PAGE):
+        page_ids = ordered_ids[start : start + _RECORD_PAGE]
+        by_id = {
+            r.thread_id: r
+            # Filters re-applied: a row changed since the snapshot drops out.
+            for r in list_records(
+                input.user_id, **filters, thread_ids=page_ids, limit=None
+            )
+        }
+        page = [by_id[tid] for tid in page_ids if tid in by_id]
+        if beyond is not None:
+            unknown = [r.thread_id for r in page if r.thread_id not in statuses]
+            statuses.update(beyond.statuses(unknown))
+        for rec in page:
+            status = statuses.get(rec.thread_id)
+            if status is None:
+                # Left the triageable inbox (resolved or archived): hidden
+                # unless asked for, and then not trustworthy as current.
+                if not input.include_inactive:
+                    continue
+                status = LedgerStatus.stale
+            if input.fresh_only and status == LedgerStatus.stale:
+                continue
+            rec.ledger_status = status
+            kept.append(rec)
+            if len(kept) >= input.limit:
+                break
+        if len(kept) >= input.limit:
+            break
 
     return GetCurationResult(records=kept, coverage=coverage)
 
 
-def _ledger_status_for(row: dict | None, current_hist: str | None) -> LedgerStatus:
-    """Map a ledger status-row + the thread's current historyId to a status."""
-    if row is None or row["state"] == CurationState.pending.value:
-        return LedgerStatus.uncurated
-    if _is_stale(current_hist, row["curated_history_id"]):
-        return LedgerStatus.stale
-    return LedgerStatus.curated
+# Ledger rows read (and, past a full scan, membership-checked) per page.
+_RECORD_PAGE = 50
 
 
 def _search_item(
@@ -316,29 +335,6 @@ def _search_item(
             "importance_prior": prior,
         }
     )
-
-
-def _is_triageable(
-    messages: list[dict[str, Any]],
-    *,
-    done_label_id: str | None,
-    label_id_to_name: dict[str, str],
-) -> bool:
-    """Whether a thread still belongs in the triageable inbox.
-
-    The incremental history delta is unfiltered (it returns every changed
-    thread, including ones archived or marked done out of band), so results are
-    re-checked against the same criteria ``build_curate_query()`` enforces
-    server-side: in INBOX, not MCP/Done, and no excluded noise label.
-    """
-    thread_label_ids: set[str] = set()
-    for msg in messages:
-        thread_label_ids.update(msg.get("labelIds") or [])
-    if _INBOX_LABEL_ID not in thread_label_ids:
-        return False
-    if done_label_id is not None and done_label_id in thread_label_ids:
-        return False
-    return not _thread_has_noise_labels(messages, label_id_to_name)
 
 
 @service(
@@ -387,14 +383,16 @@ def inbox_search(input: InboxSearchInput) -> InboxSearchResult:
         thread = fetched.get(tid)
         if thread is None or not (thread.get("messages") or []):
             continue
-        if not _is_triageable(
+        if not is_triageable(
             thread["messages"],
             done_label_id=done_label_id,
             label_id_to_name=label_id_to_name,
         ):
             continue
-        status = _ledger_status_for(
-            status_map.get(tid), _history_str(thread.get("historyId"))
+        status = ledger_status_for(
+            status_map.get(tid),
+            _history_str(thread.get("historyId")),
+            newest_incoming_at(thread["messages"]),
         )
         items.append(
             _search_item(
@@ -420,9 +418,10 @@ def inbox_search(input: InboxSearchInput) -> InboxSearchResult:
         "ledger so they are not re-reasoned next time. Call this after reading "
         "and reasoning over threads (typically from inbox_search) - pass a batch "
         "of per-thread verdicts (bucket, importance, a short summary, suggested "
-        "action, optional reasoning/confidence). Each write stamps the thread's "
-        "current Gmail historyId so the verdict stays valid until the thread "
-        "changes. This is what makes the next inbox_get_curation near-free."
+        "action, optional reasoning/confidence), and set seen_through to each "
+        "thread's last_message_at from inbox_search. The verdict stays valid "
+        "until someone else writes on the thread. This is what makes the next "
+        "inbox_get_curation near-free."
     ),
     input_model=SaveCurationInput,
     output_model=SaveCurationResult,
@@ -434,16 +433,32 @@ def inbox_save_curation(input: SaveCurationInput) -> SaveCurationResult:
 
     svc = _get_gmail_client(input.user_id)
     thread_ids = [j.thread_id for j in input.judgments]
-    # format=minimal returns each thread's current historyId with no bodies.
+    # format=minimal returns each thread's current historyId and message
+    # labels / internalDate, with no bodies.
     fetched = _batch_get_threads(svc, thread_ids, fmt="minimal")
     history_ids: dict[str, str | None] = {
         tid: _history_str(thread.get("historyId")) for tid, thread in fetched.items()
     }
+    seen_through: dict[str, datetime | None] = {}
+    for j in input.judgments:
+        at_save = newest_incoming_at(
+            (fetched.get(j.thread_id) or {}).get("messages") or []
+        )
+        seen = as_utc(j.seen_through)
+        # Prefer what the host actually read; capping at the save-time value
+        # keeps a bogus future timestamp from hiding mail.
+        seen_through[j.thread_id] = min(filter(None, (seen, at_save)), default=None)
+        if seen is not None and at_save is not None and at_save > seen:
+            # A message landed between the host's read and this save. The
+            # save-time historyId already includes it, so storing it would let
+            # the next read's fast path skip the check: keep the old one.
+            history_ids.pop(j.thread_id, None)
 
     saved = upsert_judgments(
         input.user_id,
         input.judgments,
         history_ids=history_ids,
+        seen_through=seen_through,
         curator_version=input.curator_version,
     )
     return SaveCurationResult(saved=len(saved), thread_ids=saved)

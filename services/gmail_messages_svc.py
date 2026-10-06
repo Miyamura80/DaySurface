@@ -525,7 +525,7 @@ def gmail_archive_thread(input: GmailThreadModifyInput) -> GmailArchiveResult:
 
 @service(
     name="gmail_mark_thread_done",
-    description="Mark a Gmail thread as done by applying the MCP/Done label (hides from curated inbox). Also marks the thread dismissed in the curation ledger. During a triage pass, continue on to the next uncurated or stale thread.",
+    description="Mark a Gmail thread as resolved/done. Call this whenever the user says a thread is resolved, handled, dealt with, or no longer needs their attention, so it stops coming back in triage. Applies the MCP/Done label (does not archive), which hides the thread from gmail_curate_inbox, inbox_search and inbox_get_curation until someone else sends a new message on it; the user's own later replies do not bring it back. Also marks the thread dismissed in the curation ledger. During a triage pass, continue on to the next uncurated or stale thread.",
     input_model=GmailThreadModifyInput,
     output_model=GmailMarkDoneResult,
     mutating=True,

@@ -29,7 +29,7 @@ principal - clients never pass it.
 | `gmail_get_attachment` | Fetch the raw base64 bytes of one attachment or inline image. |
 | `gmail_mark_thread_read` | Remove the `UNREAD` label from a thread. |
 | `gmail_archive_thread` | Remove `INBOX` from a thread and mark it dismissed in the curation ledger. |
-| `gmail_mark_thread_done` | Apply the `MCP/Done` label so the thread drops out of the curated inbox. |
+| `gmail_mark_thread_done` | Resolve a thread: apply the `MCP/Done` label so it drops out of triage until someone else writes on it. |
 | `gmail_unmark_thread_done` | Undo mark-done by removing the `MCP/Done` label. |
 
 ## Triage ledger
@@ -113,6 +113,11 @@ Ranking is a deterministic heuristic score, not a model - no LLM inference runs
 over your mail. For a considered triage, prefer `inbox_get_curation` (banked
 verdicts) and go deeper with `inbox_search` + `inbox_save_curation` when coverage
 shows uncurated or stale threads.
+
+A thread you mark done (`gmail_mark_thread_done`) or archive stays out of all
+three triage views until someone else sends a new message on it; your own later
+replies don't bring it back. A banked verdict turns `stale` only when someone
+else writes on the thread, not when it is read, relabelled or replied to by you.
 
 ### gmail_list_inbox
 
