@@ -107,11 +107,21 @@ def list_records(
     *,
     bucket: str | None = None,
     state: str | None = None,
+    thread_ids: Iterable[str] | None = None,
     limit: int = 50,
 ) -> list[CurationRecord]:
-    """Return decrypted curation records for a user, optionally filtered."""
+    """Return decrypted curation records for a user, optionally filtered.
+
+    ``thread_ids`` restricts the result to those threads (an empty iterable
+    returns nothing).
+    """
+    ids = None if thread_ids is None else list(thread_ids)
+    if ids is not None and not ids:
+        return []
     with _session() as session:
         query = session.query(ThreadCuration).filter(ThreadCuration.user_id == user_id)
+        if ids is not None:
+            query = query.filter(ThreadCuration.thread_id.in_(ids))
         if bucket is not None:
             query = query.filter(ThreadCuration.bucket == bucket)
         if state is not None:
@@ -125,7 +135,7 @@ def list_records(
 
 
 def load_status_map(user_id: str, thread_ids: Iterable[str]) -> dict[str, dict]:
-    """Return ``{thread_id: {state, curated_history_id}}`` for the given threads.
+    """Return ``{thread_id: {state, curated_history_id, curated_at}}`` for threads.
 
     Cheap lookup (no decryption) used to annotate search results with their
     ledger status without materializing full records.
@@ -139,6 +149,7 @@ def load_status_map(user_id: str, thread_ids: Iterable[str]) -> dict[str, dict]:
                 ThreadCuration.thread_id,
                 ThreadCuration.state,
                 ThreadCuration.curated_history_id,
+                ThreadCuration.curated_at,
             )
             .filter(
                 ThreadCuration.user_id == user_id,
@@ -147,7 +158,8 @@ def load_status_map(user_id: str, thread_ids: Iterable[str]) -> dict[str, dict]:
             .all()
         )
     return {
-        tid: {"state": state, "curated_history_id": hist} for tid, state, hist in rows
+        tid: {"state": state, "curated_history_id": hist, "curated_at": at}
+        for tid, state, hist, at in rows
     }
 
 

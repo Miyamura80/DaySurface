@@ -55,8 +55,10 @@ class LedgerStatus(StrEnum):
     """Per-thread freshness annotation computed on read (not stored).
 
     - ``curated``   - a fresh ledger row exists for the thread.
-    - ``stale``     - a ledger row exists but the thread's Gmail historyId has
-      advanced past the curated watermark (needs re-reasoning).
+    - ``stale``     - a ledger row exists but a new message arrived after the
+      verdict was banked, or a thread marked done / archived came back to the
+      inbox (needs re-reasoning). Read/label changes alone never make a row
+      stale.
     - ``uncurated`` - no ledger row (or a ``pending`` one); never judged.
     """
 
@@ -113,9 +115,17 @@ class GetCurationInput(BaseModel):
     check_freshness: bool = Field(
         default=True,
         description=(
-            "Compare each row's curated historyId against the thread's current "
-            "Gmail historyId to flag stale rows. Uses one ids-only threads.list "
-            "(no message bodies, no inference)."
+            "Flag rows stale when a new message arrived after they were curated. "
+            "Uses one ids-only threads.list plus a metadata fetch for threads "
+            "that changed (no message bodies, no inference)."
+        ),
+    )
+    include_inactive: bool = Field(
+        default=False,
+        description=(
+            "Also return rows for threads no longer in the triageable inbox "
+            "(marked done or archived). Off by default so resolved threads "
+            "stay hidden."
         ),
     )
     limit: int = Field(default=50, ge=1, le=500)
