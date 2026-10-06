@@ -174,13 +174,11 @@ export const connect: {
       // the plan requirement - is either in the collapsed steps or on the docs
       // page. Spelling the flow out here as well left the panel saying the
       // same thing twice, once as a paragraph and once as a numbered list.
-      note: "Copies the URL, then opens ChatGPT's Plugins page - click Add, then Create custom MCP server, and paste.",
+      note: "Copies the URL and opens ChatGPT Plugins.",
       steps: [
-        "Open chatgpt.com/plugins",
-        "Click Add, then Create custom MCP server",
-        "Paste the URL, name it, Authentication → OAuth",
-        "Tick the risk box, click Create as a plugin",
-        "New chat, so the tools menu refreshes",
+        "Add → Create custom MCP server",
+        "Paste the URL, Authentication → OAuth",
+        "Tick the risk box → Create as a plugin",
       ],
     },
     {

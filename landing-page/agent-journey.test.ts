@@ -157,16 +157,15 @@ describe("intent aliases answer the signup question", () => {
     }
   });
 
-  test("dialog-only steps are labelled a fallback, not remaining work", async () => {
-    // ChatGPT's `steps` are the FULL path from scratch - the deep link already
-    // performs the first one. Labelling them as what is left tells the reader to
-    // open the Plugins page again, which is already done.
+  test("dialog-only steps start after the link, not from scratch", async () => {
+    // The link already opens chatgpt.com/plugins, so the steps must not tell
+    // the reader to open it again; they are labelled as the remaining work.
     const body = await (await fetch(`${BASE}/connect.md`)).text();
-    const idx = body.indexOf("Open chatgpt.com/plugins");
+    const idx = body.indexOf("Add → Create custom MCP server");
     expect(idx).toBeGreaterThan(-1);
     const label = body.slice(Math.max(0, idx - 120), idx);
-    expect(label).toContain("if the link does not work");
-    expect(body).not.toContain("The rest of the flow");
+    expect(label).toContain("Then, in ChatGPT");
+    expect(body).not.toContain("Open chatgpt.com/plugins");
   });
 
   test("ChatGPT is never presented as one-click", async () => {

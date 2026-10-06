@@ -123,7 +123,7 @@ const selected = enriched.find((t) => t.id === defaultId) ?? enriched[0];
                   when the link is blocked, and - for a link that prefills
                   nothing - the rest of the flow, so the summary says so. */}
               {t.steps && t.steps.length > 0 && (
-                <details class="mt-3 group">
+                <details class="mt-3 group" open={t.effort === "dialog-only"}>
                   <summary class="cursor-pointer list-none text-xs text-fg-subtle transition hover:text-accent">
                     <span class="underline decoration-dotted underline-offset-4">
                       {effortMeta[t.effort].stepsLabel}

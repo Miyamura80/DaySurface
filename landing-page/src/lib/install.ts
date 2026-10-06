@@ -62,11 +62,10 @@ export const effortMeta: Record<
     /**
      * Label for the steps disclosure.
      *
-     * `steps` is ALWAYS the full click-path from scratch - connect.ts is
-     * explicit that a dialog-only target "keeps its full click-path in
-     * `steps`". So every label here has to read as a fallback. Labelling them
-     * as the remaining work tells a ChatGPT user to open the Plugins page
-     * again, which the link they just followed already did.
+     * For one-click/command/prompt targets `steps` is the full path from
+     * scratch, so the label reads as a fallback. A dialog-only target's link
+     * already opens the setup page, so its `steps` start AFTER that and the
+     * label reads as the remaining work.
      */
     stepsLabel: string;
     /** One-line "how" for the quick-reference list in llms-full.txt. */
@@ -88,7 +87,7 @@ export const effortMeta: Record<
   "dialog-only": {
     heading: "Opens the setup page, but you still paste the URL",
     badge: "shortcut",
-    stepsLabel: "Full click-path, if the link does not work",
+    stepsLabel: "Then, in ChatGPT",
     shortHow: "install link opens the setup page, but fills nothing in - follow the steps and paste the URL.",
   },
   prompt: {
