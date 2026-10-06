@@ -83,7 +83,7 @@ def _payment_header_value(scope: Scope) -> str | None:
 
 async def _authenticate_async(scope: Scope) -> AuthenticatedUser | None:
     """Run blocking auth I/O in a thread to avoid blocking the event loop."""
-    return await anyio.to_thread.run_sync(lambda: _authenticate(scope))  # ty: ignore[unresolved-attribute]
+    return await anyio.to_thread.run_sync(lambda: _authenticate(scope))
 
 
 def _authenticate(scope: Scope) -> AuthenticatedUser | None:
