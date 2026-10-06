@@ -306,21 +306,20 @@ def _get_or_create_mcp_done_label(svc: Any) -> str:
         raise
 
 
-# See ``GmailMailbox`` for why sent mail needs its own scope. "all" adds none:
-# Gmail's default search already excludes spam and trash.
-_MAILBOX_SCOPES: dict[GmailMailbox, str | None] = {
+# See ``GmailMailbox`` for why sent mail needs its own scope. Gmail's default
+# search already excludes spam and trash; "all" also drops unsent drafts in the
+# query itself, so they never use up maxResults.
+_MAILBOX_SCOPES: dict[GmailMailbox, str] = {
     "inbox": "in:inbox",
     "sent": "in:sent",
-    "all": None,
+    "all": "-in:draft",
 }
 
 
-def _mailbox_query(mailbox: GmailMailbox, query: str | None) -> str | None:
-    """Gmail ``q`` for ``mailbox`` AND-ed with ``query``; ``None`` when unscoped."""
+def _mailbox_query(mailbox: GmailMailbox, query: str | None) -> str:
+    """Return the Gmail ``q`` for ``mailbox``, AND-ed with ``query`` if given."""
     scope = _MAILBOX_SCOPES[mailbox]
-    if not query:
-        return scope
-    return f"{scope} ({query})" if scope else query
+    return f"{scope} ({query})" if query else scope
 
 
 # ---------------------------------------------------------------------------
@@ -336,8 +335,6 @@ def _mailbox_query(mailbox: GmailMailbox, query: str | None) -> str | None:
 )
 def gmail_list_inbox(input: GmailListInboxInput) -> GmailListInboxResult:
     svc = _get_gmail_client(input.user_id)
-    # googleapiclient drops kwargs whose value is None, so an unscoped "all"
-    # sends no q at all.
     listing = (
         svc.users()
         .messages()
@@ -361,8 +358,7 @@ def gmail_list_inbox(input: GmailListInboxInput) -> GmailListInboxResult:
     summaries: list[GmailMessageSummary] = []
     for mid in message_ids:
         meta = fetched.get(mid)
-        # An unscoped "all" listing also returns unsent drafts; they aren't mail.
-        if meta and "DRAFT" not in (meta.get("labelIds") or []):
+        if meta:
             summaries.append(_message_summary_from_metadata(meta))
     return GmailListInboxResult(messages=summaries)
 

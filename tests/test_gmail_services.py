@@ -678,39 +678,34 @@ class TestGmailListInbox(TestTemplate):
             ("inbox", "from:me", "in:inbox (from:me)"),
             ("sent", None, "in:sent"),
             ("sent", "from:me", "in:sent (from:me)"),
-            ("all", None, None),
-            ("all", "subject:hello", "subject:hello"),
+            ("all", None, "-in:draft"),
+            ("all", "subject:hello", "-in:draft (subject:hello)"),
         ],
     )
     def test_mailbox_query(self, mailbox, query, expected):
         assert _mailbox_query(mailbox, query) == expected
 
-    def test_sent_mailbox_reaches_list_and_drafts_are_dropped(self):
-        payloads = {
-            "m-sent": {"id": "m-sent", "labelIds": ["SENT"], "payload": {}},
-            "m-draft": {"id": "m-draft", "labelIds": ["DRAFT"], "payload": {}},
-        }
+    @pytest.mark.parametrize(
+        ("mailbox", "expected_q"),
+        [("inbox", "in:inbox"), ("sent", "in:sent"), ("all", "-in:draft")],
+    )
+    def test_mailbox_scope_reaches_messages_list(self, mailbox, expected_q):
         with _patch_db() as factory:
             _seed_token(factory)
             mock = _make_mock_service()
-            mock.users().messages().list().execute.return_value = {
-                "messages": [{"id": "m-sent"}, {"id": "m-draft"}],
-            }
+            mock.users().messages().list().execute.return_value = {}
             patches = _patch_client(mock)
             _apply(patches)
-            with patch(
-                "services.gmail_messages_svc._batch_get_messages",
-                return_value=payloads,
-            ):
-                try:
-                    result = gmail_list_inbox(
-                        GmailListInboxInput(user_id="alice", mailbox="sent")
-                    )
-                finally:
-                    _stop(patches)
+            try:
+                gmail_list_inbox(
+                    GmailListInboxInput(user_id="alice", mailbox=mailbox, limit=7)
+                )
+            finally:
+                _stop(patches)
 
-        assert mock.users().messages().list.call_args.kwargs["q"] == "in:sent"
-        assert [m.message_id for m in result.messages] == ["m-sent"]
+        kwargs = mock.users().messages().list.call_args.kwargs
+        assert kwargs["q"] == expected_q
+        assert kwargs["maxResults"] == 7
 
 
 class TestGmailGetThread(TestTemplate):
