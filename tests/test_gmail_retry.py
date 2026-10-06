@@ -15,7 +15,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from googleapiclient.http import HttpMockSequence
 
-from services import _gmail_retry, gmail_svc
+from services import _gmail_retry, gmail_svc, upstream_write_scope
 from services._gmail_retry import GmailRateLimitedError, RateLimitRetryingRequest
 from tests.test_template import TestTemplate
 
@@ -141,8 +141,9 @@ class TestGmailRateLimitRetry(TestTemplate):
             ]
         )
         _list(client)
-        # Second-resolution date, so allow a second either side of 10 s.
-        assert 9.0 <= sleeps.call_args.args[0] <= 11.0 * 1.25
+        # The date drops sub-seconds and setup time elapses, so only bound it
+        # well clear of the first backoff step (at most 1.25 s).
+        assert 5.0 < sleeps.call_args.args[0] <= 10.0 * 1.25
 
     def test_unusable_retry_after_falls_back_to_backoff(self, sleeps):
         # "nan" parses as a float; time.sleep(nan) would raise mid-retry.
@@ -150,12 +151,21 @@ class TestGmailRateLimitRetry(TestTemplate):
             [
                 ({"status": "429", "retry-after": "nan"}, "{}"),
                 ({"status": "429", "retry-after": "soon"}, "{}"),
+                # Out-of-range date: parsedate_to_datetime raises OverflowError.
+                (
+                    {
+                        "status": "429",
+                        "retry-after": "Mon, 01 Jan 99999999999999999999 00:00:00 GMT",
+                    },
+                    "{}",
+                ),
                 _OK,
             ]
         )
         _list(client)
         delays = [c.args[0] for c in sleeps.call_args_list]
-        assert all(math.isfinite(d) and 0 < d <= 2.5 for d in delays)
+        assert len(delays) == 3
+        assert all(math.isfinite(d) and 0 < d <= 5.0 for d in delays)
 
     def test_backoff_grows(self, sleeps):
         client = _client([_QUOTA_403] * 3 + [_OK])
@@ -183,3 +193,21 @@ class TestGmailRateLimitRetry(TestTemplate):
             gmail_svc._get_gmail_client("alice")
 
         assert fake_build.call_args.kwargs["requestBuilder"] is RateLimitRetryingRequest
+
+    def test_rate_limit_reports_whether_a_write_already_landed(self, sleeps):
+        # A draft created, then its re-read refused: the write may stand, so
+        # the error must not let idempotency treat the call as never run.
+        created = ({"status": "200"}, json.dumps({"id": "d1"}))
+        refused = [_QUOTA_403] * (_gmail_retry._MAX_RETRIES + 1)
+        client = _client([created, *refused])
+        with upstream_write_scope():
+            client.users().drafts().create(userId="me", body={}).execute()
+            with pytest.raises(GmailRateLimitedError) as info:
+                client.users().drafts().get(userId="me", id="d1").execute()
+        assert info.value.side_effects_possible is True
+
+    def test_rate_limit_before_any_write_reports_none(self, sleeps):
+        client = _client([_QUOTA_403] * (_gmail_retry._MAX_RETRIES + 1))
+        with upstream_write_scope(), pytest.raises(GmailRateLimitedError) as info:
+            client.users().drafts().create(userId="me", body={}).execute()
+        assert info.value.side_effects_possible is False

@@ -32,7 +32,7 @@ from googleapiclient.errors import HttpError
 from googleapiclient.http import HttpRequest
 from loguru import logger as log
 
-from services import RetryLaterError
+from services import RetryLaterError, record_upstream_write, upstream_write_done
 
 _RATE_LIMIT_REASONS = frozenset({"rateLimitExceeded", "userRateLimitExceeded"})
 # Delays double from the base: 1 + 2 + 4 + 8 s, about 15 s before giving up,
@@ -51,11 +51,12 @@ class GmailRateLimitedError(RetryLaterError):
     server's Google Cloud project).
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, side_effects_possible: bool) -> None:
         super().__init__(
             "Gmail's API rate limit for this account was hit and did not clear "
             "after retrying. Wait about a minute, then retry this tool. Avoid "
-            "issuing many Gmail tool calls at once."
+            "issuing many Gmail tool calls at once.",
+            side_effects_possible=side_effects_possible,
         )
 
 
@@ -94,7 +95,7 @@ def _retry_after_s(value: str | None) -> float | None:
     except ValueError:
         try:
             when = parsedate_to_datetime(value)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             return None
         if when.tzinfo is None:
             when = when.replace(tzinfo=UTC)
@@ -119,12 +120,14 @@ class RateLimitRetryingRequest(HttpRequest):
     def execute(self, http: Any = None, num_retries: int = 0) -> Any:
         for attempt in range(_MAX_RETRIES + 1):
             try:
-                return super().execute(http=http, num_retries=num_retries)
+                result = super().execute(http=http, num_retries=num_retries)
             except HttpError as exc:
                 if not is_rate_limited(exc):
                     raise
                 if attempt == _MAX_RETRIES:
-                    raise GmailRateLimitedError() from exc
+                    raise GmailRateLimitedError(
+                        side_effects_possible=upstream_write_done()
+                    ) from exc
                 delay = _retry_delay(exc, attempt)
                 log.warning(
                     "Gmail rate limit on {} {}; retry {}/{} in {:.1f}s",
@@ -135,4 +138,8 @@ class RateLimitRetryingRequest(HttpRequest):
                     delay,
                 )
                 time.sleep(delay)
+                continue
+            if self.method != "GET":
+                record_upstream_write()
+            return result
         raise AssertionError("unreachable")  # pragma: no cover

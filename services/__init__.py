@@ -2,7 +2,9 @@
 
 import importlib
 import pkgutil
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from typing import Any
@@ -57,7 +59,41 @@ class RetryLaterError(Exception):
     Transport-agnostic contract: re-running the same call immediately would
     only be refused again, so transports surface the message (which must say
     when to retry) instead of falling back to another attempt.
+
+    ``side_effects_possible`` says whether an earlier upstream write in the same
+    service call may already have landed (e.g. a draft created, then the
+    re-read refused). Idempotency keeps the key claimed when it is, so a
+    same-key retry cannot repeat the write. Defaults to the safe answer.
     """
+
+    def __init__(self, message: str, *, side_effects_possible: bool = True) -> None:
+        super().__init__(message)
+        self.side_effects_possible = side_effects_possible
+
+
+# Whether an upstream write succeeded in the current context. Integrations set
+# it on each successful write; the idempotency layer scopes it to one call.
+_upstream_write_done: ContextVar[bool] = ContextVar(
+    "upstream_write_done", default=False
+)
+
+
+def record_upstream_write() -> None:
+    _upstream_write_done.set(True)
+
+
+def upstream_write_done() -> bool:
+    return _upstream_write_done.get()
+
+
+@contextmanager
+def upstream_write_scope() -> Iterator[None]:
+    """Track upstream writes from a clean slate for the duration of the block."""
+    token = _upstream_write_done.set(False)
+    try:
+        yield
+    finally:
+        _upstream_write_done.reset(token)
 
 
 _registry: list[ServiceEntry] = []
