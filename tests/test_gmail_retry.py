@@ -5,6 +5,9 @@ so the request builder is exercised the way production wires it.
 """
 
 import json
+import math
+from datetime import UTC, datetime, timedelta
+from email.utils import format_datetime
 from unittest.mock import patch
 
 import pytest
@@ -117,10 +120,42 @@ class TestGmailRateLimitRetry(TestTemplate):
             ]
         )
         _list(client)
-        assert [c.args[0] for c in sleeps.call_args_list] == [
-            3.0,
-            _gmail_retry._MAX_RETRY_AFTER_S,
-        ]
+        first, second = (c.args[0] for c in sleeps.call_args_list)
+        # Jitter only stretches the wait: never earlier than Gmail asked.
+        assert 3.0 <= first <= 3.0 * 1.25
+        cap = _gmail_retry._MAX_RETRY_AFTER_S
+        assert cap <= second <= cap * 1.25
+
+    def test_retry_after_http_date_is_honored(self, sleeps):
+        when = datetime.now(UTC) + timedelta(seconds=10)
+        client = _client(
+            [
+                (
+                    {
+                        "status": "429",
+                        "retry-after": format_datetime(when, usegmt=True),
+                    },
+                    "{}",
+                ),
+                _OK,
+            ]
+        )
+        _list(client)
+        # Second-resolution date, so allow a second either side of 10 s.
+        assert 9.0 <= sleeps.call_args.args[0] <= 11.0 * 1.25
+
+    def test_unusable_retry_after_falls_back_to_backoff(self, sleeps):
+        # "nan" parses as a float; time.sleep(nan) would raise mid-retry.
+        client = _client(
+            [
+                ({"status": "429", "retry-after": "nan"}, "{}"),
+                ({"status": "429", "retry-after": "soon"}, "{}"),
+                _OK,
+            ]
+        )
+        _list(client)
+        delays = [c.args[0] for c in sleeps.call_args_list]
+        assert all(math.isfinite(d) and 0 < d <= 2.5 for d in delays)
 
     def test_backoff_grows(self, sleeps):
         client = _client([_QUOTA_403] * 3 + [_OK])

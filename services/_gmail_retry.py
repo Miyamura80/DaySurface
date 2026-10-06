@@ -21,8 +21,11 @@ stale rather than fresh.
 from __future__ import annotations
 
 import json
+import math
 import random
 import time
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 from typing import Any
 
 from googleapiclient.errors import HttpError
@@ -32,8 +35,9 @@ from loguru import logger as log
 from services import RetryLaterError
 
 _RATE_LIMIT_REASONS = frozenset({"rateLimitExceeded", "userRateLimitExceeded"})
-# Delays double from the base: 1 + 2 + 4 + 8 s, about 15 s worst case before
-# giving up, enough for a per-minute window to start draining.
+# Delays double from the base: 1 + 2 + 4 + 8 s, about 15 s before giving up,
+# enough for a per-minute window to start draining. A Retry-After from Gmail
+# replaces a step, so with the cap the worst case is about 4 x 25 s.
 _MAX_RETRIES = 4
 _BASE_DELAY_S = 1.0
 _MAX_RETRY_AFTER_S = 20.0
@@ -81,14 +85,31 @@ def is_rate_limited(exc: HttpError) -> bool:
     return status == 403 and bool(_error_reasons(exc.content) & _RATE_LIMIT_REASONS)
 
 
-def _retry_delay(exc: HttpError, attempt: int) -> float:
-    retry_after = exc.resp.get("retry-after")
-    if retry_after is not None:
+def _retry_after_s(value: str | None) -> float | None:
+    """Seconds a ``Retry-After`` header asks for (delta-seconds or HTTP-date)."""
+    if value is None:
+        return None
+    try:
+        seconds = float(value)
+    except ValueError:
         try:
-            return min(max(float(retry_after), 0.0), _MAX_RETRY_AFTER_S)
-        except ValueError:
-            pass
-    # Jittered so concurrent calls for one user don't retry in lockstep.
+            when = parsedate_to_datetime(value)
+        except (TypeError, ValueError):
+            return None
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=UTC)
+        seconds = (when - datetime.now(UTC)).total_seconds()
+    if not math.isfinite(seconds):
+        return None
+    return min(max(seconds, 0.0), _MAX_RETRY_AFTER_S)
+
+
+def _retry_delay(exc: HttpError, attempt: int) -> float:
+    retry_after = _retry_after_s(exc.resp.get("retry-after"))
+    # Jittered so concurrent calls for one user don't retry in lockstep. A
+    # Retry-After only ever gets stretched, never retried earlier than asked.
+    if retry_after is not None:
+        return retry_after * random.uniform(1.0, 1.25)  # noqa: S311 - jitter, not crypto
     return _BASE_DELAY_S * (2**attempt) * random.uniform(0.75, 1.25)  # noqa: S311 - jitter, not crypto
 
 
