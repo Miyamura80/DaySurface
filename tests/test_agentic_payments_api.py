@@ -6,6 +6,7 @@ codes, missing error details, and broken request validation.
 
 from unittest.mock import AsyncMock, MagicMock
 
+from fastapi.routing import iter_route_contexts
 from fastapi.testclient import TestClient
 
 from api_server.auth.unified_auth import AuthenticatedUser, get_authenticated_user
@@ -300,7 +301,7 @@ class TestAgenticPaymentsAPI(TestTemplate):
     # --- Route registration ---
 
     def test_agentic_payment_routes_registered(self):
-        routes = [r.path for r in app.routes if hasattr(r, "path")]
+        routes = [r.path for r in iter_route_contexts(app.routes)]
         assert "/api/v1/agentic-payments/status" in routes
         assert "/api/v1/agentic-payments/requirements" in routes
         assert "/api/v1/agentic-payments/verify" in routes

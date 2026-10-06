@@ -13,6 +13,10 @@ from api_server.server import app
 from tests.test_template import TestTemplate
 
 
+def _vary(resp) -> set[str]:
+    return {v.strip() for v in resp.headers.get("vary", "").split(",")}
+
+
 class TestRootIndex(TestTemplate):
     def _client(self) -> TestClient:
         # No lifespan needed: neither handler touches the MCP session manager.
@@ -47,9 +51,10 @@ class TestRootIndex(TestTemplate):
         # The host sits behind a CDN; without Vary the first cached response is
         # served to everyone, handing agents HTML or browsers JSON.
         client = self._client()
-        assert client.get("/").headers.get("vary") == "Accept"
+        # CORSMiddleware also appends Origin, so check membership, not equality.
+        assert "Accept" in _vary(client.get("/"))
         html_resp = client.get("/", headers={"accept": "text/html"})
-        assert html_resp.headers.get("vary") == "Accept"
+        assert "Accept" in _vary(html_resp)
 
     def test_every_advertised_endpoint_resolves(self):
         # An endpoint map that points at a 404 is worse than no map: it sends an

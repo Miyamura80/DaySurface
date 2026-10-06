@@ -51,7 +51,7 @@
 - `outputSchema` auto-generated from `output_model` for all tools (headless and enhanced)
 - Wrapper returns Pydantic model directly (not dict). Try/except removed - exceptions propagate; FastMCP turns them into `isError: true` text responses
 - Resources & Prompts: out of scope
-- SDK pin: `mcp[cli]>=1.27.0,<2.0.0`
+- SDK pin: `mcp[cli]>=1.28.1,<2.0.0`
 - Testing initial PR: pytest + vitest only
 - Testing follow-up: Playwright via Sunpeak (issue #37), then Desktest E2E
 
