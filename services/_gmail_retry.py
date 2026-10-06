@@ -29,6 +29,8 @@ from googleapiclient.errors import HttpError
 from googleapiclient.http import HttpRequest
 from loguru import logger as log
 
+from services import RetryLaterError
+
 _RATE_LIMIT_REASONS = frozenset({"rateLimitExceeded", "userRateLimitExceeded"})
 # Delays double from the base: 1 + 2 + 4 + 8 s, about 15 s worst case before
 # giving up, enough for a per-minute window to start draining.
@@ -37,7 +39,7 @@ _BASE_DELAY_S = 1.0
 _MAX_RETRY_AFTER_S = 20.0
 
 
-class GmailRateLimitedError(RuntimeError):
+class GmailRateLimitedError(RetryLaterError):
     """Gmail kept rate-limiting after the retries ran out.
 
     Over MCP the message is the ``isError`` tool-result text, so it says what

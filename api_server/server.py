@@ -15,6 +15,7 @@ from api_server.middleware.error_handler import (
     ErrorHandlerMiddleware,
     RequestIdMiddleware,
     attachment_too_large_handler,
+    retry_later_handler,
 )
 from api_server.middleware.mcp_auth import MCPAuthMiddleware
 from api_server.middleware.rate_limit import RateLimitMiddleware
@@ -36,6 +37,7 @@ from api_server.runner import runner_lifespan
 from common import global_config
 from mcp_server.server import lifespan as mcp_lifespan
 from mcp_server.server import mount_on as mount_mcp_server
+from services import RetryLaterError
 from services.gmail_svc import GmailAttachmentTooLargeError
 
 try:
@@ -165,6 +167,8 @@ app.add_middleware(
 # Map the oversized-attachment domain error to 413 so an over-cap
 # gmail_get_attachment request is a client error, not a generic 500.
 app.add_exception_handler(GmailAttachmentTooLargeError, attachment_too_large_handler)
+# An upstream rate limit that outlasted the retries is a back-off, not a 500.
+app.add_exception_handler(RetryLaterError, retry_later_handler)
 
 # --- Routes ---------------------------------------------------------------
 

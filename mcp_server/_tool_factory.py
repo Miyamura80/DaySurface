@@ -24,7 +24,7 @@ from pydantic import BaseModel
 from mcp_server.enhancers import EnhancerEntry, get_enhancer
 from mcp_server.enhancers.base import EnhancedTool, build_app_meta
 from mcp_server.url_elicitation import reraise_with_elicitation
-from services import ConnectRequiredError, ServiceEntry
+from services import ConnectRequiredError, RetryLaterError, ServiceEntry
 from src.utils.current_user import current_user
 
 
@@ -223,6 +223,10 @@ def _make_enhanced_tool(
             # would only raise it again. MCP-only affordance: upgrade to the
             # SEP-1036 URL-elicitation error (-32042) when possible.
             reraise_with_elicitation(ctx.session, exc)
+        except RetryLaterError:
+            # Also not a crash: the upstream refused the service call, and the
+            # headless fallback would repeat it, retries and all.
+            raise
         except Exception as enhancer_exc:  # noqa: BLE001
             # Enhancer failures of any kind must fall back to the pure service
             # so MCP clients still get a structured result on the headless path.

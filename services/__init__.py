@@ -51,6 +51,15 @@ class ConnectRequiredError(Exception):
         raise NotImplementedError
 
 
+class RetryLaterError(Exception):
+    """An upstream refused the call for now (e.g. a rate limit) after retries.
+
+    Transport-agnostic contract: re-running the same call immediately would
+    only be refused again, so transports surface the message (which must say
+    when to retry) instead of falling back to another attempt.
+    """
+
+
 _registry: list[ServiceEntry] = []
 _discovered: bool = False
 
