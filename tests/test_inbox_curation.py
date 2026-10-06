@@ -58,12 +58,12 @@ from services.curation_status import (
     ledger_status_for,
     newest_incoming_at,
 )
-from services.gmail_drafts_svc import GmailReplyInput, gmail_reply_to_thread
 from services.gmail_messages_svc import (
     GmailThreadModifyInput,
     gmail_archive_thread,
     gmail_mark_thread_done,
 )
+from services.gmail_reply_svc import GmailReplyInput, gmail_reply_to_thread
 from services.gmail_svc import gmail_disconnect
 from services.inbox_curation_svc import (
     _changed_thread_ids,
@@ -771,13 +771,13 @@ class TestActionsUpdateLedger(TestTemplate):
             }
             svc.users().drafts().create().execute.return_value = {"id": "draft-9"}
             with (
-                patch("services.gmail_drafts_svc._get_gmail_client", return_value=svc),
+                patch("services.gmail_reply_svc._get_gmail_client", return_value=svc),
                 patch(
-                    "services.gmail_drafts_svc._fetch_draft_model",
+                    "services.gmail_reply_svc._fetch_draft_model",
                     return_value=MagicMock(),
                 ),
                 patch(
-                    "services.gmail_drafts_svc._account_email", return_value="me@x.com"
+                    "services.gmail_reply_svc._account_email", return_value="me@x.com"
                 ),
             ):
                 gmail_reply_to_thread(

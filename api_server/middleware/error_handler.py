@@ -229,3 +229,14 @@ async def retry_later_handler(request: Request, exc: Exception) -> Response:
     response = _build_error_response(429, str(exc), request_id)
     response.headers["Retry-After"] = "60"
     return response
+
+
+async def client_refusal_handler(request: Request, exc: Exception) -> Response:
+    """Map ``ClientRefusalError`` to its own status (404 draft gone, 409 duplicate).
+
+    These are deliberate refusals the caller can act on, so they answer with
+    their message and a 4xx rather than the generic 500.
+    """
+    request_id = getattr(request.state, "request_id", uuid.uuid4().hex)
+    status = getattr(exc, "http_status", 400)
+    return _build_error_response(status, str(exc), request_id)

@@ -291,8 +291,7 @@ class GmailReplyInput(BaseModel):
     Recipients are caller-controlled: ``to``, ``cc``, and ``bcc`` each take a
     comma-separated address list, used verbatim (NOT de-duplicated against the
     thread's participants). Only ``to`` has a default, derived from the thread
-    (the other party, never the account owner). ``follow_up`` allows a reply
-    when the user's own reply is already the newest message.
+    (the other party, never the account owner).
     """
 
     user_id: str = ""
@@ -303,7 +302,9 @@ class GmailReplyInput(BaseModel):
     cc: str | None = None
     bcc: str | None = None
     attachments: list[AttachmentInput] = Field(default_factory=list)
-    follow_up: bool = False
+    follow_up: bool = Field(
+        False, description="Set true only to follow up on a reply the user just sent."
+    )
 
 
 class GmailSendInput(BaseModel):

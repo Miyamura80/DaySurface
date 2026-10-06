@@ -135,7 +135,7 @@ class TestMCPServer(TestTemplate):
         # validating the tool's argument model with attachments omitted must
         # yield a real empty list, and building the service input from it must
         # not raise.
-        from services.gmail_drafts_svc import GmailReplyInput  # noqa: PLC0415
+        from models.gmail import GmailReplyInput  # noqa: PLC0415
 
         arg_model = mcp._tool_manager._tools[
             "gmail_reply_to_thread"

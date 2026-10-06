@@ -14,9 +14,9 @@ from mcp_server.enhancers.base import EnhancedTool
 from models.gmail import (
     GmailComposeInput,
     GmailDraft,
+    GmailReplyInput,
     GmailUpdateDraftInput,
 )
-from services.gmail_drafts_svc import GmailReplyInput
 
 INBOX_URI = "ui://daysurface/gmail_inbox"
 

@@ -40,53 +40,17 @@ from services.gmail_curate_svc import (
     _build_label_lookups,
     _thread_has_noise_labels,
 )
+from services.gmail_message_roles import (
+    EXCLUDED_CATEGORY_IDS,
+    INBOX_LABEL_ID,
+    is_incoming,
+    may_be_incoming,
+)
 from services.gmail_messages_svc import _find_mcp_done_label, _internal_date_to_dt
 
 # Pages one history probe may read (500 records each). A delta past that is
 # too big to rule anything out cheaply, so the search moves to a newer start.
 HISTORY_PROBE_PAGES = 5
-
-_INBOX_LABEL_ID = "INBOX"
-_SENT_LABEL_ID = "SENT"
-_DRAFT_LABEL_ID = "DRAFT"
-# Category tabs ``build_curate_query()`` excludes with ``-category:...``.
-_EXCLUDED_CATEGORY_IDS = frozenset(
-    {"CATEGORY_UPDATES", "CATEGORY_PROMOTIONS", "CATEGORY_SOCIAL", "CATEGORY_FORUMS"}
-)
-
-
-def _may_be_incoming(msg: dict[str, Any]) -> bool:
-    """Not a draft, and not the user's own outgoing mail.
-
-    On its own this judges history records: a message can leave a category
-    tab after it arrives, so the labels it was added with can't rule it out.
-    """
-    labels = set(msg.get("labelIds") or [])
-    if _DRAFT_LABEL_ID in labels:
-        return False
-    return _SENT_LABEL_ID not in labels or _INBOX_LABEL_ID in labels
-
-
-def is_incoming(msg: dict[str, Any]) -> bool:
-    """A message someone else sent, or one the user sent to themselves."""
-    # Category-tab mail is outside triage (see is_triageable), so it can't
-    # make a verdict stale.
-    labels = set(msg.get("labelIds") or [])
-    return _may_be_incoming(msg) and not labels & _EXCLUDED_CATEGORY_IDS
-
-
-def own_reply(messages: list[dict[str, Any]]) -> dict[str, Any] | None:
-    """The thread's newest message, if it is the user's answer to incoming mail.
-
-    ``messages`` is the thread oldest first; drafts are skipped.
-    """
-    sent = [m for m in messages if _DRAFT_LABEL_ID not in (m.get("labelIds") or [])]
-    if not sent:
-        return None
-    *earlier, newest = sent
-    if _may_be_incoming(newest) or not any(map(_may_be_incoming, earlier)):
-        return None
-    return newest
 
 
 def newest_incoming_at(messages: list[dict[str, Any]]) -> datetime | None:
@@ -115,9 +79,9 @@ def is_triageable(
     ``gmail_curate_inbox`` does.
     """
     in_open_inbox = any(
-        _INBOX_LABEL_ID in (labels := set(msg.get("labelIds") or []))
+        INBOX_LABEL_ID in (labels := set(msg.get("labelIds") or []))
         and (done_label_id is None or done_label_id not in labels)
-        and not labels & _EXCLUDED_CATEGORY_IDS
+        and not labels & EXCLUDED_CATEGORY_IDS
         for msg in messages
     )
     return in_open_inbox and not _thread_has_noise_labels(messages, label_id_to_name)
@@ -182,7 +146,7 @@ def _added_since(svc: Any, start: int, budget: QuotaBudget) -> dict[str, int]:
             for added in record.get("messagesAdded") or []:
                 msg = added.get("message") or {}
                 tid = msg.get("threadId")
-                if tid and _may_be_incoming(msg):
+                if tid and may_be_incoming(msg):
                     newest[tid] = max(newest.get(tid, at), at)
     return newest
 

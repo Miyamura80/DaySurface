@@ -116,11 +116,16 @@ forbidden_modules =
     services.gmail_svc
     services.gmail_messages_svc
     services.gmail_drafts_svc
+    services.gmail_reply_svc
     services.gmail_draft_helpers
+    services.gmail_message_roles
     services.gmail_attachments_svc
     services.gmail_curate_svc
     services.gmail_watch_svc
     services._gmail_fake_backend
+    services._gmail_history
+    services._gmail_quota
+    services._gmail_retry
     models.gmail
     models.gmail_watch
 

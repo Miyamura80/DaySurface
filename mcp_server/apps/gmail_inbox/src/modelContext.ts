@@ -4,7 +4,8 @@
 // this the agent keeps offering to edit (or resend) a draft that is already
 // gone. `ui/update-model-context` reaches the model on its next turn without
 // starting one. The host keeps only the latest update, so each call re-sends a
-// short log of recent actions rather than just the newest.
+// short log of recent actions rather than just the newest. The log is per App
+// instance, i.e. per rendered iframe: each view reports what happened in it.
 import type { ComposerDraft, McpAppLike } from "./types";
 
 export type ComposerAction = {
@@ -20,7 +21,7 @@ export type ComposerAction = {
 const MAX_ACTIONS = 5;
 const logs = new WeakMap<McpAppLike, ComposerAction[]>();
 
-function describe(a: ComposerAction): string {
+function formatAction(a: ComposerAction): string {
   const what = a.kind === "sent"
     ? `SENT draft ${a.draft_id} as message ${a.message_id ?? "?"}`
     : `DISCARDED draft ${a.draft_id}`;
@@ -33,7 +34,7 @@ function describe(a: ComposerAction): string {
 export function composerContextText(actions: ComposerAction[]): string {
   return [
     "The user did this themselves in the DaySurface email composer (oldest first):",
-    ...actions.map(describe),
+    ...actions.map(formatAction),
     "Those drafts no longer exist. Do not edit, resend, or recreate them, and don't offer to.",
   ].join("\n");
 }
@@ -43,14 +44,15 @@ export async function reportComposerAction(
   app: McpAppLike,
   kind: ComposerAction["kind"],
   draft: ComposerDraft,
-  message_id?: string,
+  sent?: { message_id?: string; thread_id?: string },
 ): Promise<void> {
   if (!app.updateModelContext || !app.getHostCapabilities?.()?.updateModelContext) return;
   const action: ComposerAction = {
     kind,
     draft_id: draft.draft_id,
-    thread_id: draft.thread_id,
-    message_id,
+    // A new (non-reply) draft only learns its thread once Gmail sends it.
+    thread_id: sent?.thread_id || draft.thread_id,
+    message_id: sent?.message_id,
     to: draft.to,
     subject: draft.subject,
     at: new Date().toISOString(),

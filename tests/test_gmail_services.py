@@ -12,20 +12,14 @@ from __future__ import annotations
 import base64
 import json
 import time
-from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from email import message_from_bytes
 from unittest.mock import MagicMock, patch
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from common import global_config
 from common.token_encryption import PlaintextEncryption
-from db import engine as db_engine
-from db.base import Base
 from db.models.google_tokens import GoogleToken
 from mcp_server.app_tools.gmail_composer import (
     _coerce_attachments,
@@ -58,12 +52,10 @@ from services.gmail_attachments_svc import (
 from services.gmail_curate_svc import gmail_curate_inbox
 from services.gmail_draft_helpers import draft_thread_map, find_draft_id_for_thread
 from services.gmail_drafts_svc import (
-    GmailReplyInput,
     gmail_compose,
     gmail_discard_draft,
     gmail_get_draft,
     gmail_list_drafts,
-    gmail_reply_to_thread,
     gmail_send,
     gmail_update_draft,
 )
@@ -76,6 +68,7 @@ from services.gmail_messages_svc import (
     gmail_list_inbox,
     gmail_mark_thread_read,
 )
+from services.gmail_reply_svc import GmailReplyInput, gmail_reply_to_thread
 from services.gmail_svc import (
     GmailAttachmentTooLargeError,
     GmailNotConnectedError,
@@ -83,31 +76,41 @@ from services.gmail_svc import (
     _get_gmail_client,
     _parse_message_resource,
 )
+from tests.gmail_fakes import (
+    b64url as _b64url,
+)
+from tests.gmail_fakes import (
+    draft_resource as _draft_resource,
+)
+from tests.gmail_fakes import (
+    header_list as _headers,
+)
+from tests.gmail_fakes import (
+    make_mock_service as _make_mock_service,
+)
+from tests.gmail_fakes import (
+    patch_client as _patch_client,
+)
+from tests.gmail_fakes import (
+    patch_db as _patch_db,
+)
+from tests.gmail_fakes import (
+    plain_message as _plain_message,
+)
+from tests.gmail_fakes import (
+    seed_token as _seed_token,
+)
+from tests.gmail_fakes import (
+    start_patches as _apply,
+)
+from tests.gmail_fakes import (
+    stop_patches as _stop,
+)
 from tests.test_template import TestTemplate
 
 # ---------------------------------------------------------------------------
 # DB fixture (same pattern as tests/test_google_oauth.py)
 # ---------------------------------------------------------------------------
-
-
-@contextmanager
-def _patch_db():
-    orig_engine = db_engine._engine
-    orig_session = db_engine._SessionLocal
-    eng = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(eng)
-    session_factory = sessionmaker(bind=eng, autoflush=False, expire_on_commit=False)
-    db_engine._engine = eng
-    db_engine._SessionLocal = session_factory
-    try:
-        yield session_factory
-    finally:
-        db_engine._engine = orig_engine
-        db_engine._SessionLocal = orig_session
 
 
 @pytest.fixture(autouse=True)
@@ -121,78 +124,9 @@ def _clean_client_cache():
     gmail_svc._client_cache.clear()
 
 
-def _seed_token(factory, user_id: str = "alice") -> None:
-    s = factory()
-    s.add(
-        GoogleToken(
-            user_id=user_id,
-            email=f"{user_id}@example.com",
-            refresh_token_enc=b"RT",
-            key_id="plaintext",
-            scopes=["openid", "email"],
-        )
-    )
-    s.commit()
-    s.close()
-
-
 # ---------------------------------------------------------------------------
 # Helpers for building fake Gmail API payloads
 # ---------------------------------------------------------------------------
-
-
-def _b64url(s: str) -> str:
-    return base64.urlsafe_b64encode(s.encode("utf-8")).decode("ascii")
-
-
-def _headers(d: dict[str, str]) -> list[dict[str, str]]:
-    return [{"name": k, "value": v} for k, v in d.items()]
-
-
-def _plain_message(
-    *,
-    message_id: str = "m-1",
-    thread_id: str = "t-1",
-    headers: dict[str, str] | None = None,
-    body: str = "hello world",
-    snippet: str = "hello world",
-    internal_date_ms: int | None = None,
-    label_ids: list[str] | None = None,
-) -> dict:
-    return {
-        "id": message_id,
-        "threadId": thread_id,
-        "snippet": snippet,
-        "internalDate": str(internal_date_ms) if internal_date_ms else "1700000000000",
-        "labelIds": label_ids or [],
-        "payload": {
-            "mimeType": "text/plain",
-            "headers": _headers(
-                headers or {"From": "a@x", "To": "b@y", "Subject": "hi"}
-            ),
-            "body": {"data": _b64url(body), "size": len(body)},
-        },
-    }
-
-
-def _draft_resource(
-    *,
-    draft_id: str = "d-1",
-    to: str = "b@y",
-    subject: str = "hi",
-    body: str = "hello world",
-    thread_id: str = "t-1",
-) -> dict:
-    return {
-        "id": draft_id,
-        "message": _plain_message(
-            message_id=f"m-{draft_id}",
-            thread_id=thread_id,
-            headers={"To": to, "Subject": subject},
-            body=body,
-            snippet=body[:50],
-        ),
-    }
 
 
 def _draft_resource_with_attachment(
@@ -255,14 +189,6 @@ def _last_update_raw(mock: MagicMock) -> str:
     update_calls = [c for c in mock.users().drafts().update.call_args_list if c.kwargs]
     assert update_calls, "drafts().update() was not called with kwargs"
     return update_calls[-1].kwargs["body"]["message"]["raw"]
-
-
-def _make_mock_service() -> MagicMock:
-    """A MagicMock that supports the chained ``.users().drafts().get().execute()`` style."""
-    mock = MagicMock()
-    mock.users().labels().list().execute.return_value = {"labels": []}
-    mock.users().drafts().list().execute.return_value = {"drafts": []}
-    return mock
 
 
 # ---------------------------------------------------------------------------
@@ -359,28 +285,6 @@ class TestParseMessageResource(TestTemplate):
 # ---------------------------------------------------------------------------
 # Service tests (mock _get_gmail_client)
 # ---------------------------------------------------------------------------
-
-
-def _patch_client(mock_svc: MagicMock):
-    # Patch every import site so each service module picks it up.
-    return [
-        patch("services.gmail_svc._get_gmail_client", return_value=mock_svc),
-        patch("services.gmail_drafts_svc._get_gmail_client", return_value=mock_svc),
-        patch("services.gmail_messages_svc._get_gmail_client", return_value=mock_svc),
-        patch("services.gmail_curate_svc._get_gmail_client", return_value=mock_svc),
-        patch(
-            "services.gmail_attachments_svc._get_gmail_client", return_value=mock_svc
-        ),
-    ]
-
-
-def _apply(patches):
-    return [p.start() for p in patches]
-
-
-def _stop(patches):
-    for p in patches:
-        p.stop()
 
 
 class TestGmailListDrafts(TestTemplate):

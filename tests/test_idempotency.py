@@ -20,7 +20,14 @@ from api_server.idempotency import (
 )
 from db.base import Base
 from db.models.idempotency_keys import IdempotencyRecord
-from services import ServiceEntry, discover_services, get_registry, service
+from services import (
+    ServiceEntry,
+    discover_services,
+    get_registry,
+    record_upstream_write,
+    service,
+)
+from services.gmail_draft_helpers import DraftGoneError
 from tests.test_template import TestTemplate
 
 # Every registered service that mutates state (create/charge/send/delete/
@@ -243,6 +250,34 @@ class TestExecuteIdempotent(TestTemplate):
         result = self._run("k1", {"a": 1}, counter)
         assert result.value == 1
         assert counter["n"] == 1
+
+    def _refuse(self, key, *, after_write: bool):
+        def _compute_refuse():
+            if after_write:
+                record_upstream_write()
+            raise DraftGoneError("d")
+
+        with pytest.raises(DraftGoneError):
+            execute_idempotent(
+                request=_request(key),
+                user_id="u1",
+                route="demo",
+                request_payload={"a": 1},
+                compute=_compute_refuse,
+            )
+
+    def test_client_refusal_releases_claim(self):
+        # A refusal such as "draft not found" happens before any write, so a
+        # same-key retry runs again instead of being wedged on 409.
+        self._refuse("k1", after_write=False)
+        counter = {"n": 0}
+        assert self._run("k1", {"a": 1}, counter).value == 1
+
+    def test_client_refusal_after_a_write_keeps_claim(self):
+        self._refuse("k1", after_write=True)
+        with pytest.raises(HTTPException) as retry:
+            self._run("k1", {"a": 1}, {"n": 0})
+        assert retry.value.status_code == 409
 
     def test_ambiguous_failure_keeps_claim(self):
         # A 5xx / ambiguous failure may have committed the side effect remotely,

@@ -35,6 +35,7 @@ from googleapiclient.errors import HttpError
 from loguru import logger as log
 
 from models.gmail import (
+    AttachmentInput,
     AttachmentReference,
     AttachmentUpload,
     GmailDraft,
@@ -43,22 +44,26 @@ from models.gmail import (
     InlineImageUpload,
     _UnsetType,
 )
+from services import ClientRefusalError
 from services.gmail_svc import _build_raw_message, _parse_message_resource
 
 
-class DraftGoneError(ValueError):
-    """The draft no longer exists in Gmail (HTTP 404).
+class DraftGoneError(ClientRefusalError):
+    """No draft with this id in Gmail (HTTP 404).
 
-    Almost always because the user sent or discarded it from the composer.
-    The message is the tool error the model reads, so it says what to do next.
+    Usually the user sent or discarded it from the composer, whose tools the
+    model never sees; but a wrong id reads the same, so the message leaves
+    both open and says how to tell them apart.
     """
+
+    http_status = 404
 
     def __init__(self, draft_id: str) -> None:
         super().__init__(
-            f"Draft {draft_id!r} no longer exists: the user has most likely "
-            "already sent or discarded it from the composer. Do not edit, "
-            "resend, or recreate it. To see what was sent, read the thread "
-            "with gmail_get_thread."
+            f"Draft {draft_id!r} was not found. Either the user already sent or "
+            "discarded it from the composer, or the id is wrong. Check "
+            "gmail_list_drafts or the thread (gmail_get_thread) before drafting "
+            "again."
         )
 
 
@@ -70,6 +75,27 @@ def execute_on_draft(request: Any, draft_id: str) -> Any:
         if exc.resp.status == 404:
             raise DraftGoneError(draft_id) from exc
         raise
+
+
+def _get_draft_resource(svc: Any, draft_id: str) -> dict[str, Any]:
+    """``drafts.get(format=full)`` for ``draft_id``; ``DraftGoneError`` if missing."""
+    return execute_on_draft(
+        svc.users().drafts().get(userId="me", id=draft_id, format="full"), draft_id
+    )
+
+
+def _inputs_to_uploads(
+    attachments: list[AttachmentInput] | None,
+) -> list[AttachmentUpload] | None:
+    """Normalize caller-supplied ``AttachmentInput``s to the upload shape."""
+    if not attachments:
+        return None
+    return [
+        AttachmentUpload(
+            filename=a.filename, mime_type=a.mime_type, data_base64=a.data_base64
+        )
+        for a in attachments
+    ]
 
 
 def _iter_drafts(svc: Any) -> Iterator[tuple[str, str]]:
@@ -172,9 +198,7 @@ def _fetch_draft_model(svc: Any, draft_id: str) -> GmailDraft:
     recipients, subject, body, and current attachment ids that every draft
     mutation's response contract promises.
     """
-    full = execute_on_draft(
-        svc.users().drafts().get(userId="me", id=draft_id, format="full"), draft_id
-    )
+    full = _get_draft_resource(svc, draft_id)
     return _draft_resource_to_model(full)
 
 

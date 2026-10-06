@@ -15,11 +15,15 @@ const draft: ComposerDraft = {
 function makeApp(caps: { updateModelContext?: unknown } | undefined = { updateModelContext: {} }) {
   const updateModelContext = vi.fn(async () => ({}));
   const app: McpAppLike = {
-    callServerTool: vi.fn(async (args: { name: string }) =>
-      args.name === "gmail_composer.send"
-        ? { structuredContent: { message_id: "m123", thread_id: "t1" } }
-        : {},
-    ),
+    callServerTool: vi.fn(async (args: { name: string }) => {
+      if (args.name === "gmail_composer.send") {
+        return { structuredContent: { message_id: "m123", thread_id: "t1" } };
+      }
+      if (args.name === "gmail_composer.discard") {
+        return { structuredContent: { discarded: true } };
+      }
+      return {};
+    }),
     openLink: vi.fn(async () => ({})),
     updateModelContext,
     getHostCapabilities: () => caps,
@@ -71,6 +75,30 @@ describe("composer actions reach the model", () => {
     expect(lastText(updateModelContext)).toContain("DISCARDED draft d1 on thread t1");
   });
 
+  it("says nothing when the discard failed", async () => {
+    const { app, updateModelContext } = makeApp();
+    app.callServerTool = vi.fn(async () => ({
+      isError: true,
+      content: [{ type: "text", text: "Gmail 500" }],
+    }));
+    renderComposer(app);
+
+    await act(async () => { fireEvent.click(screen.getByTitle("Discard draft")); });
+
+    expect(updateModelContext).not.toHaveBeenCalled();
+  });
+
+  it("names the thread Gmail put a new draft on", async () => {
+    const { app, updateModelContext } = makeApp();
+    await reportComposerAction(
+      app,
+      "sent",
+      { ...draft, thread_id: undefined },
+      { message_id: "m9", thread_id: "t-new" },
+    );
+    expect(lastText(updateModelContext)).toContain("message m9 on thread t-new");
+  });
+
   it("says nothing when the send was not confirmed", async () => {
     const { app, updateModelContext } = makeApp();
     app.callServerTool = vi.fn(async () => ({ isError: true }));
@@ -83,14 +111,14 @@ describe("composer actions reach the model", () => {
 
   it("skips hosts that don't accept context updates", async () => {
     const { app, updateModelContext } = makeApp({});
-    await reportComposerAction(app, "sent", draft, "m1");
+    await reportComposerAction(app, "sent", draft, { message_id: "m1" });
     expect(updateModelContext).not.toHaveBeenCalled();
   });
 
   it("re-sends recent actions, since each update replaces the last", async () => {
     const { app, updateModelContext } = makeApp();
     for (let i = 1; i <= 7; i++) {
-      await reportComposerAction(app, "sent", { ...draft, draft_id: `d${i}` }, `m${i}`);
+      await reportComposerAction(app, "sent", { ...draft, draft_id: `d${i}` }, { message_id: `m${i}` });
     }
     const text = lastText(updateModelContext);
     // The newest five, oldest first.
@@ -101,6 +129,6 @@ describe("composer actions reach the model", () => {
   it("swallows a rejected update", async () => {
     const { app, updateModelContext } = makeApp();
     updateModelContext.mockRejectedValueOnce(new Error("unsupported"));
-    await expect(reportComposerAction(app, "sent", draft, "m1")).resolves.toBeUndefined();
+    await expect(reportComposerAction(app, "sent", draft, { message_id: "m1" })).resolves.toBeUndefined();
   });
 });

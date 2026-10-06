@@ -34,7 +34,10 @@ from __future__ import annotations
 import base64
 import email
 import itertools
+from types import SimpleNamespace
 from typing import Any
+
+from googleapiclient.errors import HttpError
 
 _DEMO_EMAIL = "you@startup.com"
 
@@ -240,6 +243,19 @@ class _Executable:
         return self._value
 
 
+class _MissingDraft(_Executable):
+    """A request on a draft id that doesn't exist: ``.execute()`` raises the
+    404 Gmail returns, so the services' ``DraftGoneError`` path runs here too."""
+
+    def __init__(self, draft_id: str) -> None:
+        super().__init__(None)
+        self._draft_id = draft_id
+
+    def execute(self, *args: Any, **kwargs: Any) -> Any:
+        body = f'{{"error": {{"code": 404, "message": "no draft {self._draft_id}"}}}}'
+        raise HttpError(SimpleNamespace(status=404, reason="Not Found"), body.encode())
+
+
 class _Threads:
     def get(self, **kwargs: Any) -> _Executable:
         tid = kwargs.get("id")
@@ -308,7 +324,7 @@ class _Drafts:
         draft_id = kwargs.get("id") or ""
         existing = self._store.get(draft_id)
         if existing is None:
-            raise LookupError(f"fake Gmail backend has no draft {draft_id!r}")
+            return _MissingDraft(draft_id)
         message = (kwargs.get("body") or {}).get("message") or {}
         # Whole-message replace, exactly as Gmail does. Parse BEFORE releasing:
         # if the new MIME is malformed this raises, and the draft keeps a payload
@@ -325,17 +341,14 @@ class _Drafts:
         draft_id = kwargs.get("id") or ""
         draft = self._store.get(draft_id)
         if draft is None:
-            raise LookupError(
-                f"fake Gmail backend has no draft {draft_id!r}; it was never created, "
-                "or was already sent or discarded"
-            )
+            return _MissingDraft(draft_id)
         return _Executable(draft)
 
     def send(self, **kwargs: Any) -> _Executable:
         draft_id = (kwargs.get("body") or {}).get("id") or ""
         draft = self._store.pop(draft_id, None)
         if draft is None:
-            raise LookupError(f"fake Gmail backend has no draft {draft_id!r} to send")
+            return _MissingDraft(draft_id)
         msg = draft["message"]
         _release_attachments(msg.get("payload"))
         return _Executable(
@@ -343,9 +356,11 @@ class _Drafts:
         )
 
     def delete(self, **kwargs: Any) -> _Executable:
-        removed = self._store.pop(kwargs.get("id") or "", None)
-        if removed:
-            _release_attachments(removed["message"].get("payload"))
+        draft_id = kwargs.get("id") or ""
+        removed = self._store.pop(draft_id, None)
+        if removed is None:
+            return _MissingDraft(draft_id)
+        _release_attachments(removed["message"].get("payload"))
         return _Executable(None)
 
     def list(self, **kwargs: Any) -> _Executable:
