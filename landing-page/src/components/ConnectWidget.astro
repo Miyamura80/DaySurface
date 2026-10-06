@@ -102,9 +102,9 @@ const selected = enriched.find((t) => t.id === defaultId) ?? enriched[0];
         <div data-panel={t.id} hidden={t.id !== selected.id}>
           {t.install_url ? (
             <>
-              {/* A link that prefills nothing drops the visitor into an empty
-                  dialog, so data-copy-on-open puts the URL on their clipboard
-                  on the way out - the paste is the only step left. Astro omits
+              {/* A link that prefills nothing drops the visitor onto a setup
+                  page with nothing filled in, so data-copy-on-open puts the
+                  URL on their clipboard on the way out, ready to paste. Astro omits
                   the attribute entirely when the value is undefined. */}
               <a
                 href={t.install_url}

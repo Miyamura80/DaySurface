@@ -86,26 +86,26 @@ export const clientGuides: ClientGuide[] = [
     logo: "/logos/chatgpt.svg",
     title: "Connect Gmail to ChatGPT - DaySurface",
     description:
-      "Give ChatGPT access to your Gmail over MCP: turn on Developer mode, create a connector pointing at the DaySurface endpoint, sign in with Google, and work your inbox from the chat.",
+      "Give ChatGPT access to your Gmail over MCP: create an MCP app on ChatGPT's Plugins page pointing at the DaySurface endpoint, sign in with Google, and work your inbox from the chat.",
     heading: "Connect Gmail to ChatGPT",
-    subhead: "Developer mode, one connector, a Google sign-in. No key to paste.",
-    lede: "ChatGPT reaches outside tools through connectors, which speak MCP. DaySurface is an MCP server for Gmail, so adding it as a connector is what gives ChatGPT your inbox. The one wrinkle is that connector creation lives behind Developer mode, and the dialog opens empty - so unlike some clients, you will be pasting the endpoint in by hand.",
+    subhead: "One MCP app, a Google sign-in. No key to paste.",
+    lede: "ChatGPT reaches outside tools through apps, and a custom app can be any MCP server. DaySurface is an MCP server for Gmail, so adding it as an app is what gives ChatGPT your inbox. The one wrinkle is that the create form opens empty - so unlike some clients, you will be pasting the endpoint in by hand.",
     prerequisites: [
       "A Google account with Gmail.",
-      "A ChatGPT plan that exposes Connectors and Developer mode.",
+      "ChatGPT Plus, Pro, Business, Enterprise or Edu on the web. On Business, Enterprise and Edu, a workspace admin has to allow custom MCP apps first.",
     ],
     steps: [
       {
-        title: "Turn on Developer mode",
-        body: "Go to Settings, then Connectors, then Advanced settings, and switch Developer mode on. Connector creation does not appear until you do - this is the step people miss.",
+        title: "Open the Plugins page",
+        body: "Go to chatgpt.com/plugins in a browser. Custom MCP apps are added from the web, not from the desktop or mobile apps.",
       },
       {
-        title: "Create the connector",
-        body: "Back on the Connectors screen, click Create. The dialog opens with every field blank, so have the DaySurface endpoint ready to paste rather than expecting it to be filled in for you.",
+        title: "Create an MCP app",
+        body: "Click Add, then Create MCP App. The form opens with every field blank, so have the DaySurface endpoint ready to paste rather than expecting it to be filled in for you.",
       },
       {
         title: "Fill in the details",
-        body: "Paste the endpoint, give the connector a name, and set Authentication to OAuth. Do not look for an API key field - there is no key, and picking the wrong auth mode here is the most common reason setup fails.",
+        body: "Paste the endpoint, give the app a name, and set Authentication to OAuth. Do not look for an API key field - there is no key, and picking the wrong auth mode here is the most common reason setup fails.",
       },
       {
         title: "Accept and create",
@@ -113,18 +113,18 @@ export const clientGuides: ClientGuide[] = [
       },
       {
         title: "Start a new chat",
-        body: "Open a new conversation so the tools menu refreshes. The connector will not appear in a chat that was already open when you created it.",
+        body: "Open a new conversation so the tools menu refreshes. The app will not appear in a chat that was already open when you created it; if it is still missing, enable it from the composer's + menu.",
       },
     ],
     capabilities: CAPABILITIES,
     faq: [
       {
-        q: "Why do I need Developer mode?",
-        a: "OpenAI keeps custom connector creation behind it. It is a setting on your own account rather than anything specific to this server, and you only turn it on once.",
+        q: "I don't see Create MCP App - what's wrong?",
+        a: "Custom MCP apps need a paid plan (Plus, Pro, Business, Enterprise or Edu) and the web version of ChatGPT. On Business, Enterprise and Edu, a workspace admin also has to allow them under Workspace Settings, then Permissions & roles, then Connected data.",
       },
       {
-        q: "The dialog opened empty - did the link fail?",
-        a: "No. OpenAI publishes no install URL scheme that carries a name and endpoint, so the shortcut can open the right dialog but cannot prefill it. Pasting the endpoint yourself is the expected flow.",
+        q: "The form opened empty - did the link fail?",
+        a: "No. OpenAI publishes no install URL scheme that carries a name and endpoint, so the shortcut can open the right page but cannot prefill anything. Pasting the endpoint yourself is the expected flow.",
       },
       ...SHARED_FAQ,
     ],

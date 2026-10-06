@@ -37,7 +37,7 @@ import { deepLink } from "../utils/deeplink";
  *
  * This is the site's single answer to "is this one click?", and every renderer
  * must ask it rather than re-deriving from `method`/`prefills`/`setupKind`. The
- * rule that makes it necessary: ChatGPT's link opens an EMPTY dialog, and
+ * rule that makes it necessary: ChatGPT's link fills NOTHING in, and
  * connect.ts and deeplink.ts both warn at length that calling it one-click is
  * worse than shipping no link at all - it tells someone the job is done while
  * the form in front of them is blank. That rule is expressed here, once.
@@ -65,8 +65,8 @@ export const effortMeta: Record<
      * `steps` is ALWAYS the full click-path from scratch - connect.ts is
      * explicit that a dialog-only target "keeps its full click-path in
      * `steps`". So every label here has to read as a fallback. Labelling them
-     * as the remaining work tells a ChatGPT user to turn on Developer mode and
-     * click Create again, both of which the link they just followed performed.
+     * as the remaining work tells a ChatGPT user to open the Plugins page
+     * again, which the link they just followed already did.
      */
     stepsLabel: string;
     /** One-line "how" for the quick-reference list in llms-full.txt. */
@@ -86,10 +86,10 @@ export const effortMeta: Record<
     shortHow: "run the command below.",
   },
   "dialog-only": {
-    heading: "Opens the dialog, but you still paste the URL",
+    heading: "Opens the setup page, but you still paste the URL",
     badge: "shortcut",
     stepsLabel: "Full click-path, if the link does not work",
-    shortHow: "install link opens the setup dialog, but the fields come up empty - paste the URL there.",
+    shortHow: "install link opens the setup page, but fills nothing in - follow the steps and paste the URL.",
   },
   prompt: {
     heading: "Paste this prompt into the client",

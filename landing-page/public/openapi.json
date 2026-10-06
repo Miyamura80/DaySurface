@@ -2,17 +2,44 @@
   "openapi": "3.1.0",
   "info": {
     "title": "DaySurface API",
-    "version": "0.1.0",
-    "description": "An MCP server for Gmail: triage a ranked inbox, draft replies in a real composer, and fill and sign PDF attachments - inside Claude, ChatGPT, or any MCP client."
+    "description": "An MCP server for Gmail: triage a ranked inbox, draft replies in a real composer, and fill and sign PDF attachments - inside Claude, ChatGPT, or any MCP client.",
+    "version": "0.1.1"
   },
+  "servers": [
+    {
+      "url": "https://api.daysurface.com",
+      "description": "DaySurface production API"
+    }
+  ],
   "paths": {
     "/health": {
       "get": {
         "tags": [
           "health"
         ],
-        "summary": "Health Check",
+        "summary": "Liveness probe (public)",
+        "description": "Public liveness signal: this process is up and serving.\n\nRuns **no dependency probes**.  Liveness and readiness are different\nquestions and this endpoint answers only the first, for three reasons:\n\n- ``db/engine.py`` builds the engine with ``pool_pre_ping=True`` and no\n  connect timeout, so a database host that stops answering SYN blocks the\n  probe on OS TCP retries (~130s on Linux).  The Dockerfile healthcheck is\n  ``--timeout=5s --retries=3``, so probing here would turn a slow\n  dependency into a container restart loop.\n- This is a sync ``def``, so it runs on the anyio threadpool.  A probe that\n  blocks lets unauthenticated callers park every thread in that pool and\n  stall every other sync route in the app.  ``db/engine.py`` now bounds the\n  connect at ``CONNECT_TIMEOUT_SECONDS``, but a bounded probe on an\n  anonymous endpoint is still a lever an attacker can pull for free.\n- A per-component rollup readable by anonymous callers is a disclosure\n  oracle in its own right (\"one of their backends is erroring right now\").\n\nNothing consumes the rollup: Railway ``healthcheckPath``, Render\n``healthCheckPath`` and the Dockerfile ``HEALTHCHECK`` all assert on the\nstatus code alone.  Readiness lives on ``/health/detail``.",
         "operationId": "health_check_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health/detail": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Detailed health (authenticated)",
+        "description": "Full health payload - build identity plus per-component status.\n\nAuthenticated-only: the git commit identifies the exact deployed revision\nof an open-source codebase, which is exactly the disclosure ASVS V14.3.3\nwarns about.\n\nThis is a sync ``def`` and it does probe, so the threadpool argument in\n``health_check`` applies here too - authentication changes who can pull the\nlever, not that it exists.  What bounds it is ``db/engine.py``'s\n``CONNECT_TIMEOUT_SECONDS``: the Redis client already carries its own\nsocket timeouts and the Stripe probe makes no network call, so with the\ndatabase connect bounded, no probe here can hold a worker indefinitely.",
+        "operationId": "health_detail_health_detail_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -31,8 +58,68 @@
           "well-known"
         ],
         "summary": "Mcp Server Card",
-        "description": "SEP-2127 Server Card - pre-connect registry/client branding.\n\nNo ``$schema`` is emitted: the draft SEP-2127 server-card schema is not yet\npublished (the URL 404s), so advertising it would only break validators.",
+        "description": "SEP-2127 Server Card - pre-connect registry/client discovery.\n\nLets agents preview the server before opening a transport: identity\n(``name``/``title``/``description``/``version``/``icons``), where to connect\n(``serverUrl`` + ``remotes``), and the tool surface (``tools[]``).\n\nNo ``$schema`` is emitted: the draft SEP-2127 server-card schema is not yet\npublished (the URL 404s), so advertising it would only break validators.",
         "operationId": "mcp_server_card__well_known_mcp_server_card_json_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/.well-known/agent-card.json": {
+      "get": {
+        "tags": [
+          "well-known"
+        ],
+        "summary": "A2A Agent Card",
+        "description": "A2A Agent Card (spec v0.3.0) - pre-connect agent discovery document.\n\nDiscovery/branding only: it advertises this agent's identity and skills so\nA2A registries/clients can find it. We intentionally do not declare a\n``preferredTransport`` because the server implements no A2A wire transport;\nadvertising one would point clients at an endpoint that can't speak it.",
+        "operationId": "a2a_agent_card__well_known_agent_card_json_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/.well-known/api-catalog": {
+      "get": {
+        "tags": [
+          "well-known"
+        ],
+        "summary": "Api Catalog",
+        "description": "RFC 9727 API catalog - points agents/crawlers at the OpenAPI description.\n\nReturns an RFC 9264 linkset whose ``service-desc`` link references this\nserver's OpenAPI document, so function-calling agents can discover the\nmachine-readable API contract from one well-known URL. Absolute URLs are\nemitted when ``API_PUBLIC_URL`` is configured (matching the OpenAPI\n``servers`` block); otherwise relative hrefs let the client resolve them\nagainst the request origin.",
+        "operationId": "api_catalog__well_known_api_catalog_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/.well-known/http-message-signatures-directory": {
+      "get": {
+        "tags": [
+          "well-known"
+        ],
+        "summary": "Web Bot Auth Directory",
+        "description": "Web Bot Auth key directory - the agent's Ed25519 public signing keys.\n\nPublic discovery: any origin verifying this agent's HTTP Message Signatures\nreads it cross-origin, so it is served with ``Access-Control-Allow-Origin:\n*`` and the directory-specific JWKS media type.",
+        "operationId": "web_bot_auth_directory__well_known_http_message_signatures_directory_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -85,6 +172,44 @@
                   "type": "object",
                   "title": "Response Protected Resource Metadata Root  Well Known Oauth Protected Resource Get"
                 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/.well-known/oauth-authorization-server/mcp": {
+      "get": {
+        "tags": [
+          "well-known"
+        ],
+        "summary": "Authorization Server Metadata For Mcp",
+        "operationId": "authorization_server_metadata_for_mcp__well_known_oauth_authorization_server_mcp_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/.well-known/oauth-authorization-server": {
+      "get": {
+        "tags": [
+          "well-known"
+        ],
+        "summary": "Authorization Server Metadata Root",
+        "operationId": "authorization_server_metadata_root__well_known_oauth_authorization_server_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           }
@@ -214,18 +339,18 @@
         }
       }
     },
-    "/api/v1/services/config_show": {
+    "/api/v1/services/gmail_add_attachment": {
       "post": {
         "tags": [
           "services"
         ],
-        "summary": "Show the full project configuration",
-        "operationId": "svc_config_show_api_v1_services_config_show_post",
+        "summary": "Attach one file to an existing Gmail draft and return the draft's full attachment list (each with attachment_id, filename, mime_type, size_bytes). Only the attachments change - body, subject, and recipients are preserved exactly. Pass the file as 'attachment' (filename + mime_type + base64 data_base64).",
+        "operationId": "svc_gmail_add_attachment_api_v1_services_gmail_add_attachment_post",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ConfigShowInput"
+                "$ref": "#/components/schemas/GmailAddAttachmentInput"
               }
             }
           },
@@ -237,7 +362,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConfigShowResult"
+                  "$ref": "#/components/schemas/GmailDraftAttachmentsResult"
                 }
               }
             }
@@ -255,18 +380,18 @@
         }
       }
     },
-    "/api/v1/services/config_get": {
+    "/api/v1/services/gmail_remove_attachment": {
       "post": {
         "tags": [
           "services"
         ],
-        "summary": "Get a single configuration value by dot-separated key",
-        "operationId": "svc_config_get_api_v1_services_config_get_post",
+        "summary": "Remove one file from a Gmail draft by its attachment_id and return the draft's remaining attachment list. Only the attachments change - body, subject, and recipients are preserved exactly. The attachment_id comes from any prior draft response or gmail_get_draft.",
+        "operationId": "svc_gmail_remove_attachment_api_v1_services_gmail_remove_attachment_post",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ConfigGetInput"
+                "$ref": "#/components/schemas/GmailRemoveAttachmentInput"
               }
             }
           },
@@ -278,7 +403,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConfigGetResult"
+                  "$ref": "#/components/schemas/GmailDraftAttachmentsResult"
                 }
               }
             }
@@ -296,18 +421,18 @@
         }
       }
     },
-    "/api/v1/services/config_set": {
+    "/api/v1/services/gmail_list_inbox": {
       "post": {
         "tags": [
           "services"
         ],
-        "summary": "Set a configuration override",
-        "operationId": "svc_config_set_api_v1_services_config_set_post",
+        "summary": "List recent messages, optionally filtered by a Gmail search query. Searches the inbox by default; messages the user sent are never in the inbox, so pass mailbox='sent' or mailbox='all' to find them. When the user asks to find or open a specific email, ALWAYS follow up by calling gmail_get_thread with the thread_id to render the full conversation in an interactive UI.",
+        "operationId": "svc_gmail_list_inbox_api_v1_services_gmail_list_inbox_post",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ConfigSetInput"
+                "$ref": "#/components/schemas/GmailListInboxInput"
               }
             }
           },
@@ -319,7 +444,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConfigSetResult"
+                  "$ref": "#/components/schemas/GmailListInboxResult"
                 }
               }
             }
@@ -337,18 +462,18 @@
         }
       }
     },
-    "/api/v1/services/doctor": {
+    "/api/v1/services/gmail_get_thread": {
       "post": {
         "tags": [
           "services"
         ],
-        "summary": "Run health checks on the project environment",
-        "operationId": "svc_doctor_api_v1_services_doctor_post",
+        "summary": "Fetch a Gmail thread by id with full message bodies. By default attachment/inline-image bytes are omitted (each attachment still carries filename, mime_type, size, attachment_id) to keep the payload small - fetch a file on demand with gmail_get_attachment. Pass include_attachment_data=true to inline bytes, or strip_quoted_replies=true to drop repeated quoted history. When an interactive UI is rendered alongside the result, keep your text response brief since the user can browse the conversation in the UI.",
+        "operationId": "svc_gmail_get_thread_api_v1_services_gmail_get_thread_post",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/DoctorInput"
+                "$ref": "#/components/schemas/GmailGetThreadInput"
               }
             }
           },
@@ -360,7 +485,253 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DoctorResult"
+                  "$ref": "#/components/schemas/GmailThread"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/services/gmail_get_attachment": {
+      "post": {
+        "tags": [
+          "services"
+        ],
+        "summary": "Fetch the raw base64 bytes of a single attachment or inline image on a Gmail message, identified by the message_id + attachment_id echoed by gmail_get_thread. Use this to pull one file on demand instead of loading every attachment into the thread payload. data_base64 is raw encoded bytes, not a rendered image - you cannot read an image's contents from it; on vision-capable MCP hosts, image attachments are additionally rendered into context as a viewable image.",
+        "operationId": "svc_gmail_get_attachment_api_v1_services_gmail_get_attachment_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GmailGetAttachmentInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GmailAttachmentData"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/services/gmail_mark_thread_read": {
+      "post": {
+        "tags": [
+          "services"
+        ],
+        "summary": "Mark a Gmail thread as read by removing the UNREAD label",
+        "operationId": "svc_gmail_mark_thread_read_api_v1_services_gmail_mark_thread_read_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GmailThreadModifyInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GmailMarkReadResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/services/gmail_archive_thread": {
+      "post": {
+        "tags": [
+          "services"
+        ],
+        "summary": "Archive a Gmail thread by removing the INBOX label. Also marks the thread dismissed in the curation ledger. During a triage pass, continue on to the next uncurated or stale thread.",
+        "operationId": "svc_gmail_archive_thread_api_v1_services_gmail_archive_thread_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GmailThreadModifyInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GmailArchiveResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/services/gmail_mark_thread_done": {
+      "post": {
+        "tags": [
+          "services"
+        ],
+        "summary": "Mark a Gmail thread as done by applying the MCP/Done label (hides from curated inbox). Also marks the thread dismissed in the curation ledger. During a triage pass, continue on to the next uncurated or stale thread.",
+        "operationId": "svc_gmail_mark_thread_done_api_v1_services_gmail_mark_thread_done_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GmailThreadModifyInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GmailMarkDoneResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/services/gmail_unmark_thread_done": {
+      "post": {
+        "tags": [
+          "services"
+        ],
+        "summary": "Remove the MCP/Done label from a thread (undo mark-done)",
+        "operationId": "svc_gmail_unmark_thread_done_api_v1_services_gmail_unmark_thread_done_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GmailThreadModifyInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GmailUnmarkDoneResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/services/gmail_curate_inbox": {
+      "post": {
+        "tags": [
+          "services"
+        ],
+        "summary": "Rank recent inbox threads by a deterministic heuristic score and render the inbox dashboard. This is a quick provisional view, NOT the assistant's own triage: for 'what's important / triage my inbox', prefer inbox_get_curation (banked LLM verdicts + coverage), going deeper with inbox_search + inbox_save_curation when coverage shows uncurated/stale threads. When an interactive UI is rendered alongside the result, keep your text response brief (a one-line summary) since the user can browse details in the UI. Only elaborate if the user asks.",
+        "operationId": "svc_gmail_curate_inbox_api_v1_services_gmail_curate_inbox_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GmailCurateInboxInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GmailCurateInboxResult"
                 }
               }
             }
@@ -465,7 +836,7 @@
         "tags": [
           "services"
         ],
-        "summary": "Patch fields on an existing Gmail draft and open an interactive composer UI. ALWAYS call this tool to write or edit draft content - NEVER compose email text as plain chat text. The tool renders an interactive composer where the user can review, edit, and send. Pass your composed text in the 'body' parameter. Keep your chat response to one brief sentence since the user can edit in the UI.",
+        "summary": "Patch fields on an existing Gmail draft and open an interactive composer UI. Non-destructive by default: any field you OMIT is left unchanged on the draft, and a field set to null is CLEARED - this holds for to, cc, bcc, subject, body, and attachments. Omit 'attachments' to keep every existing file untouched (so you can edit the body repeatedly without re-uploading); pass null or [] to drop them all. 'attachments' may mix new uploads (filename + mime_type + data_base64) with references to existing files ({attachment_id}) taken from a prior response, letting you preserve specific files by id. To add or remove a single file without touching the body, prefer gmail_add_attachment / gmail_remove_attachment. The returned draft echoes the saved state (recipients, subject, body_preview, and the full attachment list with ids/filenames/sizes). ALWAYS call this tool to write or edit draft content - NEVER compose email text as plain chat text. Pass your composed text in the 'body' parameter. Keep your chat response to one brief sentence since the user can edit in the UI.",
         "operationId": "svc_gmail_update_draft_api_v1_services_gmail_update_draft_post",
         "requestBody": {
           "content": {
@@ -506,7 +877,7 @@
         "tags": [
           "services"
         ],
-        "summary": "Create a new Gmail draft from the given fields. ALWAYS use this tool instead of composing email text in chat - it creates a real Gmail draft and opens an interactive composer UI where the user can review, edit, and send. When an interactive UI is rendered alongside the result, keep your text response brief since the user can edit in the UI.",
+        "summary": "Create a new Gmail draft from the given fields and open an interactive composer UI. Returns the draft's actual saved state - draft_id, thread_id, recipients, subject, a body_preview, and the attachment list (each with attachment_id, filename, mime_type, size_bytes) - so you can verify what was saved without a follow-up gmail_get_draft. To edit it afterward use gmail_update_draft, which preserves omitted fields and keeps attachments unless you clear them. ALWAYS use this tool instead of composing email text in chat - it creates a real Gmail draft where the user can review, edit, and send. When an interactive UI is rendered alongside the result, keep your text response brief since the user can edit in the UI.",
         "operationId": "svc_gmail_compose_api_v1_services_gmail_compose_post",
         "requestBody": {
           "content": {
@@ -629,7 +1000,7 @@
         "tags": [
           "services"
         ],
-        "summary": "Create a reply draft on an existing Gmail thread. ALWAYS use this tool instead of composing reply text in chat - it creates a real Gmail draft and opens an interactive composer UI where the user can review, edit, and send. Pass your drafted reply in the 'body' parameter. When an interactive UI is rendered alongside the result, keep your text response brief since the user can edit in the UI.",
+        "summary": "Create a reply draft on an existing Gmail thread. ALWAYS use this tool instead of composing reply text in chat - it creates a real Gmail draft and opens an interactive composer UI where the user can review, edit, and send. Pass your drafted reply in the 'body' parameter. Recipients are yours to control: pass 'to', 'cc', and/or 'bcc' (each a comma-separated address list) to set them explicitly. If you omit 'to', it defaults to the other party in the thread (never the account owner); omitted 'cc'/'bcc' are left unset. If every message in the thread is yours (no other participant to reply to), you must pass 'to' explicitly or the call errors. When an interactive UI is rendered alongside the result, keep your text response brief since the user can edit in the UI.",
         "operationId": "svc_gmail_reply_to_thread_api_v1_services_gmail_reply_to_thread_post",
         "requestBody": {
           "content": {
@@ -665,18 +1036,18 @@
         }
       }
     },
-    "/api/v1/services/gmail_list_inbox": {
+    "/api/v1/services/webhook_subscribe": {
       "post": {
         "tags": [
           "services"
         ],
-        "summary": "List recent inbox messages, optionally filtered by a Gmail search query. When the user asks to find or open a specific email, ALWAYS follow up by calling gmail_get_thread with the thread_id to render the full conversation in an interactive UI.",
-        "operationId": "svc_gmail_list_inbox_api_v1_services_gmail_list_inbox_post",
+        "summary": "Register an HTTPS endpoint to receive signed webhook events",
+        "operationId": "svc_webhook_subscribe_api_v1_services_webhook_subscribe_post",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/GmailListInboxInput"
+                "$ref": "#/components/schemas/WebhookSubscribeInput"
               }
             }
           },
@@ -688,7 +1059,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GmailListInboxResult"
+                  "$ref": "#/components/schemas/WebhookSubscribeResult"
                 }
               }
             }
@@ -706,18 +1077,18 @@
         }
       }
     },
-    "/api/v1/services/gmail_get_thread": {
+    "/api/v1/services/webhook_list": {
       "post": {
         "tags": [
           "services"
         ],
-        "summary": "Fetch a Gmail thread by id with full message bodies + attachments. When an interactive UI is rendered alongside the result, keep your text response brief since the user can browse the conversation in the UI.",
-        "operationId": "svc_gmail_get_thread_api_v1_services_gmail_get_thread_post",
+        "summary": "List the caller's webhook subscriptions (secrets are never returned)",
+        "operationId": "svc_webhook_list_api_v1_services_webhook_list_post",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/GmailGetThreadInput"
+                "$ref": "#/components/schemas/WebhookListInput"
               }
             }
           },
@@ -729,7 +1100,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GmailThread"
+                  "$ref": "#/components/schemas/WebhookListResult"
                 }
               }
             }
@@ -747,18 +1118,18 @@
         }
       }
     },
-    "/api/v1/services/gmail_curate_inbox": {
+    "/api/v1/services/webhook_unsubscribe": {
       "post": {
         "tags": [
           "services"
         ],
-        "summary": "Rank recent inbox threads by a deterministic importance score. When an interactive UI is rendered alongside the result, keep your text response brief (a one-line summary) since the user can browse details in the UI. Only elaborate if the user asks.",
-        "operationId": "svc_gmail_curate_inbox_api_v1_services_gmail_curate_inbox_post",
+        "summary": "Deactivate a webhook subscription so it stops receiving events",
+        "operationId": "svc_webhook_unsubscribe_api_v1_services_webhook_unsubscribe_post",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/GmailCurateInboxInput"
+                "$ref": "#/components/schemas/WebhookUnsubscribeInput"
               }
             }
           },
@@ -770,7 +1141,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GmailCurateInboxResult"
+                  "$ref": "#/components/schemas/WebhookUnsubscribeResult"
                 }
               }
             }
@@ -788,18 +1159,18 @@
         }
       }
     },
-    "/api/v1/services/gmail_mark_thread_read": {
+    "/api/v1/services/webhook_rotate_secret": {
       "post": {
         "tags": [
           "services"
         ],
-        "summary": "Mark a Gmail thread as read by removing the UNREAD label",
-        "operationId": "svc_gmail_mark_thread_read_api_v1_services_gmail_mark_thread_read_post",
+        "summary": "Issue a new signing secret for a subscription (invalidates the old one)",
+        "operationId": "svc_webhook_rotate_secret_api_v1_services_webhook_rotate_secret_post",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/GmailThreadModifyInput"
+                "$ref": "#/components/schemas/WebhookRotateSecretInput"
               }
             }
           },
@@ -811,7 +1182,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GmailMarkReadResult"
+                  "$ref": "#/components/schemas/WebhookRotateSecretResult"
                 }
               }
             }
@@ -829,18 +1200,18 @@
         }
       }
     },
-    "/api/v1/services/gmail_archive_thread": {
+    "/api/v1/services/gmail_watch_start": {
       "post": {
         "tags": [
           "services"
         ],
-        "summary": "Archive a Gmail thread by removing the INBOX label",
-        "operationId": "svc_gmail_archive_thread_api_v1_services_gmail_archive_thread_post",
+        "summary": "Subscribe the user's Gmail inbox to push notifications",
+        "operationId": "svc_gmail_watch_start_api_v1_services_gmail_watch_start_post",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/GmailThreadModifyInput"
+                "$ref": "#/components/schemas/GmailWatchStartInput"
               }
             }
           },
@@ -852,7 +1223,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GmailArchiveResult"
+                  "$ref": "#/components/schemas/GmailWatchStartResult"
                 }
               }
             }
@@ -870,18 +1241,18 @@
         }
       }
     },
-    "/api/v1/services/gmail_mark_thread_done": {
+    "/api/v1/services/gmail_watch_stop": {
       "post": {
         "tags": [
           "services"
         ],
-        "summary": "Mark a Gmail thread as done by applying the MCP/Done label (hides from curated inbox)",
-        "operationId": "svc_gmail_mark_thread_done_api_v1_services_gmail_mark_thread_done_post",
+        "summary": "Cancel the user's Gmail push-notification watch",
+        "operationId": "svc_gmail_watch_stop_api_v1_services_gmail_watch_stop_post",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/GmailThreadModifyInput"
+                "$ref": "#/components/schemas/GmailWatchStopInput"
               }
             }
           },
@@ -893,48 +1264,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GmailMarkDoneResult"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/services/gmail_unmark_thread_done": {
-      "post": {
-        "tags": [
-          "services"
-        ],
-        "summary": "Remove the MCP/Done label from a thread (undo mark-done)",
-        "operationId": "svc_gmail_unmark_thread_done_api_v1_services_gmail_unmark_thread_done_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/GmailThreadModifyInput"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/GmailUnmarkDoneResult"
+                  "$ref": "#/components/schemas/GmailWatchStopResult"
                 }
               }
             }
@@ -993,6 +1323,334 @@
         }
       }
     },
+    "/api/v1/services/inbox_get_curation": {
+      "post": {
+        "tags": [
+          "services"
+        ],
+        "summary": "Read banked inbox triage from the curation ledger. Cheap: no email bodies are fetched and no reasoning is run - it returns judgments the assistant already made (bucket, importance, summary, suggested action) plus a coverage count of curated / stale / uncurated threads in the inbox. Call this FIRST for any 'what's important / triage my inbox' request. If coverage shows many uncurated or stale threads and the user wants a thorough pass, go deeper with inbox_search + inbox_save_curation; otherwise answer directly from these banked verdicts.",
+        "operationId": "svc_inbox_get_curation_api_v1_services_inbox_get_curation_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GetCurationInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetCurationResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/services/inbox_search": {
+      "post": {
+        "tags": [
+          "services"
+        ],
+        "summary": "Search recent inbox threads headlessly (no UI) when doing a thorough triage pass - use this to actually look at many emails. Returns thread summaries (subject, sender, snippet, recency) each annotated with its ledger status: 'uncurated' / 'stale' threads are the delta worth reasoning about; 'curated' threads are already banked and can be skipped. Uncurated threads also carry a provisional heuristic importance_prior. Pass since_history_id (from a prior result's current_history_id) to fetch only changed threads. After reasoning over the results, bank your verdicts with inbox_save_curation.",
+        "operationId": "svc_inbox_search_api_v1_services_inbox_search_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InboxSearchInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InboxSearchResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/services/inbox_save_curation": {
+      "post": {
+        "tags": [
+          "services"
+        ],
+        "summary": "Bank your triage judgments for one or more threads into the curation ledger so they are not re-reasoned next time. Call this after reading and reasoning over threads (typically from inbox_search) - pass a batch of per-thread verdicts (bucket, importance, a short summary, suggested action, optional reasoning/confidence). Each write stamps the thread's current Gmail historyId so the verdict stays valid until the thread changes. This is what makes the next inbox_get_curation near-free.",
+        "operationId": "svc_inbox_save_curation_api_v1_services_inbox_save_curation_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveCurationInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SaveCurationResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/services/pdf_open": {
+      "post": {
+        "tags": [
+          "services"
+        ],
+        "summary": "Open a PDF into a server-side editing session and return everything needed to plan edits: a doc_id handle, the fillable form-field inventory (name, type, current value, page, rect), and - for flat PDFs without form fields - the existing text layout with coordinates for anchoring text overlays. The PDF bytes stay server-side; every later pdf_* call takes the doc_id. Optionally pass render_pages (1-based page numbers) to also get PNG renders of pages for visual inspection. Coordinates are PDF user space: origin at the page's bottom-left corner, in points (1/72 inch).",
+        "operationId": "svc_pdf_open_api_v1_services_pdf_open_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PdfOpenInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PdfOpenResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/services/pdf_edit": {
+      "post": {
+        "tags": [
+          "services"
+        ],
+        "summary": "Apply a batch of edits to an open PDF document session. Ops: {op:'set_field', name, value} fills an AcroForm field (checkbox/radio/choice values must match the field's options); {op:'add_text', page, x, y, text, font_size?} stamps a text overlay onto a flat PDF at PDF user-space coordinates (origin bottom-left, points). The batch is atomic: any invalid op rejects the whole batch and the document is unchanged. Pass render_pages (1-based) to get PNG renders back for verifying placement. Rejected once a signature has been requested or the document is signed.",
+        "operationId": "svc_pdf_edit_api_v1_services_pdf_edit_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PdfEditInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PdfEditResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/services/pdf_request_signature": {
+      "post": {
+        "tags": [
+          "services"
+        ],
+        "summary": "Hand a filled PDF document over to the user for signing. Locks the document (no further edits) and opens the signing ceremony: the user reviews the document and types their full legal name themselves - signing can never be performed by the assistant. placement says where the signature stamp goes: a signature field's name from pdf_open's fields[], or {page, x, y} in PDF user-space coordinates (origin bottom-left, points) for flat PDFs. Call pdf_export afterwards to deliver the signed file.",
+        "operationId": "svc_pdf_request_signature_api_v1_services_pdf_request_signature_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PdfRequestSignatureInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PdfRequestSignatureResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/services/pdf_export": {
+      "post": {
+        "tags": [
+          "services"
+        ],
+        "summary": "Deliver a PDF document session to its destination - v1: attach it to an existing Gmail draft, server-side (the PDF bytes never enter this conversation). Default filename is '{original-stem}-signed.pdf' for signed documents, '{original-stem}-filled.pdf' otherwise; override with destination.filename. Returns the draft's resulting attachment list. Rejected while a signature request is pending.",
+        "operationId": "svc_pdf_export_api_v1_services_pdf_export_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PdfExportInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PdfExportResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/services/webhook_settings": {
+      "post": {
+        "tags": [
+          "services"
+        ],
+        "summary": "Open your settings: Gmail connection status and webhook subscriptions",
+        "operationId": "svc_webhook_settings_api_v1_services_webhook_settings_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebhookSettingsInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookSettingsResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/auth/me": {
       "get": {
         "tags": [
@@ -1013,6 +1671,45 @@
       }
     },
     "/api/v1/auth/api-keys": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Create Key",
+        "operationId": "create_key_api_v1_auth_api_keys_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAPIKeyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateAPIKeyResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
       "get": {
         "tags": [
           "auth"
@@ -1060,45 +1757,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CursorPage_APIKeyInfo_"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "tags": [
-          "auth"
-        ],
-        "summary": "Create Key",
-        "operationId": "create_key_api_v1_auth_api_keys_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateAPIKeyRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CreateAPIKeyResponse"
                 }
               }
             }
@@ -1376,6 +2034,46 @@
         }
       }
     },
+    "/api/v1/google/webhook/gmail": {
+      "post": {
+        "tags": [
+          "google-webhooks"
+        ],
+        "summary": "Gmail Push",
+        "description": "Receive an authenticated Gmail Pub/Sub push notification.",
+        "operationId": "gmail_push_api_v1_google_webhook_gmail_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/google/internal/renew": {
+      "post": {
+        "tags": [
+          "google-webhooks"
+        ],
+        "summary": "Internal Renew",
+        "description": "Drive watch renewal + outbox draining (external scheduler entrypoint).",
+        "operationId": "internal_renew_api_v1_google_internal_renew_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/agentic-payments/status": {
       "get": {
         "tags": [
@@ -1487,6 +2185,197 @@
           }
         }
       }
+    },
+    "/ask": {
+      "post": {
+        "tags": [
+          "ask"
+        ],
+        "summary": "Ask Post",
+        "operationId": "ask_post_ask_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AskInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Ask Post Ask Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "ask"
+        ],
+        "summary": "Ask Get",
+        "operationId": "ask_get_ask_get",
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Query"
+            }
+          },
+          {
+            "name": "streaming",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Streaming"
+            }
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "list",
+                "summarize",
+                "generate"
+              ],
+              "type": "string",
+              "default": "generate",
+              "title": "Mode"
+            }
+          },
+          {
+            "name": "query_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Query Id"
+            }
+          },
+          {
+            "name": "prev",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Prev"
+            }
+          },
+          {
+            "name": "site",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Site"
+            }
+          },
+          {
+            "name": "decontextualized_query",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Decontextualized Query"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Ask Get Ask Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/waitlist/join": {
+      "post": {
+        "tags": [
+          "waitlist"
+        ],
+        "summary": "Join the waitlist (public)",
+        "operationId": "join_waitlist_waitlist_join_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WaitlistJoinResult"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1563,6 +2452,122 @@
         ],
         "title": "APIKeyInfo"
       },
+      "AddTextOp": {
+        "properties": {
+          "op": {
+            "type": "string",
+            "const": "add_text",
+            "title": "Op",
+            "default": "add_text"
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "title": "Page",
+            "description": "1-based page number"
+          },
+          "x": {
+            "type": "number",
+            "title": "X",
+            "description": "Left edge of the text, PDF user space (points)"
+          },
+          "y": {
+            "type": "number",
+            "title": "Y",
+            "description": "Baseline of the text, PDF user space (origin bottom-left)"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Text"
+          },
+          "font_size": {
+            "type": "number",
+            "maximum": 72,
+            "exclusiveMinimum": 0,
+            "title": "Font Size",
+            "default": 10
+          }
+        },
+        "type": "object",
+        "required": [
+          "page",
+          "x",
+          "y",
+          "text"
+        ],
+        "title": "AddTextOp",
+        "description": "Stamp a text overlay onto a page (for flat PDFs without form fields)."
+      },
+      "AskInput": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "title": "Query"
+          },
+          "streaming": {
+            "type": "boolean",
+            "title": "Streaming",
+            "default": true
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "list",
+              "summarize",
+              "generate"
+            ],
+            "title": "Mode",
+            "default": "generate"
+          },
+          "query_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Query Id"
+          },
+          "prev": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Prev"
+          },
+          "site": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Site"
+          },
+          "decontextualized_query": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decontextualized Query"
+          }
+        },
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "title": "AskInput",
+        "description": "A natural-language question plus NLWeb conversation context."
+      },
       "AttachmentInput": {
         "properties": {
           "filename": {
@@ -1597,127 +2602,43 @@
         "title": "AttachmentInput",
         "description": "A file attachment to include on an outgoing email.\n\nPass ``data_base64`` with the file content base64-encoded. Works from any\nMCP host (ChatGPT, Claude, etc.) regardless of filesystem access."
       },
-      "CheckResultModel": {
+      "AttachmentReference": {
         "properties": {
-          "name": {
+          "attachment_id": {
             "type": "string",
-            "title": "Name"
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "pass",
-              "fail",
-              "warn"
-            ],
-            "title": "Status"
-          },
-          "message": {
-            "type": "string",
-            "title": "Message"
-          },
-          "detail": {
-            "type": "string",
-            "title": "Detail",
-            "default": ""
-          },
-          "fixable": {
-            "type": "boolean",
-            "title": "Fixable",
-            "default": false
+            "minLength": 1,
+            "title": "Attachment Id",
+            "description": "Stable id of an attachment already on the draft to preserve"
           }
         },
         "type": "object",
         "required": [
-          "name",
-          "status",
-          "message"
+          "attachment_id"
         ],
-        "title": "CheckResultModel"
+        "title": "AttachmentReference",
+        "description": "Reference to an attachment already present on a draft, by its stable id.\n\nPass this (instead of an ``AttachmentInput``) in ``gmail_update_draft`` to\nkeep an existing file on the draft without re-uploading its bytes. The\n``attachment_id`` comes from the ``attachments[].attachment_id`` echoed by\nany prior draft mutation (compose / update / add / remove) or\n``gmail_get_draft``."
       },
-      "ConfigGetInput": {
+      "CoverageSummary": {
         "properties": {
-          "key": {
-            "type": "string",
-            "title": "Key"
-          }
-        },
-        "type": "object",
-        "required": [
-          "key"
-        ],
-        "title": "ConfigGetInput"
-      },
-      "ConfigGetResult": {
-        "properties": {
-          "key": {
-            "type": "string",
-            "title": "Key"
+          "curated": {
+            "type": "integer",
+            "title": "Curated",
+            "default": 0
           },
-          "value": {
-            "title": "Value"
-          }
-        },
-        "type": "object",
-        "required": [
-          "key",
-          "value"
-        ],
-        "title": "ConfigGetResult"
-      },
-      "ConfigSetInput": {
-        "properties": {
-          "key": {
-            "type": "string",
-            "title": "Key"
+          "stale": {
+            "type": "integer",
+            "title": "Stale",
+            "default": 0
           },
-          "value": {
-            "type": "string",
-            "title": "Value"
+          "uncurated": {
+            "type": "integer",
+            "title": "Uncurated",
+            "default": 0
           }
         },
         "type": "object",
-        "required": [
-          "key",
-          "value"
-        ],
-        "title": "ConfigSetInput"
-      },
-      "ConfigSetResult": {
-        "properties": {
-          "key": {
-            "type": "string",
-            "title": "Key"
-          },
-          "coerced_value": {
-            "title": "Coerced Value"
-          }
-        },
-        "type": "object",
-        "required": [
-          "key",
-          "coerced_value"
-        ],
-        "title": "ConfigSetResult"
-      },
-      "ConfigShowInput": {
-        "properties": {},
-        "type": "object",
-        "title": "ConfigShowInput"
-      },
-      "ConfigShowResult": {
-        "properties": {
-          "config": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Config"
-          }
-        },
-        "type": "object",
-        "required": [
-          "config"
-        ],
-        "title": "ConfigShowResult"
+        "title": "CoverageSummary",
+        "description": "How much of the current inbox is covered by the ledger.\n\nThe host reads these counts to decide whether to go deeper: a large\n``uncurated`` or ``stale`` count is the signal to run a deep pass."
       },
       "CreateAPIKeyRequest": {
         "properties": {
@@ -1815,37 +2736,292 @@
         ],
         "title": "CreateAPIKeyResponse"
       },
-      "DoctorInput": {
-        "properties": {
-          "fix": {
-            "type": "boolean",
-            "title": "Fix",
-            "default": false
-          }
-        },
-        "type": "object",
-        "title": "DoctorInput"
+      "CurationBucket": {
+        "type": "string",
+        "enum": [
+          "needs_reply",
+          "waiting_on",
+          "fyi",
+          "noise"
+        ],
+        "title": "CurationBucket",
+        "description": "Where the host LLM sorted a thread."
       },
-      "DoctorResult": {
+      "CurationRecord": {
         "properties": {
-          "checks": {
-            "items": {
-              "$ref": "#/components/schemas/CheckResultModel"
-            },
-            "type": "array",
-            "title": "Checks"
+          "thread_id": {
+            "type": "string",
+            "title": "Thread Id"
           },
-          "has_failures": {
-            "type": "boolean",
-            "title": "Has Failures"
+          "bucket": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CurationBucket"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "importance": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Importance"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "reasoning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning"
+          },
+          "suggested_action": {
+            "$ref": "#/components/schemas/SuggestedAction",
+            "default": "none"
+          },
+          "draft_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Draft Id"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "state": {
+            "$ref": "#/components/schemas/CurationState",
+            "default": "curated"
+          },
+          "curator_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Curator Version"
+          },
+          "curated_history_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Curated History Id"
+          },
+          "curated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Curated At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "ledger_status": {
+            "$ref": "#/components/schemas/LedgerStatus",
+            "default": "curated"
           }
         },
         "type": "object",
         "required": [
-          "checks",
-          "has_failures"
+          "thread_id"
         ],
-        "title": "DoctorResult"
+        "title": "CurationRecord",
+        "description": "Decrypted, host-facing curation verdict for one thread."
+      },
+      "CurationState": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "curated",
+          "acted",
+          "dismissed"
+        ],
+        "title": "CurationState",
+        "description": "Lifecycle of a ledger row.\n\n- ``pending``   - a row exists but has not been curated (reserved for a\n  future server-side prior; the host never writes this).\n- ``curated``   - the host LLM has recorded a judgment.\n- ``acted``     - an action tool (archive / mark-done / reply) has run.\n- ``dismissed`` - the thread was archived / marked done (removed from inbox)."
+      },
+      "CursorPage_APIKeyInfo_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/APIKeyInfo"
+            },
+            "type": "array",
+            "title": "Items",
+            "description": "The items on this page."
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor",
+            "description": "Opaque cursor for the next page. Pass it back as `cursor`. `null` when there are no more items."
+          },
+          "has_more": {
+            "type": "boolean",
+            "title": "Has More",
+            "description": "True when another page is available via `next_cursor`.",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "CursorPage[APIKeyInfo]"
+      },
+      "GetCurationInput": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id",
+            "default": ""
+          },
+          "bucket": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CurationBucket"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CurationState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fresh_only": {
+            "type": "boolean",
+            "title": "Fresh Only",
+            "description": "Drop rows whose thread has changed since it was curated.",
+            "default": false
+          },
+          "check_freshness": {
+            "type": "boolean",
+            "title": "Check Freshness",
+            "description": "Compare each row's curated historyId against the thread's current Gmail historyId to flag stale rows. Uses one ids-only threads.list (no message bodies, no inference).",
+            "default": true
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 500,
+            "minimum": 1,
+            "title": "Limit",
+            "default": 50
+          }
+        },
+        "type": "object",
+        "title": "GetCurationInput"
+      },
+      "GetCurationResult": {
+        "properties": {
+          "records": {
+            "items": {
+              "$ref": "#/components/schemas/CurationRecord"
+            },
+            "type": "array",
+            "title": "Records"
+          },
+          "coverage": {
+            "$ref": "#/components/schemas/CoverageSummary"
+          }
+        },
+        "type": "object",
+        "required": [
+          "records",
+          "coverage"
+        ],
+        "title": "GetCurationResult"
+      },
+      "GmailAddAttachmentInput": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id",
+            "default": ""
+          },
+          "draft_id": {
+            "type": "string",
+            "title": "Draft Id"
+          },
+          "attachment": {
+            "$ref": "#/components/schemas/AttachmentInput"
+          }
+        },
+        "type": "object",
+        "required": [
+          "draft_id",
+          "attachment"
+        ],
+        "title": "GmailAddAttachmentInput",
+        "description": "Input for ``gmail_add_attachment``: append one file to a draft.\n\nTouches only the attachment list - body, subject, and recipients are\npreserved verbatim."
       },
       "GmailArchiveResult": {
         "properties": {
@@ -1931,6 +3107,70 @@
         },
         "type": "object",
         "title": "GmailAttachment"
+      },
+      "GmailAttachmentData": {
+        "properties": {
+          "message_id": {
+            "type": "string",
+            "title": "Message Id"
+          },
+          "attachment_id": {
+            "type": "string",
+            "title": "Attachment Id"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
+          },
+          "data_base64": {
+            "type": "string",
+            "title": "Data Base64"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message_id",
+          "attachment_id",
+          "data_base64"
+        ],
+        "title": "GmailAttachmentData",
+        "description": "Raw bytes of a single attachment, fetched on demand.\n\n``data_base64`` is standard base64 (padded), ready to decode or re-upload."
+      },
+      "GmailAttachmentSource": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "gmail_attachment",
+            "title": "Type",
+            "default": "gmail_attachment"
+          },
+          "message_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Message Id",
+            "description": "Id of the message the attachment lives on (from gmail_get_thread)"
+          },
+          "attachment_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Attachment Id",
+            "description": "Stable attachment id from a gmail_get_thread attachment entry"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message_id",
+          "attachment_id"
+        ],
+        "title": "GmailAttachmentSource",
+        "description": "Locator for a PDF arriving as a Gmail attachment.\n\nResolved server-side by the Gmail bridge - the bytes never travel\nthrough the model's context."
       },
       "GmailComposeInput": {
         "properties": {
@@ -2301,11 +3541,25 @@
             },
             "type": "array",
             "title": "Attachments"
+          },
+          "body_preview": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body Preview",
+            "description": "First ~200 chars of the body, so callers can verify content cheaply.",
+            "readOnly": true
           }
         },
         "type": "object",
         "required": [
-          "draft_id"
+          "draft_id",
+          "body_preview"
         ],
         "title": "GmailDraft"
       },
@@ -2365,11 +3619,81 @@
               }
             ],
             "title": "Message Id"
+          },
+          "size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Bytes",
+            "description": "Size in bytes - the name the public tool contract advertises.\n\nEmitted alongside ``size`` (not instead of it) because the committed\ncomposer UI bundle still reads ``size``; collapsing to a single key\nwould require rebuilding that React bundle (``make build_apps``), which\nis out of scope for a pure service change.",
+            "readOnly": true
           }
         },
         "type": "object",
+        "required": [
+          "size_bytes"
+        ],
         "title": "GmailDraftAttachment",
-        "description": "Metadata for an attachment already on a draft (read-only, no data blob)."
+        "description": "Metadata for an attachment already on a draft (read-only, no data blob).\n\n``attachment_id`` is the stable handle for the file: pass it back as an\n``AttachmentReference`` to ``gmail_update_draft`` (or to\n``gmail_remove_attachment``) to preserve / remove the file without\nre-uploading its bytes."
+      },
+      "GmailDraftAttachmentsResult": {
+        "properties": {
+          "draft_id": {
+            "type": "string",
+            "title": "Draft Id"
+          },
+          "attachments": {
+            "items": {
+              "$ref": "#/components/schemas/GmailDraftAttachment"
+            },
+            "type": "array",
+            "title": "Attachments"
+          }
+        },
+        "type": "object",
+        "required": [
+          "draft_id"
+        ],
+        "title": "GmailDraftAttachmentsResult",
+        "description": "The draft's attachment list after an add/remove operation."
+      },
+      "GmailDraftDestination": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "gmail_draft",
+            "title": "Type",
+            "default": "gmail_draft"
+          },
+          "draft_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Draft Id"
+          },
+          "filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filename",
+            "description": "Attachment filename. Defaults to '{original-stem}-signed.pdf' for signed documents, '{original-stem}-filled.pdf' otherwise."
+          }
+        },
+        "type": "object",
+        "required": [
+          "draft_id"
+        ],
+        "title": "GmailDraftDestination",
+        "description": "Attach the exported PDF to an existing Gmail draft, server-side."
       },
       "GmailDraftSummary": {
         "properties": {
@@ -2429,6 +3753,33 @@
         ],
         "title": "GmailDraftSummary"
       },
+      "GmailGetAttachmentInput": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id",
+            "default": ""
+          },
+          "message_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Message Id",
+            "description": "Id of the message the attachment lives on (from gmail_get_thread)"
+          },
+          "attachment_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Attachment Id",
+            "description": "Stable attachment id from a gmail_get_thread attachment entry"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message_id",
+          "attachment_id"
+        ],
+        "title": "GmailGetAttachmentInput"
+      },
       "GmailGetDraftInput": {
         "properties": {
           "user_id": {
@@ -2457,6 +3808,18 @@
           "thread_id": {
             "type": "string",
             "title": "Thread Id"
+          },
+          "include_attachment_data": {
+            "type": "boolean",
+            "title": "Include Attachment Data",
+            "description": "Inline the raw base64 bytes of attachments and cid: inline images (e.g. signature logos) into the response. Off by default to keep thread payloads small - attachments still carry filename, mime_type, size, and attachment_id, so fetch a file's bytes on demand with gmail_get_attachment using its message_id + attachment_id.",
+            "default": false
+          },
+          "strip_quoted_replies": {
+            "type": "boolean",
+            "title": "Strip Quoted Replies",
+            "description": "Collapse quoted prior-message history from each reply's body, keeping only the newly written text. Off by default; turn on to read long threads cheaply without every message re-quoting the whole chain.",
+            "default": false
           }
         },
         "type": "object",
@@ -2546,6 +3909,17 @@
             "minimum": 1,
             "title": "Limit",
             "default": 25
+          },
+          "mailbox": {
+            "type": "string",
+            "enum": [
+              "inbox",
+              "sent",
+              "all"
+            ],
+            "title": "Mailbox",
+            "description": "Where to search: 'inbox' (received mail in the inbox), 'sent' (messages you sent), or 'all' (everything except spam, trash and drafts).",
+            "default": "inbox"
           }
         },
         "type": "object",
@@ -2673,6 +4047,32 @@
         ],
         "title": "GmailMessageSummary"
       },
+      "GmailRemoveAttachmentInput": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id",
+            "default": ""
+          },
+          "draft_id": {
+            "type": "string",
+            "title": "Draft Id"
+          },
+          "attachment_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Attachment Id",
+            "description": "Stable id of the attachment to remove"
+          }
+        },
+        "type": "object",
+        "required": [
+          "draft_id",
+          "attachment_id"
+        ],
+        "title": "GmailRemoveAttachmentInput",
+        "description": "Input for ``gmail_remove_attachment``: drop one file from a draft by id.\n\nTouches only the attachment list - body, subject, and recipients are\npreserved verbatim."
+      },
       "GmailReplyInput": {
         "properties": {
           "user_id": {
@@ -2706,6 +4106,39 @@
             ],
             "title": "Subject"
           },
+          "to": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To"
+          },
+          "cc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cc"
+          },
+          "bcc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bcc"
+          },
           "attachments": {
             "items": {
               "$ref": "#/components/schemas/AttachmentInput"
@@ -2719,7 +4152,7 @@
           "thread_id"
         ],
         "title": "GmailReplyInput",
-        "description": "Input for ``gmail_reply_to_thread``: create a reply draft on a thread.\n\n``body`` defaults to an empty placeholder so the composer UI can populate\nit on the next turn. ``subject`` defaults to ``Re: <orig>`` derived from\nthe thread's last message."
+        "description": "Input for ``gmail_reply_to_thread``: create a reply draft on a thread.\n\n``body`` defaults to an empty placeholder so the composer UI can populate\nit on the next turn. ``subject`` defaults to ``Re: <orig>`` derived from\nthe thread's last message.\n\nRecipients are caller-controlled: ``to``, ``cc``, and ``bcc`` each accept a\ncomma-separated address list and are used verbatim when provided. Only\n``to`` has a default - when omitted it is derived from the thread (the other\nparty in the conversation, never the account owner). ``cc``/``bcc`` are set\nonly when the caller passes them; the reply carries none otherwise. Supplied\naddresses are used as-is - they are NOT de-duplicated against the thread's\nexisting participants or the derived ``to`` default."
       },
       "GmailSendInput": {
         "properties": {
@@ -3053,7 +4486,14 @@
             "anyOf": [
               {
                 "items": {
-                  "$ref": "#/components/schemas/AttachmentInput"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/AttachmentInput"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AttachmentReference"
+                    }
+                  ]
                 },
                 "type": "array"
               },
@@ -3068,7 +4508,80 @@
         "required": [
           "draft_id"
         ],
-        "title": "GmailUpdateDraftInput"
+        "title": "GmailUpdateDraftInput",
+        "description": "Patch input for ``gmail_update_draft``.\n\nNon-destructive by default: a field you omit is left unchanged on the\ndraft; a field you set to ``null`` is cleared. This applies to ``to``,\n``cc``, ``bcc``, ``subject``, ``body``, and ``attachments``.\n\nThe omitted-vs-null distinction is carried by the ``UNSET`` sentinel\ndefault rather than ``model_fields_set``, because the latter cannot tell\nthe two apart over the MCP transport (see ``_UnsetType``). Every patchable\nfield therefore defaults to ``UNSET`` (preserve) instead of ``None``\n(clear).\n\n``attachments`` accepts a mix of new uploads (``AttachmentInput`` with\nbase64 bytes) and references to files already on the draft\n(``AttachmentReference`` with just an ``attachment_id``), so a caller can\nedit the body repeatedly without re-uploading attachments. Omit\n``attachments`` to keep every existing file; pass ``null`` (or ``[]``) to\ndrop them all."
+      },
+      "GmailWatchStartInput": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id",
+            "description": "User whose mailbox to watch",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "GmailWatchStartInput"
+      },
+      "GmailWatchStartResult": {
+        "properties": {
+          "watching": {
+            "type": "boolean",
+            "title": "Watching"
+          },
+          "history_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "History Id"
+          },
+          "expiration": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expiration"
+          }
+        },
+        "type": "object",
+        "required": [
+          "watching"
+        ],
+        "title": "GmailWatchStartResult"
+      },
+      "GmailWatchStopInput": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "GmailWatchStopInput"
+      },
+      "GmailWatchStopResult": {
+        "properties": {
+          "stopped": {
+            "type": "boolean",
+            "title": "Stopped"
+          }
+        },
+        "type": "object",
+        "required": [
+          "stopped"
+        ],
+        "title": "GmailWatchStopResult"
       },
       "GreetInput": {
         "properties": {
@@ -3123,6 +4636,159 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "InboxSearchInput": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id",
+            "default": ""
+          },
+          "query": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Query"
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 200,
+            "minimum": 1,
+            "title": "Limit",
+            "default": 25
+          },
+          "since_history_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since History Id",
+            "description": "Return only threads changed since this Gmail historyId (incremental delta via users.history.list). Omit for a normal query."
+          }
+        },
+        "type": "object",
+        "title": "InboxSearchInput"
+      },
+      "InboxSearchItem": {
+        "properties": {
+          "thread_id": {
+            "type": "string",
+            "title": "Thread Id"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
+          },
+          "from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From"
+          },
+          "snippet": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snippet"
+          },
+          "last_message_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Message At"
+          },
+          "ledger_status": {
+            "$ref": "#/components/schemas/LedgerStatus",
+            "default": "uncurated"
+          },
+          "importance_prior": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Importance Prior",
+            "description": "Heuristic prior importance for an uncurated thread (0..~2)."
+          }
+        },
+        "type": "object",
+        "required": [
+          "thread_id"
+        ],
+        "title": "InboxSearchItem"
+      },
+      "InboxSearchResult": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/InboxSearchItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "current_history_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current History Id",
+            "description": "The mailbox's latest historyId, to pass as a future watermark."
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "InboxSearchResult"
+      },
+      "LedgerStatus": {
+        "type": "string",
+        "enum": [
+          "curated",
+          "stale",
+          "uncurated"
+        ],
+        "title": "LedgerStatus",
+        "description": "Per-thread freshness annotation computed on read (not stored).\n\n- ``curated``   - a fresh ledger row exists for the thread.\n- ``stale``     - a ledger row exists but the thread's Gmail historyId has\n  advanced past the curated watermark (needs re-reasoning).\n- ``uncurated`` - no ledger row (or a ``pending`` one); never judged."
       },
       "PaymentRequirementRequest": {
         "properties": {
@@ -3195,6 +4861,802 @@
         "title": "PaymentVerifyRequest",
         "description": "Request body for verifying a payment payload."
       },
+      "PdfDocStatus": {
+        "type": "string",
+        "enum": [
+          "open",
+          "awaiting_signature",
+          "signed"
+        ],
+        "title": "PdfDocStatus",
+        "description": "The document-session state machine's states (single source of truth).\n\nTransitions are owned by ``services/pdf_documents_repo.py``:\nopen -> awaiting_signature -> signed (terminal), with\nawaiting_signature -> open as the user-cancel path."
+      },
+      "PdfEditInput": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id",
+            "default": ""
+          },
+          "doc_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Doc Id"
+          },
+          "ops": {
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/SetFieldOp"
+                },
+                {
+                  "$ref": "#/components/schemas/AddTextOp"
+                }
+              ],
+              "discriminator": {
+                "propertyName": "op",
+                "mapping": {
+                  "add_text": "#/components/schemas/AddTextOp",
+                  "set_field": "#/components/schemas/SetFieldOp"
+                }
+              }
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Ops",
+            "description": "Batch of edits, applied atomically: if any op is invalid the whole batch is rejected and the document is unchanged"
+          },
+          "render_pages": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Render Pages",
+            "description": "1-based page numbers to rasterize into the response as PNG images to verify placement (capped by pdf_forms.render_max_pages)"
+          },
+          "acknowledge_signature_invalidation": {
+            "type": "boolean",
+            "title": "Acknowledge Signature Invalidation",
+            "description": "Must be true to edit a document that already carries digital signatures (pdf_open's existing_signatures) - editing cryptographically invalidates them. Set only after the user has explicitly confirmed they accept that.",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "doc_id",
+          "ops"
+        ],
+        "title": "PdfEditInput"
+      },
+      "PdfEditResult": {
+        "properties": {
+          "doc_id": {
+            "type": "string",
+            "title": "Doc Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PdfDocStatus"
+          },
+          "applied_ops": {
+            "type": "integer",
+            "title": "Applied Ops"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/PdfFormField"
+            },
+            "type": "array",
+            "title": "Fields",
+            "description": "Field inventory after the edit"
+          },
+          "page_images": {
+            "items": {
+              "$ref": "#/components/schemas/PdfPageImage"
+            },
+            "type": "array",
+            "title": "Page Images"
+          }
+        },
+        "type": "object",
+        "required": [
+          "doc_id",
+          "status",
+          "applied_ops"
+        ],
+        "title": "PdfEditResult"
+      },
+      "PdfExportInput": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id",
+            "default": ""
+          },
+          "doc_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Doc Id"
+          },
+          "destination": {
+            "$ref": "#/components/schemas/GmailDraftDestination",
+            "description": "Where to deliver the PDF (attached server-side; the bytes never enter this conversation)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "doc_id",
+          "destination"
+        ],
+        "title": "PdfExportInput"
+      },
+      "PdfExportResult": {
+        "properties": {
+          "doc_id": {
+            "type": "string",
+            "title": "Doc Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "open",
+              "signed"
+            ],
+            "title": "Status"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename",
+            "description": "Filename the PDF was delivered under"
+          },
+          "destination_type": {
+            "type": "string",
+            "title": "Destination Type"
+          },
+          "draft_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Draft Id",
+            "description": "Gmail draft id (gmail_draft destinations)"
+          },
+          "attachments": {
+            "items": {
+              "$ref": "#/components/schemas/PdfExportedAttachment"
+            },
+            "type": "array",
+            "title": "Attachments",
+            "description": "The destination draft's resulting attachment list"
+          }
+        },
+        "type": "object",
+        "required": [
+          "doc_id",
+          "status",
+          "filename",
+          "destination_type"
+        ],
+        "title": "PdfExportResult"
+      },
+      "PdfExportedAttachment": {
+        "properties": {
+          "filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filename"
+          },
+          "mime_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mime Type"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
+          },
+          "attachment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attachment Id"
+          }
+        },
+        "type": "object",
+        "title": "PdfExportedAttachment",
+        "description": "Metadata of one attachment on the destination after export (no bytes)."
+      },
+      "PdfFormField": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Fully-qualified field name (use in set_field)"
+          },
+          "field_type": {
+            "type": "string",
+            "enum": [
+              "text",
+              "checkbox",
+              "radio",
+              "choice",
+              "signature",
+              "unknown"
+            ],
+            "title": "Field Type"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value",
+            "description": "Current value, if any"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page",
+            "description": "1-based page the field's widget sits on"
+          },
+          "rect": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rect",
+            "description": "Widget rectangle [x0, y0, x1, y1] in PDF user space"
+          },
+          "options": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Options",
+            "description": "Allowed values: export options for choice fields, appearance states (e.g. ['/Off', '/Yes']) for checkboxes and radios"
+          },
+          "required": {
+            "type": "boolean",
+            "title": "Required",
+            "default": false
+          },
+          "read_only": {
+            "type": "boolean",
+            "title": "Read Only",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "field_type"
+        ],
+        "title": "PdfFormField",
+        "description": "One AcroForm field, flattened for the LLM to reason about."
+      },
+      "PdfOpenInput": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id",
+            "default": ""
+          },
+          "source": {
+            "$ref": "#/components/schemas/GmailAttachmentSource",
+            "description": "Where to fetch the PDF from"
+          },
+          "render_pages": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Render Pages",
+            "description": "1-based page numbers to rasterize into the response as PNG images for visual inspection (capped by pdf_forms.render_max_pages)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source"
+        ],
+        "title": "PdfOpenInput"
+      },
+      "PdfOpenResult": {
+        "properties": {
+          "doc_id": {
+            "type": "string",
+            "title": "Doc Id",
+            "description": "Session handle for all subsequent pdf_* calls"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PdfDocStatus"
+          },
+          "page_count": {
+            "type": "integer",
+            "title": "Page Count"
+          },
+          "page_sizes": {
+            "items": {
+              "$ref": "#/components/schemas/PdfPageSize"
+            },
+            "type": "array",
+            "title": "Page Sizes"
+          },
+          "has_acroform": {
+            "type": "boolean",
+            "title": "Has Acroform",
+            "description": "True if the PDF has fillable form fields (use set_field); false means a flat PDF (use add_text overlays anchored on text_layout)"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/PdfFormField"
+            },
+            "type": "array",
+            "title": "Fields"
+          },
+          "text_layout": {
+            "items": {
+              "$ref": "#/components/schemas/PdfTextLine"
+            },
+            "type": "array",
+            "title": "Text Layout",
+            "description": "Existing text lines with coordinates (flat PDFs only), for anchoring add_text overlays"
+          },
+          "text_layout_truncated": {
+            "type": "boolean",
+            "title": "Text Layout Truncated",
+            "description": "True if text_layout was cut at pdf_forms.text_layout_max_lines",
+            "default": false
+          },
+          "page_images": {
+            "items": {
+              "$ref": "#/components/schemas/PdfPageImage"
+            },
+            "type": "array",
+            "title": "Page Images"
+          },
+          "existing_signatures": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Existing Signatures",
+            "description": "Signature fields that already hold a digital signature. Editing such a document cryptographically invalidates them - pdf_edit requires acknowledge_signature_invalidation=true, and the user must be told before proceeding."
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings",
+            "description": "Non-fatal caveats about this document (existing digital signatures, XFA forms). Relay these to the user before planning edits."
+          }
+        },
+        "type": "object",
+        "required": [
+          "doc_id",
+          "filename",
+          "status",
+          "page_count",
+          "has_acroform"
+        ],
+        "title": "PdfOpenResult"
+      },
+      "PdfPageImage": {
+        "properties": {
+          "page": {
+            "type": "integer",
+            "title": "Page",
+            "description": "1-based page number"
+          },
+          "mime_type": {
+            "type": "string",
+            "title": "Mime Type",
+            "default": "image/png"
+          },
+          "data_base64": {
+            "type": "string",
+            "title": "Data Base64"
+          }
+        },
+        "type": "object",
+        "required": [
+          "page",
+          "data_base64"
+        ],
+        "title": "PdfPageImage",
+        "description": "A rasterized page (PNG) for visual verification of edits."
+      },
+      "PdfPageSize": {
+        "properties": {
+          "page": {
+            "type": "integer",
+            "title": "Page",
+            "description": "1-based page number"
+          },
+          "width": {
+            "type": "number",
+            "title": "Width"
+          },
+          "height": {
+            "type": "number",
+            "title": "Height"
+          }
+        },
+        "type": "object",
+        "required": [
+          "page",
+          "width",
+          "height"
+        ],
+        "title": "PdfPageSize"
+      },
+      "PdfRequestSignatureInput": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id",
+            "default": ""
+          },
+          "doc_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Doc Id"
+          },
+          "placement": {
+            "$ref": "#/components/schemas/SignaturePlacement",
+            "description": "Where the signature stamp goes: a signature field's name, or {page, x, y} in PDF user space for flat PDFs"
+          }
+        },
+        "type": "object",
+        "required": [
+          "doc_id",
+          "placement"
+        ],
+        "title": "PdfRequestSignatureInput"
+      },
+      "PdfRequestSignatureResult": {
+        "properties": {
+          "doc_id": {
+            "type": "string",
+            "title": "Doc Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "awaiting_user_signature",
+              "signed",
+              "signing_declined",
+              "signing_unavailable"
+            ],
+            "title": "Status"
+          },
+          "guidance": {
+            "type": "string",
+            "title": "Guidance",
+            "description": "What happens next; relay this to the user verbatim"
+          }
+        },
+        "type": "object",
+        "required": [
+          "doc_id",
+          "status",
+          "guidance"
+        ],
+        "title": "PdfRequestSignatureResult"
+      },
+      "PdfTextLine": {
+        "properties": {
+          "page": {
+            "type": "integer",
+            "title": "Page",
+            "description": "1-based page number"
+          },
+          "x": {
+            "type": "number",
+            "title": "X",
+            "description": "Left edge of the line, PDF user space"
+          },
+          "y": {
+            "type": "number",
+            "title": "Y",
+            "description": "Baseline of the line, PDF user space"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "page",
+          "x",
+          "y",
+          "text"
+        ],
+        "title": "PdfTextLine",
+        "description": "A line of existing text with its anchor position, for flat-PDF overlays."
+      },
+      "SaveCurationInput": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id",
+            "default": ""
+          },
+          "judgments": {
+            "items": {
+              "$ref": "#/components/schemas/ThreadJudgment"
+            },
+            "type": "array",
+            "title": "Judgments"
+          },
+          "curator_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Curator Version",
+            "description": "Model/prompt version tag stamped on each written row."
+          }
+        },
+        "type": "object",
+        "title": "SaveCurationInput"
+      },
+      "SaveCurationResult": {
+        "properties": {
+          "saved": {
+            "type": "integer",
+            "title": "Saved"
+          },
+          "thread_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Thread Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "saved"
+        ],
+        "title": "SaveCurationResult"
+      },
+      "SetFieldOp": {
+        "properties": {
+          "op": {
+            "type": "string",
+            "const": "set_field",
+            "title": "Op",
+            "default": "set_field"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Field name from pdf_open's fields[]"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value",
+            "description": "New value. Text fields: any string. Checkboxes/radios: one of the field's options (e.g. '/Yes'; '/Off' clears). Choice fields: one of the listed options."
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "value"
+        ],
+        "title": "SetFieldOp",
+        "description": "Set an AcroForm field's value (text, checkbox, radio, choice)."
+      },
+      "SignaturePlacement": {
+        "properties": {
+          "field_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field Name",
+            "description": "Name of a signature-type AcroForm field to sign into"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page",
+            "description": "1-based page for flat-PDF placement"
+          },
+          "x": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X",
+            "description": "Left edge of the stamp, PDF user space"
+          },
+          "y": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Y",
+            "description": "Baseline of the stamp, PDF user space (origin bottom-left)"
+          }
+        },
+        "type": "object",
+        "title": "SignaturePlacement",
+        "description": "Where the visible signature stamp goes.\n\nEither ``field_name`` (an AcroForm signature field from pdf_open's\nfields[]) or an explicit ``page``/``x``/``y`` anchor for flat PDFs -\nexactly one of the two forms."
+      },
+      "SuggestedAction": {
+        "type": "string",
+        "enum": [
+          "archive",
+          "reply",
+          "mark_done",
+          "none"
+        ],
+        "title": "SuggestedAction",
+        "description": "The next action the host LLM proposes for a thread."
+      },
+      "ThreadJudgment": {
+        "properties": {
+          "thread_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Thread Id"
+          },
+          "bucket": {
+            "$ref": "#/components/schemas/CurationBucket"
+          },
+          "importance": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1,
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Importance"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "reasoning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning"
+          },
+          "suggested_action": {
+            "$ref": "#/components/schemas/SuggestedAction",
+            "default": "none"
+          },
+          "draft_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Draft Id"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1,
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          }
+        },
+        "type": "object",
+        "required": [
+          "thread_id",
+          "bucket"
+        ],
+        "title": "ThreadJudgment",
+        "description": "One host-produced judgment to bank."
+      },
       "ValidationError": {
         "properties": {
           "loc": {
@@ -3235,17 +5697,98 @@
         ],
         "title": "ValidationError"
       },
-      "CursorPage_APIKeyInfo_": {
+      "WaitlistJoinResult": {
         "properties": {
-          "items": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          }
+        },
+        "type": "object",
+        "title": "WaitlistJoinResult"
+      },
+      "WebhookListInput": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "WebhookListInput"
+      },
+      "WebhookListResult": {
+        "properties": {
+          "subscriptions": {
             "items": {
-              "$ref": "#/components/schemas/APIKeyInfo"
+              "$ref": "#/components/schemas/WebhookSubscriptionView"
             },
             "type": "array",
-            "title": "Items",
-            "description": "The items on this page."
+            "title": "Subscriptions"
+          }
+        },
+        "type": "object",
+        "title": "WebhookListResult"
+      },
+      "WebhookRotateSecretInput": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id",
+            "default": ""
           },
-          "next_cursor": {
+          "subscription_id": {
+            "type": "string",
+            "title": "Subscription Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "subscription_id"
+        ],
+        "title": "WebhookRotateSecretInput"
+      },
+      "WebhookRotateSecretResult": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "secret": {
+            "type": "string",
+            "title": "Secret",
+            "description": "New HMAC signing secret; shown only once"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "secret"
+        ],
+        "title": "WebhookRotateSecretResult"
+      },
+      "WebhookSettingsInput": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id",
+            "description": "Owner of the settings snapshot",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "WebhookSettingsInput"
+      },
+      "WebhookSettingsResult": {
+        "properties": {
+          "gmail_connected": {
+            "type": "boolean",
+            "title": "Gmail Connected",
+            "default": false
+          },
+          "gmail_email": {
             "anyOf": [
               {
                 "type": "string"
@@ -3254,28 +5797,201 @@
                 "type": "null"
               }
             ],
-            "title": "Next Cursor",
-            "description": "Opaque cursor for the next page. Pass it back as `cursor`. `null` when there are no more items."
+            "title": "Gmail Email"
           },
-          "has_more": {
+          "watching": {
             "type": "boolean",
-            "title": "Has More",
-            "description": "True when another page is available via `next_cursor`.",
+            "title": "Watching",
             "default": false
+          },
+          "watch_expiration": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Watch Expiration"
+          },
+          "push_available": {
+            "type": "boolean",
+            "title": "Push Available",
+            "default": false
+          },
+          "subscriptions": {
+            "items": {
+              "$ref": "#/components/schemas/WebhookSubscriptionView"
+            },
+            "type": "array",
+            "title": "Subscriptions"
+          }
+        },
+        "type": "object",
+        "title": "WebhookSettingsResult"
+      },
+      "WebhookSubscribeInput": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id",
+            "description": "Owner of the subscription",
+            "default": ""
+          },
+          "url": {
+            "type": "string",
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Url",
+            "description": "HTTPS endpoint that will receive signed webhook POSTs"
+          },
+          "event_types": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Types",
+            "description": "Event types to receive; omit/empty means all event types"
           }
         },
         "type": "object",
         "required": [
-          "items"
+          "url"
         ],
-        "title": "CursorPage[APIKeyInfo]"
+        "title": "WebhookSubscribeInput"
+      },
+      "WebhookSubscribeResult": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "event_types": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Types"
+          },
+          "active": {
+            "type": "boolean",
+            "title": "Active",
+            "default": true
+          },
+          "secret": {
+            "type": "string",
+            "title": "Secret",
+            "description": "HMAC signing secret; shown only once"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "url",
+          "secret"
+        ],
+        "title": "WebhookSubscribeResult"
+      },
+      "WebhookSubscriptionView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "event_types": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Types"
+          },
+          "active": {
+            "type": "boolean",
+            "title": "Active"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "url",
+          "active"
+        ],
+        "title": "WebhookSubscriptionView"
+      },
+      "WebhookUnsubscribeInput": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id",
+            "default": ""
+          },
+          "subscription_id": {
+            "type": "string",
+            "title": "Subscription Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "subscription_id"
+        ],
+        "title": "WebhookUnsubscribeInput"
+      },
+      "WebhookUnsubscribeResult": {
+        "properties": {
+          "unsubscribed": {
+            "type": "boolean",
+            "title": "Unsubscribed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "unsubscribed"
+        ],
+        "title": "WebhookUnsubscribeResult"
       }
     }
-  },
-  "servers": [
-    {
-      "url": "https://api.daysurface.com",
-      "description": "DaySurface production API"
-    }
-  ]
+  }
 }

@@ -1,21 +1,21 @@
 ---
 title: ChatGPT
-description: Connect your server to ChatGPT as a remote MCP connector via developer mode
+description: Connect your server to ChatGPT as a custom MCP app from the Plugins page
 icon: chatgpt
 ---
 
 import { Step, Steps } from 'fumadocs-ui/components/steps';
 import { Callout } from 'fumadocs-ui/components/callout';
 
-ChatGPT connects to your server as a *custom remote MCP connector* through
-OpenAI's **developer mode**. Because ChatGPT runs in OpenAI's cloud (not
+ChatGPT connects to your server as a *custom MCP app*, created from the
+**Plugins** page. Because ChatGPT runs in OpenAI's cloud (not
 locally), you point it at your public **streamable-HTTP** endpoint at `/mcp`,
 never `localhost`.
 
 <Callout type="info" title="Account requirements">
-Custom connectors need ChatGPT **Plus, Pro, Business, Enterprise, or Edu**.
-Developer mode on Business/Enterprise/Edu must be enabled by a workspace admin.
-ChatGPT **Free** cannot create custom connectors.
+Custom MCP apps need ChatGPT **Plus, Pro, Business, Enterprise, or Edu**, on
+the web. On Business/Enterprise/Edu a workspace admin must allow them first.
+ChatGPT **Free** cannot create custom MCP apps.
 </Callout>
 
 <Steps>
@@ -31,8 +31,8 @@ https://YOUR-DEPLOYMENT/mcp
 ```
 
 Configure [OAuth 2.1](/docs/mcp/oauth) on your deployment so ChatGPT can
-authenticate on connect - you'll pick **OAuth** as the connector's auth method
-in Step 3. ChatGPT's connector can't send a custom `X-API-KEY` header, so the
+authenticate on connect - you'll pick **OAuth** as the app's auth method
+in Step 2. ChatGPT's app can't send a custom `X-API-KEY` header, so the
 header-based API-key path that [local clients](/docs/mcp/setup) use doesn't
 apply here.
 
@@ -40,49 +40,34 @@ apply here.
 
 <Step>
 
-### Enable developer mode
+### Create the MCP app
 
-1. Open ChatGPT **Settings > Apps & Connectors**.
-2. Scroll to **Advanced settings** at the bottom.
-3. Toggle **Developer mode** on.
-
-OpenAI notes that developer mode gives ChatGPT full read/write access to the
-tools you expose. Your server still enforces its own auth and policy on every
-call as an additional layer.
-
-</Step>
-
-<Step>
-
-### Add the custom connector
-
-Under **Settings > Apps & Connectors**, open **Apps** and click **Create** -
-or jump straight to the dialog with
-[chatgpt.com/plugins#settings/Connectors?create-connector=true](https://chatgpt.com/plugins#settings/Connectors?create-connector=true&redirectAfter=%2Fplugins),
-which opens **New Plugin** on the Connectors screen. It skips the clicks, not
-the typing: the fields come up empty, and it only works once developer mode
-(Step 2) is on.
-
-Either way:
+Open [chatgpt.com/plugins](https://chatgpt.com/plugins), click **Add** (+),
+then **Create MCP App**. There is no link that opens the form pre-filled, so
+the fields come up empty.
 
 1. Enter a **name** (e.g. `daysurface`); icon and description are optional.
-2. Keep **Server URL** selected under Connection.
-3. Paste your connection **URL** from Step 1.
-4. Set **Authentication** to **OAuth** - ChatGPT discovers your server's
+2. Paste your connection **URL** from Step 1.
+3. Set **Authentication** to **OAuth** - ChatGPT discovers your server's
    authorization server and walks you through consent. (Use **No Auth** only if
    your deployment runs with no auth configured, e.g. a private internal
    deployment.)
-5. Check the box acknowledging the risk warning.
-6. Click **Create**.
+4. Check the box acknowledging the risk warning.
+5. Click **Create**.
 
-ChatGPT connects and lists your available tools. Enable them per-conversation
-from the composer's **Tools** menu.
+ChatGPT connects and lists your available tools. Start a new chat so the
+tools menu refreshes; enable the app from the composer's **+** menu if it
+isn't on already.
+
+OpenAI notes that custom MCP apps give ChatGPT full read/write access to the
+tools you expose. Your server still enforces its own auth and policy on every
+call as an additional layer.
 
 <Callout type="warn" title="Teams: each member connects with their own account">
 With OAuth, every member signs in individually on connect, so tool calls are
 attributed to the right user. For a team rollout, have the workspace admin
-enable developer mode under **Workspace Settings > Permissions & roles >
-Connected data**, then let each member add their own connector.
+allow **Create custom MCP connectors** under **Workspace Settings >
+Permissions & roles > Connected data**, then let each member add their own app.
 </Callout>
 
 </Step>

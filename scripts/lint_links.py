@@ -28,9 +28,9 @@ BOT_BLOCKED_DOMAINS = [
     # chatgpt.com sits behind Cloudflare bot protection and serves the app
     # itself to signed-in browsers only - a checker gets 403/redirect wherever
     # it runs, so this belongs here rather than in CLOUD_SANDBOX_IGNORES (which
-    # would still fail open-egress CI). The one link we have is the
-    # create-connector deep link in docs/content/docs/mcp/chatgpt.mdx; verify it
-    # by clicking it, not by link-linting it.
+    # would still fail open-egress CI). The one link we have is the Plugins
+    # page (chatgpt.com/plugins) in README.md and docs/content/docs/mcp/chatgpt.mdx;
+    # verify it by clicking it, not by link-linting it.
     r"https://chatgpt\.com/.*",
 ]
 
