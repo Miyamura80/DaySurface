@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { InlineComposer } from "./InlineComposer";
 import { reportComposerAction } from "./modelContext";
@@ -51,7 +51,9 @@ function renderComposer(app: McpAppLike) {
 }
 
 describe("composer actions reach the model", () => {
-  afterEach(() => { vi.clearAllMocks(); });
+  // A confirmed send schedules onSent after 1.5s; keep that timer fake.
+  beforeEach(() => { vi.useFakeTimers({ shouldAdvanceTime: true }); });
+  afterEach(() => { vi.useRealTimers(); vi.clearAllMocks(); });
 
   it("tells the model a draft was sent", async () => {
     const { app, updateModelContext } = makeApp();
@@ -124,6 +126,13 @@ describe("composer actions reach the model", () => {
     // The newest five, oldest first.
     expect(text).not.toContain("draft d2 ");
     expect(text.indexOf("draft d3 ")).toBeLessThan(text.indexOf("draft d7 "));
+  });
+
+  it("swallows a host that throws on the capability check", async () => {
+    const { app, updateModelContext } = makeApp();
+    app.getHostCapabilities = () => { throw new Error("host bug"); };
+    await expect(reportComposerAction(app, "sent", draft, { message_id: "m1" })).resolves.toBeUndefined();
+    expect(updateModelContext).not.toHaveBeenCalled();
   });
 
   it("swallows a rejected update", async () => {

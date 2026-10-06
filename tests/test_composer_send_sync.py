@@ -117,6 +117,31 @@ class TestDraftGone(TestTemplate):
                 )
             assert result.discarded is True
 
+    def test_a_draft_gone_mid_edit_reads_the_same(self):
+        # The draft was there for the first read, then sent before its
+        # attachment bytes could be copied into the rebuilt message.
+        draft = draft_resource(draft_id="d")
+        draft["message"]["payload"] = {
+            "mimeType": "multipart/mixed",
+            "headers": header_list({"To": "b@y", "Subject": "hi"}),
+            "parts": [
+                {
+                    "mimeType": "application/pdf",
+                    "filename": "a.pdf",
+                    "body": {"attachmentId": "att-1", "size": 3},
+                }
+            ],
+        }
+        mock = make_mock_service()
+        mock.users().drafts().get().execute.return_value = draft
+        mock.users().messages().attachments().get().execute.configure_mock(
+            side_effect=_http_error(404)
+        )
+        with _gmail(mock), pytest.raises(DraftGoneError):
+            gmail_update_draft(
+                GmailUpdateDraftInput(user_id="alice", draft_id="d", body="x")
+            )
+
     def test_other_errors_pass_through(self):
         mock = make_mock_service()
         mock.users().drafts().send().execute.configure_mock(
@@ -144,15 +169,13 @@ class TestRefusalsOverHTTP(TestTemplate):
         assert str(error) in resp.text
 
 
-_NOW = datetime.now(UTC)
-
-
 def _msg(mid: str, labels: list[str], sender: str, to: str, ago: timedelta) -> dict:
-    sent_at = int((_NOW - ago).timestamp() * 1000)
+    # ``ago`` is stamped into internalDate when the call runs (see _stamped):
+    # the guard compares against the clock then, not at collection.
     return {
         "id": mid,
         "labelIds": labels,
-        "internalDate": str(sent_at),
+        "_ago": ago,
         "payload": {
             "headers": header_list({"From": sender, "To": to, "Subject": "Plans"})
         },
@@ -170,11 +193,20 @@ def _mine(mid: str, ago: timedelta, to: str = "bob@x.com") -> dict:
 _HOUR, _MIN = timedelta(hours=1), timedelta(minutes=1)
 
 
+def _stamped(messages: list[dict]) -> list[dict]:
+    now = datetime.now(UTC)
+    return [
+        {k: v for k, v in m.items() if k != "_ago"}
+        | {"internalDate": str(int((now - m["_ago"]).timestamp() * 1000))}
+        for m in messages
+    ]
+
+
 def _reply(messages: list[dict], **kwargs) -> MagicMock:
     mock = make_mock_service()
     mock.users().threads().get().execute.return_value = {
         "id": "t",
-        "messages": messages,
+        "messages": _stamped(messages),
     }
     mock.users().drafts().create().execute.return_value = {"id": "d-new"}
     mock.users().drafts().get().execute.return_value = draft_resource(

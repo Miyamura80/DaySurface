@@ -37,8 +37,6 @@ import itertools
 from types import SimpleNamespace
 from typing import Any
 
-from googleapiclient.errors import HttpError
-
 _DEMO_EMAIL = "you@startup.com"
 
 
@@ -252,6 +250,9 @@ class _MissingDraft(_Executable):
         self._draft_id = draft_id
 
     def execute(self, *args: Any, **kwargs: Any) -> Any:
+        # Deferred like the real services: the SDK loads on a Gmail call only.
+        from googleapiclient.errors import HttpError  # noqa: PLC0415
+
         body = f'{{"error": {{"code": 404, "message": "no draft {self._draft_id}"}}}}'
         raise HttpError(SimpleNamespace(status=404, reason="Not Found"), body.encode())
 

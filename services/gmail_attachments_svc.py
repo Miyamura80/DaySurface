@@ -24,6 +24,7 @@ from services.gmail_draft_helpers import (
     _get_draft_resource,
     _rebuild_draft,
     _resolve_inline_images,
+    on_draft,
 )
 from services.gmail_svc import _get_gmail_client, _parse_message_resource
 
@@ -92,6 +93,7 @@ def _rebuild_preserving_content(
     output_model=GmailDraftAttachmentsResult,
     mutating=True,
 )
+@on_draft
 def gmail_add_attachment(
     input: GmailAddAttachmentInput,
 ) -> GmailDraftAttachmentsResult:
@@ -130,6 +132,7 @@ def gmail_add_attachment(
     output_model=GmailDraftAttachmentsResult,
     mutating=True,
 )
+@on_draft
 def gmail_remove_attachment(
     input: GmailRemoveAttachmentInput,
 ) -> GmailDraftAttachmentsResult:

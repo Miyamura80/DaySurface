@@ -46,26 +46,28 @@ export async function reportComposerAction(
   draft: ComposerDraft,
   sent?: { message_id?: string; thread_id?: string },
 ): Promise<void> {
-  if (!app.updateModelContext || !app.getHostCapabilities?.()?.updateModelContext) return;
-  const action: ComposerAction = {
-    kind,
-    draft_id: draft.draft_id,
-    // A new (non-reply) draft only learns its thread once Gmail sends it.
-    thread_id: sent?.thread_id || draft.thread_id,
-    message_id: sent?.message_id,
-    to: draft.to,
-    subject: draft.subject,
-    at: new Date().toISOString(),
-  };
-  const actions = [...(logs.get(app) ?? []), action].slice(-MAX_ACTIONS);
-  logs.set(app, actions);
+  // Best-effort end to end: the user's action already succeeded, and a host
+  // that throws (here or on the update) only leaves the model as unaware as
+  // it was before. Callers fire and forget, so nothing may reject.
   try {
+    if (!app.updateModelContext || !app.getHostCapabilities?.()?.updateModelContext) return;
+    const action: ComposerAction = {
+      kind,
+      draft_id: draft.draft_id,
+      // A new (non-reply) draft only learns its thread once Gmail sends it.
+      thread_id: sent?.thread_id || draft.thread_id,
+      message_id: sent?.message_id,
+      to: draft.to,
+      subject: draft.subject,
+      at: new Date().toISOString(),
+    };
+    const actions = [...(logs.get(app) ?? []), action].slice(-MAX_ACTIONS);
+    logs.set(app, actions);
     await app.updateModelContext({
       content: [{ type: "text", text: composerContextText(actions) }],
       structuredContent: { composer_actions: actions },
     });
   } catch {
-    // The action itself already succeeded; a host that rejects the update only
-    // leaves the model as unaware as it was before.
+    // See above.
   }
 }

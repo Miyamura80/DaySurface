@@ -21,17 +21,19 @@ Two concerns share the module:
 
 A third, smaller one: a draft the user sent or discarded in the composer UI
 is gone from Gmail, and the model can't see that (the composer's tools are
-app-only). ``execute_on_draft`` turns the resulting 404 into
-``DraftGoneError``, which tells the model so instead of a raw Google error.
+app-only). ``on_draft`` (whole services) and ``draft_gone_on_404`` (single
+calls) turn the resulting 404 into ``DraftGoneError``, which tells the model
+so instead of a raw Google error.
 """
 
 from __future__ import annotations
 
 import base64
-from collections.abc import Iterator
-from typing import Any
+import functools
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from typing import Any, Protocol
 
-from googleapiclient.errors import HttpError
 from loguru import logger as log
 
 from models.gmail import (
@@ -67,21 +69,46 @@ class DraftGoneError(ClientRefusalError):
         )
 
 
-def execute_on_draft(request: Any, draft_id: str) -> Any:
-    """``request.execute()`` for a call on ``draft_id``; a 404 is ``DraftGoneError``."""
+@contextmanager
+def draft_gone_on_404(draft_id: str) -> Iterator[None]:
+    """Inside, a Gmail 404 means the draft (or its message) is gone."""
+    # Deferred like gmail_messages_svc: load the SDK on a Gmail call only.
+    from googleapiclient.errors import HttpError  # noqa: PLC0415
+
     try:
-        return request.execute()
+        yield
     except HttpError as exc:
         if exc.resp.status == 404:
             raise DraftGoneError(draft_id) from exc
         raise
 
 
+class _OnDraft(Protocol):
+    draft_id: str
+
+
+def on_draft[I: _OnDraft, O](func: Callable[[I], O]) -> Callable[[I], O]:
+    """Run a draft service with any Gmail 404 read as ``DraftGoneError``.
+
+    Every request such a service makes (the draft, its message's attachment
+    bytes, the update, the re-read) is about ``input.draft_id``, so a 404 from
+    any of them, even mid-edit, means the draft went away.
+    """
+
+    @functools.wraps(func)
+    def wrapper(input: I) -> O:
+        with draft_gone_on_404(input.draft_id):
+            return func(input)
+
+    return wrapper
+
+
 def _get_draft_resource(svc: Any, draft_id: str) -> dict[str, Any]:
     """``drafts.get(format=full)`` for ``draft_id``; ``DraftGoneError`` if missing."""
-    return execute_on_draft(
-        svc.users().drafts().get(userId="me", id=draft_id, format="full"), draft_id
-    )
+    with draft_gone_on_404(draft_id):
+        return (
+            svc.users().drafts().get(userId="me", id=draft_id, format="full").execute()
+        )
 
 
 def _inputs_to_uploads(
@@ -375,10 +402,7 @@ def _rebuild_draft(
         inline_images=inline_images or None,
     )
     body_dict = draft_message_body(raw, parsed.get("thread_id"))
-    execute_on_draft(
-        svc.users().drafts().update(userId="me", id=draft_id, body=body_dict),
-        draft_id,
-    )
+    svc.users().drafts().update(userId="me", id=draft_id, body=body_dict).execute()
     # The update response omits the message payload and its post-replace
     # attachment ids; re-fetch at format=full for the true saved state.
     return _fetch_draft_model(svc, draft_id)

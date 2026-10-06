@@ -43,8 +43,9 @@ from services.gmail_draft_helpers import (
     _rebuild_draft,
     _resolve_inline_images,
     _resolve_update_attachments,
+    draft_gone_on_404,
     draft_message_body,
-    execute_on_draft,
+    on_draft,
 )
 from services.gmail_svc import (
     _build_raw_message,
@@ -135,6 +136,7 @@ def gmail_list_drafts(input: GmailListDraftsInput) -> GmailListDraftsResult:
     input_model=GmailGetDraftInput,
     output_model=GmailDraft,
 )
+@on_draft
 def gmail_get_draft(input: GmailGetDraftInput) -> GmailDraft:
     return _fetch_draft_model(_get_gmail_client(input.user_id), input.draft_id)
 
@@ -163,6 +165,7 @@ def gmail_get_draft(input: GmailGetDraftInput) -> GmailDraft:
     output_model=GmailDraft,
     mutating=True,
 )
+@on_draft
 def gmail_update_draft(input: GmailUpdateDraftInput) -> GmailDraft:
     """Patch a draft non-destructively: omitted fields stay, null clears them.
 
@@ -265,12 +268,10 @@ def gmail_compose(input: GmailComposeInput) -> GmailDraft:
     output_model=GmailSendResult,
     mutating=True,
 )
+@on_draft
 def gmail_send(input: GmailSendInput) -> GmailSendResult:
     svc = _get_gmail_client(input.user_id)
-    sent = execute_on_draft(
-        svc.users().drafts().send(userId="me", body={"id": input.draft_id}),
-        input.draft_id,
-    )
+    sent = svc.users().drafts().send(userId="me", body={"id": input.draft_id}).execute()
     return GmailSendResult(
         message_id=sent.get("id") or "",
         thread_id=sent.get("threadId"),
@@ -293,10 +294,8 @@ def gmail_discard_draft(input: GmailDiscardDraftInput) -> GmailDiscardDraftResul
     """
     svc = _get_gmail_client(input.user_id)
     try:
-        execute_on_draft(
-            svc.users().drafts().delete(userId="me", id=input.draft_id),
-            input.draft_id,
-        )
+        with draft_gone_on_404(input.draft_id):
+            svc.users().drafts().delete(userId="me", id=input.draft_id).execute()
     except DraftGoneError:
         log.debug("Draft id={} was already gone", input.draft_id)
     else:
