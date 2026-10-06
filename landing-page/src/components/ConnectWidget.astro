@@ -116,7 +116,7 @@ const selected = enriched.find((t) => t.id === defaultId) ?? enriched[0];
                   style={`-webkit-mask:url('${t.logo}') center/contain no-repeat;mask:url('${t.logo}') center/contain no-repeat;`}
                   aria-hidden="true"
                 />
-                {t.effort === "dialog-only" ? `Open ${t.name} connector setup` : `Add to ${t.name}`}
+                {t.effort === "dialog-only" ? (t.id === "chatgpt" ? "Open ChatGPT Plugins" : `Open ${t.name} setup page`) : `Add to ${t.name}`}
               </a>
               {t.note && <p class="mt-2.5 text-xs leading-relaxed text-fg-subtle">{t.note}</p>}
               {/* A deep-link target may ALSO carry steps: the manual fallback

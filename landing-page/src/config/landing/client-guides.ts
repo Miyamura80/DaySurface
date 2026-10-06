@@ -100,7 +100,7 @@ export const clientGuides: ClientGuide[] = [
         body: "Go to chatgpt.com/plugins in a browser. Custom MCP apps are added from the web, not from the desktop or mobile apps.",
       },
       {
-        title: "Create an MCP app",
+        title: "Create a custom MCP server",
         body: "Click Add, then Create custom MCP server. The form opens with every field blank, so have the DaySurface endpoint ready to paste rather than expecting it to be filled in for you.",
       },
       {
