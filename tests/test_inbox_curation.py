@@ -11,7 +11,7 @@ without hitting ``googleapiclient``.
 from __future__ import annotations
 
 from contextlib import contextmanager
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 from cryptography.fernet import Fernet
@@ -357,13 +357,12 @@ class TestGetCuration(TestTemplate):
             patch("services.inbox_curation_svc._get_gmail_client", return_value=svc),
             patch("services.inbox_curation_svc._list_thread_stubs", return_value=stubs),
             patch("services.curation_status._batch_get_threads", fake_batch),
-            patch("services.inbox_curation_svc._batch_get_threads", fake_batch),
             patch(
-                "services.inbox_curation_svc._build_label_lookups",
+                "services.curation_status._build_label_lookups",
                 return_value=({}, {}),
             ),
             patch(
-                "services.inbox_curation_svc._find_mcp_done_label",
+                "services.curation_status._find_mcp_done_label",
                 return_value="DONE",
             ),
         ):
@@ -510,6 +509,41 @@ class TestGetCuration(TestTemplate):
             )
             assert [r.thread_id for r in res.records] == ["old-open"]
             assert res.records[0].ledger_status == LedgerStatus.curated
+
+    def test_full_scan_pages_past_archived_rows(self):
+        with _patch_db(), _patch_fernet():
+            # 120 high-importance archived rows outrank the one still open.
+            archived = [_judgment(f"a{i}", importance=0.9) for i in range(120)]
+            upsert_judgments(
+                "alice",
+                [*archived, _judgment("open", importance=0.1)],
+                history_ids={},
+            )
+            stubs = [_stub(f"n{i}", "1") for i in range(200)]
+            threads = {f"a{i}": [_msg_at(_EARLIER)] for i in range(120)}
+            threads["open"] = [_msg_at(_EARLIER, "INBOX")]
+            res = self._run_get(
+                stubs, GetCurationInput(user_id="alice", limit=1), threads=threads
+            )
+            assert [r.thread_id for r in res.records] == ["open"]
+            # Three pages of 50 were checked, in batches of at most 50.
+            assert [len(ids) for ids in self.fetched_ids] == [50, 50, 21]
+
+    def test_full_scan_fetch_miss_is_surfaced_as_stale(self):
+        with _patch_db(), _patch_fernet():
+            upsert_judgments("alice", [_judgment("gone")], history_ids={})
+            stubs = [_stub(f"n{i}", "1") for i in range(200)]
+            res = self._run_get(stubs, threads={})  # the fetch returns nothing
+            assert [r.thread_id for r in res.records] == ["gone"]
+            assert res.records[0].ledger_status == LedgerStatus.stale
+
+    def test_missing_current_history_checks_messages(self):
+        with _patch_db(), _patch_fernet():
+            upsert_judgments("alice", [_judgment("t1")], history_ids={"t1": "100"})
+            res = self._run_get(
+                [{"id": "t1"}], threads={"t1": [_msg_at(_LATER, "INBOX")]}
+            )
+            assert res.records[0].ledger_status == LedgerStatus.stale
 
     def test_check_freshness_false_treats_all_as_curated(self):
         with _patch_db(), _patch_fernet():
@@ -1031,6 +1065,13 @@ class TestIsTriageableDoneSemantics(TestTemplate):
     def test_archived_thread_is_hidden(self):
         assert not self._triageable(_labelled("SENT"), _labelled())
 
+    def test_category_tab_message_does_not_count(self):
+        # Mirrors -category:promotions etc. in build_curate_query().
+        assert not self._triageable(_labelled("INBOX", "CATEGORY_PROMOTIONS"))
+        assert self._triageable(
+            _labelled("INBOX", "CATEGORY_PROMOTIONS"), _labelled("INBOX")
+        )
+
 
 class TestFreshnessHelpers(TestTemplate):
     def test_newest_incoming_ignores_drafts_and_own_replies(self):
@@ -1087,6 +1128,28 @@ class TestSeenThrough(TestTemplate):
             assert row.watermark == read_at
             # Later the thread changes; the reply the host never read counts.
             assert ledger_status_for(row, "2", race) == LedgerStatus.stale
+
+    def test_race_skips_storing_the_save_time_history_id(self):
+        read_at = datetime(2026, 5, 1, tzinfo=UTC)
+        race = read_at + timedelta(minutes=2)
+        with _patch_db(), _patch_fernet():
+            row = self._save(
+                _judgment("t1", seen_through=read_at),
+                [_msg_at(read_at, "INBOX"), _msg_at(race, "INBOX")],
+            )
+            # historyId "1" already includes the unread reply: not stored, so
+            # the next read cannot take the unchanged-history fast path.
+            assert row.curated_history_id is None
+            assert ledger_status_for(row, "1", race) == LedgerStatus.stale
+
+    def test_offset_seen_through_is_stored_as_utc(self):
+        tokyo = timezone(timedelta(hours=9))
+        with _patch_db(), _patch_fernet():
+            row = self._save(
+                _judgment("t1", seen_through=datetime(2026, 5, 1, 9, tzinfo=tokyo)),
+                [_msg_at(datetime(2026, 5, 1, 0, tzinfo=UTC), "INBOX")],
+            )
+            assert row.watermark == datetime(2026, 5, 1, 0, tzinfo=UTC)
 
     def test_future_seen_through_is_capped_at_save_time(self):
         newest = datetime(2026, 5, 1, tzinfo=UTC)

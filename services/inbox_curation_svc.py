@@ -47,6 +47,7 @@ from services.curation_ledger import (
     upsert_judgments,
 )
 from services.curation_status import (
+    BeyondScan,
     is_triageable,
     ledger_status_for,
     newest_incoming_at,
@@ -234,27 +235,31 @@ def inbox_get_curation(input: GetCurationInput) -> GetCurationResult:
 
     # The scan stops at the newest _COVERAGE_STUB_CAP inbox threads. When it is
     # full, a row outside it may still be in the inbox, so membership is
-    # checked directly instead of assumed.
+    # checked directly instead of assumed. Rows are read a page at a time so
+    # a large ledger of long-archived threads costs only what it takes to fill
+    # ``limit``.
     scan_full = len(stubs) >= _COVERAGE_STUB_CAP
-    only_scanned = not (input.include_inactive or scan_full)
-    records = list_records(
-        input.user_id,
-        bucket=input.bucket.value if input.bucket else None,
-        state=input.state.value if input.state else None,
-        thread_ids=inbox_ids if only_scanned else None,
-        limit=None if scan_full and not input.include_inactive else input.limit,
+    beyond = (
+        BeyondScan(svc, input.user_id, check_freshness=input.check_freshness)
+        if scan_full
+        else None
     )
     kept = []
-    for offset in range(0, len(records), _MEMBERSHIP_CHUNK):
-        chunk = records[offset : offset + _MEMBERSHIP_CHUNK]
-        if scan_full:
-            unknown = [r.thread_id for r in chunk if r.thread_id not in statuses]
-            statuses.update(
-                _statuses_beyond_scan(
-                    svc, input.user_id, unknown, check_freshness=input.check_freshness
-                )
-            )
-        for rec in chunk:
+    offset = 0
+    while len(kept) < input.limit:
+        page = list_records(
+            input.user_id,
+            bucket=input.bucket.value if input.bucket else None,
+            state=input.state.value if input.state else None,
+            thread_ids=None if input.include_inactive or scan_full else inbox_ids,
+            limit=_RECORD_PAGE,
+            offset=offset,
+        )
+        offset += len(page)
+        if beyond is not None:
+            unknown = [r.thread_id for r in page if r.thread_id not in statuses]
+            statuses.update(beyond.statuses(unknown))
+        for rec in page:
             status = statuses.get(rec.thread_id)
             if status is None:
                 # Left the triageable inbox (resolved or archived): hidden
@@ -266,43 +271,16 @@ def inbox_get_curation(input: GetCurationInput) -> GetCurationResult:
                 continue
             rec.ledger_status = status
             kept.append(rec)
-        if len(kept) >= input.limit:
+            if len(kept) >= input.limit:
+                break
+        if len(page) < _RECORD_PAGE:
             break
 
-    return GetCurationResult(records=kept[: input.limit], coverage=coverage)
+    return GetCurationResult(records=kept, coverage=coverage)
 
 
-# Ledger rows checked per membership batch when the inbox scan was full.
-_MEMBERSHIP_CHUNK = 50
-
-
-def _statuses_beyond_scan(
-    svc: Any, user_id: str, thread_ids: list[str], *, check_freshness: bool
-) -> dict[str, LedgerStatus]:
-    """Status of threads outside the inbox scan that are still triageable.
-
-    Threads that left the triageable inbox are absent from the result.
-    """
-    if not thread_ids:
-        return {}
-    fetched = _batch_get_threads(svc, thread_ids, fmt="minimal")
-    label_id_to_name, _ = _build_label_lookups(svc)
-    done_label_id = _find_mcp_done_label(svc)
-    rows = load_status_map(user_id, thread_ids)
-    out: dict[str, LedgerStatus] = {}
-    for tid in thread_ids:
-        messages = (fetched.get(tid) or {}).get("messages") or []
-        if not messages or not is_triageable(
-            messages, done_label_id=done_label_id, label_id_to_name=label_id_to_name
-        ):
-            continue
-        out[tid] = ledger_status_for(
-            rows.get(tid),
-            _history_str(fetched[tid].get("historyId")),
-            newest_incoming_at(messages),
-            check_freshness=check_freshness,
-        )
-    return out
+# Ledger rows read (and, past a full scan, membership-checked) per page.
+_RECORD_PAGE = 50
 
 
 def _search_item(
@@ -457,12 +435,15 @@ def inbox_save_curation(input: SaveCurationInput) -> SaveCurationResult:
         at_save = newest_incoming_at(
             (fetched.get(j.thread_id) or {}).get("messages") or []
         )
-        # Prefer what the host actually read: a message landing between its
-        # read and this save is newer than that, so it stays stale. Capping at
-        # the save-time value keeps a bogus future timestamp from hiding mail.
-        seen_through[j.thread_id] = min(
-            filter(None, (as_utc(j.seen_through), at_save)), default=None
-        )
+        seen = as_utc(j.seen_through)
+        # Prefer what the host actually read; capping at the save-time value
+        # keeps a bogus future timestamp from hiding mail.
+        seen_through[j.thread_id] = min(filter(None, (seen, at_save)), default=None)
+        if seen is not None and at_save is not None and at_save > seen:
+            # A message landed between the host's read and this save. The
+            # save-time historyId already includes it, so storing it would let
+            # the next read's fast path skip the check: keep the old one.
+            history_ids.pop(j.thread_id, None)
 
     saved = upsert_judgments(
         input.user_id,

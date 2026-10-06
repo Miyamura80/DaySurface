@@ -110,11 +110,13 @@ def list_records(
     state: str | None = None,
     thread_ids: Iterable[str] | None = None,
     limit: int | None = 50,
+    offset: int = 0,
 ) -> list[CurationRecord]:
     """Return decrypted curation records for a user, optionally filtered.
 
     ``thread_ids`` restricts the result to those threads (an empty iterable
-    returns nothing). ``limit=None`` returns every match.
+    returns nothing). ``limit=None`` returns every match; ``offset`` pages
+    through them in importance order.
     """
     ids = None if thread_ids is None else list(thread_ids)
     if ids is not None and not ids:
@@ -127,17 +129,25 @@ def list_records(
             query = query.filter(ThreadCuration.bucket == bucket)
         if state is not None:
             query = query.filter(ThreadCuration.state == state)
-        query = query.order_by(ThreadCuration.importance.desc().nullslast())
+        query = query.order_by(
+            ThreadCuration.importance.desc().nullslast(), ThreadCuration.thread_id
+        ).offset(offset)
         if limit is not None:
             query = query.limit(limit)
         return [row_to_record(r) for r in query.all()]
 
 
 def as_utc(value: datetime | None) -> datetime | None:
-    # SQLite hands timezone-aware columns back naive; they were written as UTC.
-    if value is not None and value.tzinfo is None:
+    """Normalise to aware UTC before storing or comparing.
+
+    SQLite hands timezone-aware columns back naive (they were written as UTC),
+    and it drops a non-UTC offset on write, so aware values are converted too.
+    """
+    if value is None:
+        return None
+    if value.tzinfo is None:
         return value.replace(tzinfo=UTC)
-    return value
+    return value.astimezone(UTC)
 
 
 class LedgerRowStatus(NamedTuple):
