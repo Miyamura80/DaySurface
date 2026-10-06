@@ -36,14 +36,14 @@
       "prefills": false,
       "steps": [
         "Open chatgpt.com/plugins",
-        "Click Add (+), then Create MCP App",
+        "Click Add, then Create custom MCP server",
         "Paste the URL, name it, Authentication → OAuth",
-        "Tick the risk box, click Create",
+        "Tick the risk box, click Create as a plugin",
         "New chat, so the tools menu refreshes"
       ],
       "setup_prompt": null,
       "setup_kind": null,
-      "note": "Copies the URL, then opens ChatGPT's Plugins page - click Add, then Create MCP App, and paste."
+      "note": "Copies the URL, then opens ChatGPT's Plugins page - click Add, then Create custom MCP server, and paste."
     },
     {
       "id": "claude-code",

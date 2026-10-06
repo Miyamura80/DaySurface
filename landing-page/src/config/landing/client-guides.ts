@@ -101,7 +101,7 @@ export const clientGuides: ClientGuide[] = [
       },
       {
         title: "Create an MCP app",
-        body: "Click Add, then Create MCP App. The form opens with every field blank, so have the DaySurface endpoint ready to paste rather than expecting it to be filled in for you.",
+        body: "Click Add, then Create custom MCP server. The form opens with every field blank, so have the DaySurface endpoint ready to paste rather than expecting it to be filled in for you.",
       },
       {
         title: "Fill in the details",
@@ -109,7 +109,7 @@ export const clientGuides: ClientGuide[] = [
       },
       {
         title: "Accept and create",
-        body: "Tick the risk acknowledgement, then click Create. ChatGPT will take you through the Google sign-in, where you can review the scopes before approving.",
+        body: "Tick the risk acknowledgement, then click Create as a plugin. ChatGPT will take you through the Google sign-in, where you can review the scopes before approving.",
       },
       {
         title: "Start a new chat",
@@ -119,7 +119,7 @@ export const clientGuides: ClientGuide[] = [
     capabilities: CAPABILITIES,
     faq: [
       {
-        q: "I don't see Create MCP App - what's wrong?",
+        q: "I don't see Create custom MCP server - what's wrong?",
         a: "Custom MCP apps need a paid plan (Plus, Pro, Business, Enterprise or Edu) and the web version of ChatGPT. On Business, Enterprise and Edu, a workspace admin also has to allow them under Workspace Settings, then Permissions & roles, then Connected data.",
       },
       {

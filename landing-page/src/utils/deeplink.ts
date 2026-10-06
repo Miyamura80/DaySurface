@@ -45,7 +45,7 @@ export function deepLink(
       // https://chatgpt.com/plugins
       //
       // A plain navigation link to ChatGPT's Plugins page, where custom MCP
-      // servers are added via Add (+) → Create MCP App. It prefills NOTHING,
+      // servers are added via Add → Create custom MCP server. It prefills NOTHING,
       // hence `prefills: false` in connect.ts - do not relabel this "1-click".
       // ConnectWidget copies the server URL to the clipboard as it navigates,
       // so the remaining work is two clicks and a paste.
