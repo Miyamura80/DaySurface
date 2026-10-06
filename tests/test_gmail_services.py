@@ -69,6 +69,7 @@ from services.gmail_drafts_svc import (
 )
 from services.gmail_messages_svc import (
     GmailThreadModifyInput,
+    _mailbox_query,
     gmail_archive_thread,
     gmail_get_attachment,
     gmail_get_thread,
@@ -669,6 +670,42 @@ class TestGmailListInbox(TestTemplate):
         assert result.messages[0].subject == "S1"
         dumped = result.messages[0].model_dump(by_alias=True)
         assert dumped["from"] == "sender1@example.com"
+
+    @pytest.mark.parametrize(
+        ("mailbox", "query", "expected"),
+        [
+            ("inbox", None, "in:inbox"),
+            ("inbox", "from:me", "in:inbox (from:me)"),
+            ("sent", None, "in:sent"),
+            ("sent", "from:me", "in:sent (from:me)"),
+            ("all", None, "-in:draft"),
+            ("all", "subject:hello", "-in:draft (subject:hello)"),
+        ],
+    )
+    def test_mailbox_query(self, mailbox, query, expected):
+        assert _mailbox_query(mailbox, query) == expected
+
+    @pytest.mark.parametrize(
+        ("mailbox", "expected_q"),
+        [("inbox", "in:inbox"), ("sent", "in:sent"), ("all", "-in:draft")],
+    )
+    def test_mailbox_scope_reaches_messages_list(self, mailbox, expected_q):
+        with _patch_db() as factory:
+            _seed_token(factory)
+            mock = _make_mock_service()
+            mock.users().messages().list().execute.return_value = {}
+            patches = _patch_client(mock)
+            _apply(patches)
+            try:
+                gmail_list_inbox(
+                    GmailListInboxInput(user_id="alice", mailbox=mailbox, limit=7)
+                )
+            finally:
+                _stop(patches)
+
+        kwargs = mock.users().messages().list.call_args.kwargs
+        assert kwargs["q"] == expected_q
+        assert kwargs["maxResults"] == 7
 
 
 class TestGmailGetThread(TestTemplate):

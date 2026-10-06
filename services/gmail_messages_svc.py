@@ -26,6 +26,7 @@ from models.gmail import (
     GmailGetThreadInput,
     GmailListInboxInput,
     GmailListInboxResult,
+    GmailMailbox,
     GmailMessageSummary,
     GmailThread,
     GmailThreadMessage,
@@ -305,6 +306,22 @@ def _get_or_create_mcp_done_label(svc: Any) -> str:
         raise
 
 
+# See ``GmailMailbox`` for why sent mail needs its own scope. Gmail's default
+# search already excludes spam and trash; "all" also drops unsent drafts in the
+# query itself, so they never use up maxResults.
+_MAILBOX_SCOPES: dict[GmailMailbox, str] = {
+    "inbox": "in:inbox",
+    "sent": "in:sent",
+    "all": "-in:draft",
+}
+
+
+def _mailbox_query(mailbox: GmailMailbox, query: str | None) -> str:
+    """Return the Gmail ``q`` for ``mailbox``, AND-ed with ``query`` if given."""
+    scope = _MAILBOX_SCOPES[mailbox]
+    return f"{scope} ({query})" if query else scope
+
+
 # ---------------------------------------------------------------------------
 # Services
 # ---------------------------------------------------------------------------
@@ -312,15 +329,21 @@ def _get_or_create_mcp_done_label(svc: Any) -> str:
 
 @service(
     name="gmail_list_inbox",
-    description="List recent inbox messages, optionally filtered by a Gmail search query. When the user asks to find or open a specific email, ALWAYS follow up by calling gmail_get_thread with the thread_id to render the full conversation in an interactive UI.",
+    description="List recent messages, optionally filtered by a Gmail search query. Searches the inbox by default; messages the user sent are never in the inbox, so pass mailbox='sent' or mailbox='all' to find them. When the user asks to find or open a specific email, ALWAYS follow up by calling gmail_get_thread with the thread_id to render the full conversation in an interactive UI.",
     input_model=GmailListInboxInput,
     output_model=GmailListInboxResult,
 )
 def gmail_list_inbox(input: GmailListInboxInput) -> GmailListInboxResult:
     svc = _get_gmail_client(input.user_id)
-    q = f"in:inbox ({input.query})" if input.query else "in:inbox"
     listing = (
-        svc.users().messages().list(userId="me", q=q, maxResults=input.limit).execute()
+        svc.users()
+        .messages()
+        .list(
+            userId="me",
+            q=_mailbox_query(input.mailbox, input.query),
+            maxResults=input.limit,
+        )
+        .execute()
     )
     message_ids = [
         stub["id"] for stub in (listing.get("messages", []) or []) if stub.get("id")
