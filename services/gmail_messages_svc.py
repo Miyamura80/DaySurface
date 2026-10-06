@@ -306,18 +306,17 @@ def _get_or_create_mcp_done_label(svc: Any) -> str:
         raise
 
 
-# messages.list scopes per message, so "in:inbox" drops the user's own sent
-# copies (SENT label only). "all" adds no scope: Gmail's default search already
-# excludes spam and trash.
-_MAILBOX_SCOPES: dict[GmailMailbox, str] = {
+# See ``GmailMailbox`` for why sent mail needs its own scope. "all" adds none:
+# Gmail's default search already excludes spam and trash.
+_MAILBOX_SCOPES: dict[GmailMailbox, str | None] = {
     "inbox": "in:inbox",
     "sent": "in:sent",
-    "all": "",
+    "all": None,
 }
 
 
-def _mailbox_query(mailbox: GmailMailbox, query: str | None) -> str:
-    """Return the Gmail ``q`` for ``mailbox``, AND-ed with ``query`` if given."""
+def _mailbox_query(mailbox: GmailMailbox, query: str | None) -> str | None:
+    """Gmail ``q`` for ``mailbox`` AND-ed with ``query``; ``None`` when unscoped."""
     scope = _MAILBOX_SCOPES[mailbox]
     if not query:
         return scope
@@ -331,17 +330,24 @@ def _mailbox_query(mailbox: GmailMailbox, query: str | None) -> str:
 
 @service(
     name="gmail_list_inbox",
-    description="List recent messages, optionally filtered by a Gmail search query. Searches the inbox by default; your own sent messages are NOT in the inbox (Gmail labels them SENT only, even replies inside inbox threads), so pass mailbox='sent' or mailbox='all' to find something you sent. When the user asks to find or open a specific email, ALWAYS follow up by calling gmail_get_thread with the thread_id to render the full conversation in an interactive UI.",
+    description="List recent messages, optionally filtered by a Gmail search query. Searches the inbox by default; messages the user sent are never in the inbox, so pass mailbox='sent' or mailbox='all' to find them. When the user asks to find or open a specific email, ALWAYS follow up by calling gmail_get_thread with the thread_id to render the full conversation in an interactive UI.",
     input_model=GmailListInboxInput,
     output_model=GmailListInboxResult,
 )
 def gmail_list_inbox(input: GmailListInboxInput) -> GmailListInboxResult:
     svc = _get_gmail_client(input.user_id)
-    q = _mailbox_query(input.mailbox, input.query)
-    list_kwargs: dict[str, Any] = {"userId": "me", "maxResults": input.limit}
-    if q:
-        list_kwargs["q"] = q
-    listing = svc.users().messages().list(**list_kwargs).execute()
+    # googleapiclient drops kwargs whose value is None, so an unscoped "all"
+    # sends no q at all.
+    listing = (
+        svc.users()
+        .messages()
+        .list(
+            userId="me",
+            q=_mailbox_query(input.mailbox, input.query),
+            maxResults=input.limit,
+        )
+        .execute()
+    )
     message_ids = [
         stub["id"] for stub in (listing.get("messages", []) or []) if stub.get("id")
     ]
@@ -355,7 +361,8 @@ def gmail_list_inbox(input: GmailListInboxInput) -> GmailListInboxResult:
     summaries: list[GmailMessageSummary] = []
     for mid in message_ids:
         meta = fetched.get(mid)
-        if meta:
+        # An unscoped "all" listing also returns unsent drafts; they aren't mail.
+        if meta and "DRAFT" not in (meta.get("labelIds") or []):
             summaries.append(_message_summary_from_metadata(meta))
     return GmailListInboxResult(messages=summaries)
 

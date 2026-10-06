@@ -24,7 +24,7 @@ principal - clients never pass it.
 | Tool | Description |
 |------|-------------|
 | `gmail_curate_inbox` **UI** | Rank recent inbox threads by a deterministic score and render the inbox dashboard. |
-| `gmail_list_inbox` | List recent inbox messages, optionally filtered by a Gmail search query. |
+| `gmail_list_inbox` | List recent messages from the inbox, sent mail, or everywhere, optionally filtered by a Gmail search query. |
 | `gmail_get_thread` **UI** | Fetch a thread with full message bodies. |
 | `gmail_get_attachment` | Fetch the raw base64 bytes of one attachment or inline image. |
 | `gmail_mark_thread_read` | Remove the `UNREAD` label from a thread. |
@@ -120,7 +120,7 @@ shows uncurated or stale threads.
 |-----------|------|---------|-------------|
 | `query` | string | _(none)_ | Gmail search query, e.g. `from:sarah@acme.com is:unread` |
 | `limit` | integer | `25` | Messages to return (1-500) |
-| `mailbox` | string | `inbox` | `inbox`, `sent`, or `all`. Your own sent messages carry only Gmail's `SENT` label, so use `sent` or `all` to find them |
+| `mailbox` | string | `inbox` | `inbox`, `sent`, or `all` (everything except spam, trash and drafts). Messages you sent are never in the inbox, so use `sent` or `all` to find them |
 
 ### gmail_get_thread
 

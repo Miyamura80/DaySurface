@@ -85,7 +85,7 @@ curl -X POST https://api.daysurface.com/api/v1/services/gmail_list_inbox \
 |-------|------|---------|-------------|
 | `query` | string | _(none)_ | Gmail search query |
 | `limit` | integer | `25` | Messages to return (1-500) |
-| `mailbox` | string | `inbox` | `inbox`, `sent`, or `all` (everything except spam/trash) |
+| `mailbox` | string | `inbox` | `inbox`, `sent`, or `all` (everything except spam, trash and drafts) |
 
 ## gmail_get_thread
 

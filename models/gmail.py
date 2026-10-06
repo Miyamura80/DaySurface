@@ -348,7 +348,8 @@ class GmailListInboxInput(BaseModel):
         default="inbox",
         description=(
             "Where to search: 'inbox' (received mail in the inbox), 'sent' "
-            "(messages you sent), or 'all' (everything except spam/trash)."
+            "(messages you sent), or 'all' (everything except spam, trash "
+            "and drafts)."
         ),
     )
 

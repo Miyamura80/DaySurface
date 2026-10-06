@@ -45,7 +45,7 @@
   },
   {
     "name": "gmail_list_inbox",
-    "description": "List recent messages, optionally filtered by a Gmail search query. Searches the inbox by default; your own sent messages are NOT in the inbox (Gmail labels them SENT only, even replies inside inbox threads), so pass mailbox='sent' or mailbox='all' to find something you sent. When the user asks to find or open a specific email, ALWAYS follow up by calling gmail_get_thread with the thread_id to render the full conversation in an interactive UI."
+    "description": "List recent messages, optionally filtered by a Gmail search query. Searches the inbox by default; messages the user sent are never in the inbox, so pass mailbox='sent' or mailbox='all' to find them. When the user asks to find or open a specific email, ALWAYS follow up by calling gmail_get_thread with the thread_id to render the full conversation in an interactive UI."
   },
   {
     "name": "gmail_mark_thread_done",

@@ -69,6 +69,7 @@ from services.gmail_drafts_svc import (
 )
 from services.gmail_messages_svc import (
     GmailThreadModifyInput,
+    _mailbox_query,
     gmail_archive_thread,
     gmail_get_attachment,
     gmail_get_thread,
@@ -670,74 +671,46 @@ class TestGmailListInbox(TestTemplate):
         dumped = result.messages[0].model_dump(by_alias=True)
         assert dumped["from"] == "sender1@example.com"
 
-    def _list_with_label_filter(self, mailbox, query=None):
-        """Run gmail_list_inbox against a fake that scopes per message.
+    @pytest.mark.parametrize(
+        ("mailbox", "query", "expected"),
+        [
+            ("inbox", None, "in:inbox"),
+            ("inbox", "from:me", "in:inbox (from:me)"),
+            ("sent", None, "in:sent"),
+            ("sent", "from:me", "in:sent (from:me)"),
+            ("all", None, None),
+            ("all", "subject:hello", "subject:hello"),
+        ],
+    )
+    def test_mailbox_query(self, mailbox, query, expected):
+        assert _mailbox_query(mailbox, query) == expected
 
-        Mirrors Gmail's messages.list: ``in:inbox`` / ``in:sent`` match a
-        message only if *that message* carries the label. The thread holds a
-        received message (INBOX) and the user's sent reply (SENT only).
-        """
-        labels = {"m-recv": ["INBOX", "UNREAD"], "m-sent": ["SENT"]}
-        seen_q: list[str | None] = []
-
-        def fake_list(**kwargs):
-            q = kwargs.get("q")
-            seen_q.append(q)
-            ids = list(labels)
-            if q and q.startswith("in:inbox"):
-                ids = [m for m in ids if "INBOX" in labels[m]]
-            elif q and q.startswith("in:sent"):
-                ids = [m for m in ids if "SENT" in labels[m]]
-            req = MagicMock()
-            req.execute.return_value = {"messages": [{"id": m} for m in ids]}
-            return req
-
-        def fake_batch_get_messages(svc, ids, **kwargs):
-            return {
-                mid: {"id": mid, "threadId": "t-1", "payload": {"headers": []}}
-                for mid in ids
-            }
-
+    def test_sent_mailbox_reaches_list_and_drafts_are_dropped(self):
+        payloads = {
+            "m-sent": {"id": "m-sent", "labelIds": ["SENT"], "payload": {}},
+            "m-draft": {"id": "m-draft", "labelIds": ["DRAFT"], "payload": {}},
+        }
         with _patch_db() as factory:
             _seed_token(factory)
             mock = _make_mock_service()
-            mock.users().messages().list.side_effect = fake_list
+            mock.users().messages().list().execute.return_value = {
+                "messages": [{"id": "m-sent"}, {"id": "m-draft"}],
+            }
             patches = _patch_client(mock)
             _apply(patches)
             with patch(
                 "services.gmail_messages_svc._batch_get_messages",
-                side_effect=fake_batch_get_messages,
+                return_value=payloads,
             ):
                 try:
                     result = gmail_list_inbox(
-                        GmailListInboxInput(
-                            user_id="alice", mailbox=mailbox, query=query
-                        )
+                        GmailListInboxInput(user_id="alice", mailbox="sent")
                     )
                 finally:
                     _stop(patches)
-        return [m.message_id for m in result.messages], seen_q[-1]
 
-    def test_inbox_scope_omits_own_sent_copy(self):
-        # The reported bug: the user's sent reply has no INBOX label, so the
-        # default inbox listing can never surface it.
-        ids, q = self._list_with_label_filter("inbox")
-        assert ids == ["m-recv"]
-        assert q == "in:inbox"
-
-    def test_sent_mailbox_returns_own_sent_copy(self):
-        ids, q = self._list_with_label_filter("sent", query="from:me")
-        assert ids == ["m-sent"]
-        assert q == "in:sent (from:me)"
-
-    def test_all_mailbox_sends_no_scope(self):
-        ids, q = self._list_with_label_filter("all")
-        assert ids == ["m-recv", "m-sent"]
-        assert q is None
-
-    def test_all_mailbox_passes_query_through(self):
-        _, q = self._list_with_label_filter("all", query="subject:hello")
-        assert q == "subject:hello"
+        assert mock.users().messages().list.call_args.kwargs["q"] == "in:sent"
+        assert [m.message_id for m in result.messages] == ["m-sent"]
 
 
 class TestGmailGetThread(TestTemplate):
