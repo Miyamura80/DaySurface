@@ -68,10 +68,17 @@ def v1_accepts(req: PaymentRequirement, *, resource: str) -> dict[str, Any]:
             atomic = Decimal(req.amount).scaleb(token["decimals"])
     except (InvalidOperation, Inexact) as exc:
         raise ValueError(f"x402: amount {req.amount!r} is not an exact number") from exc
-    if not atomic.is_finite() or atomic <= 0 or atomic != atomic.to_integral_value():
+    if (
+        not atomic.is_finite()
+        or atomic <= 0
+        or atomic != atomic.to_integral_value()
+        # The transfer authorization's value is a uint256.
+        or atomic > (1 << 256) - 1
+    ):
         raise ValueError(
-            f"x402: amount {req.amount!r} is not a positive multiple of the "
-            f"token's smallest unit ({token['decimals']} decimals)"
+            f"x402: amount {req.amount!r} is not payable: it must be a positive "
+            f"whole number of the token's smallest unit ({token['decimals']} "
+            "decimals) that fits in a uint256"
         )
     return {
         "scheme": "exact",

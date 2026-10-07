@@ -87,6 +87,7 @@ class TestV1Accepts(TestTemplate):
             ({"amount": "abc"}, "not an exact number"),
             ({"amount": "0.001" + "0" * 40 + "1"}, "not an exact number"),
             ({"amount": "Infinity"}, "smallest unit"),
+            ({"amount": "2e71"}, "smallest unit"),
             ({"asset": "USDT"}, "only USDC"),
         ],
     )
