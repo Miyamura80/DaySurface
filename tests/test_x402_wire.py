@@ -84,7 +84,10 @@ class TestV1Accepts(TestTemplate):
             ({"network": "base-sepolia-typo"}, "no known token contract"),
             ({"amount": "0.0000001"}, "smallest unit"),
             ({"amount": "0"}, "smallest unit"),
-            ({"amount": "abc"}, "not a number"),
+            ({"amount": "abc"}, "not an exact number"),
+            ({"amount": "0.001" + "0" * 40 + "1"}, "not an exact number"),
+            ({"amount": "Infinity"}, "smallest unit"),
+            ({"asset": "USDT"}, "only USDC"),
         ],
     )
     def test_refuses_what_no_client_could_pay(self, overrides, message):
@@ -157,10 +160,12 @@ class TestPaywallChallengeIsPayable(TestTemplate):
         with pytest.raises(PaymentRequiredError) as caught:
             self._enforce("base-sepolia")
         (accept,) = caught.value.challenge["accepts"]
-        assert accept["maxAmountRequired"] == "1000"
-        assert accept["asset"] == _BASE_SEPOLIA_USDC
-        assert accept["payTo"] == _WALLET
-        assert accept["facilitator"] == "https://x402.org/facilitator"
+        # Exactly the terms the facilitator will check, plus where to settle.
+        expected = v1_accepts(
+            _requirement(facilitator_url="https://x402.org/facilitator"),
+            resource="paid_svc",
+        )
+        assert accept == expected | {"facilitator": "https://x402.org/facilitator"}
 
     def test_unpayable_network_fails_closed(self):
         with pytest.raises(HTTPException) as caught:

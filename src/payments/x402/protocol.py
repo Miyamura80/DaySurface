@@ -2,7 +2,7 @@
 
 import os
 import threading
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, Inexact, InvalidOperation, localcontext
 from typing import Any
 
 from loguru import logger as log
@@ -20,7 +20,9 @@ from src.payments.types import (
 # How long a signed authorization stays valid; the client sets validBefore from it.
 _MAX_TIMEOUT_SECONDS = 300
 
-# USDC per x402 v1 network name: contract, EIP-712 domain, decimals. Values
+# USDC per x402 v1 network name: contract, EIP-712 domain, decimals. These are
+# the only networks (and USDC the only asset) this deployment can charge on;
+# any other config fails closed with a 500 before a challenge goes out. Values
 # from the SDK's V1_DEFAULT_ASSETS, which we can't import without the
 # ``x402[evm]`` extra and its Ethereum signing stack, used only by clients.
 _USDC: dict[str, dict[str, Any]] = {
@@ -48,17 +50,25 @@ def v1_accepts(req: PaymentRequirement, *, resource: str) -> dict[str, Any]:
     symbol; the exact-EVM scheme wants the token's contract address, the amount
     in its smallest unit, and the EIP-712 domain the client signs with.
 
-    Raises ValueError for a network with no known token or an amount the token
-    cannot represent.
+    Raises ValueError for an asset other than USDC, a network with no known
+    USDC contract, or an amount USDC cannot represent exactly.
     """
+    if req.asset != "USDC":
+        raise ValueError(
+            f"x402: unsupported asset {req.asset!r}; only USDC is supported"
+        )
     token = _USDC.get(req.network)
     if token is None:
         raise ValueError(f"x402: no known token contract for network {req.network!r}")
     try:
-        atomic = Decimal(req.amount).scaleb(token["decimals"])
-    except InvalidOperation as exc:
-        raise ValueError(f"x402: amount {req.amount!r} is not a number") from exc
-    if atomic <= 0 or atomic != atomic.to_integral_value():
+        # Inexact trapped: a price with more digits than the context keeps
+        # must be refused, never rounded into a different charge.
+        with localcontext() as ctx:
+            ctx.traps[Inexact] = True
+            atomic = Decimal(req.amount).scaleb(token["decimals"])
+    except (InvalidOperation, Inexact) as exc:
+        raise ValueError(f"x402: amount {req.amount!r} is not an exact number") from exc
+    if not atomic.is_finite() or atomic <= 0 or atomic != atomic.to_integral_value():
         raise ValueError(
             f"x402: amount {req.amount!r} is not a positive multiple of the "
             f"token's smallest unit ({token['decimals']} decimals)"
