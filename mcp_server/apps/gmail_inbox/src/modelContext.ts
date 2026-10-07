@@ -23,7 +23,7 @@ const logs = new WeakMap<McpAppLike, ComposerAction[]>();
 
 function formatAction(a: ComposerAction): string {
   const what = a.kind === "sent"
-    ? `SENT draft ${a.draft_id} as message ${a.message_id ?? "?"}`
+    ? `SENT draft ${a.draft_id}${a.message_id ? ` as message ${a.message_id}` : ""}`
     : `DISCARDED draft ${a.draft_id}`;
   const thread = a.thread_id ? ` on thread ${a.thread_id}` : "";
   const subject = a.subject ? `, subject "${a.subject}"` : "";

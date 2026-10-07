@@ -14,6 +14,8 @@ import {
   extractStructuredContent,
   formatFileSize,
   isPreviewable,
+  sendLanded,
+  toolErrorText,
 } from "./helpers";
 import { useComposerAttachments } from "./useComposerAttachments";
 import { reportComposerAction } from "./modelContext";
@@ -229,15 +231,25 @@ export function InlineComposer({
       // `undefined` means "omit -> preserve all"; an array (including the empty
       // clear-all list) must be sent, so test against undefined, not truthiness.
       if (attachmentsArg !== undefined) args.attachments = attachmentsArg;
-      const raw = await mcpApp.callServerTool({ name: "gmail_composer.send", arguments: args });
-      // callServerTool resolves on a tool-level failure (isError) too, so only a
-      // server-confirmed message_id counts as sent. Since "sent" is terminal, a
-      // false positive here would be unrecoverable.
+      let raw: unknown;
+      let callError: unknown = null;
+      try {
+        raw = await mcpApp.callServerTool({ name: "gmail_composer.send", arguments: args });
+      } catch (err) {
+        callError = err;
+      }
+      // callServerTool resolves on a tool-level failure (isError) too, so a
+      // message_id is the only direct confirmation. Without one (failure, host
+      // timeout, lost reply) the send may still have landed: "sent" is terminal,
+      // so only the server saying the draft is gone may stand in for it.
       const inner = extractStructuredContent<{ message_id?: string; thread_id?: string }>(raw);
       const msgId = inner?.message_id ?? "";
-      if (!msgId) throw new Error("the server did not confirm the send");
+      if (!msgId && !(await sendLanded(mcpApp, draft.draft_id))) {
+        if (callError) throw callError;
+        throw new Error(toolErrorText(raw) ?? "the server did not confirm the send");
+      }
       setSaveStatus({ kind: "sent", message_id: msgId });
-      void reportComposerAction(mcpApp, "sent", draft, { message_id: msgId, thread_id: inner?.thread_id });
+      void reportComposerAction(mcpApp, "sent", draft, { message_id: msgId || undefined, thread_id: inner?.thread_id });
       setTimeout(onSent, 1500);
     } catch (err) {
       // The send did not land, so the composer stays editable: reopen it to

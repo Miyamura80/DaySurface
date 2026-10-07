@@ -271,3 +271,29 @@ class TestDuplicateReplyGuard(TestTemplate):
         incoming["payload"]["headers"] += header_list({"Reply-To": "bob@x.com"})
         with pytest.raises(DuplicateReplyError):
             _reply([incoming, _mine("m2", _MIN)])
+
+
+class TestComposerSendStatus(TestTemplate):
+    """An unconfirmed send asks whether the draft is gone before saying it failed."""
+
+    def test_gone_draft_reads_as_sent(self):
+        from mcp_server.app_tools.gmail_composer import send_status  # noqa: PLC0415
+
+        with _gmail(_gone_mailbox()):
+            assert send_status(draft_id="d", user_id="alice").draft_exists is False
+
+    def test_live_draft_reads_as_not_sent(self):
+        from mcp_server.app_tools.gmail_composer import send_status  # noqa: PLC0415
+
+        mock = make_mock_service()
+        mock.users().drafts().get().execute.return_value = draft_resource()
+        with _gmail(mock):
+            assert send_status(draft_id="d", user_id="alice").draft_exists is True
+
+    def test_other_gmail_errors_propagate(self):
+        from mcp_server.app_tools.gmail_composer import send_status  # noqa: PLC0415
+
+        mock = make_mock_service()
+        mock.users().drafts().get().execute.configure_mock(side_effect=_http_error(500))
+        with _gmail(mock), pytest.raises(HttpError):
+            send_status(draft_id="d", user_id="alice")

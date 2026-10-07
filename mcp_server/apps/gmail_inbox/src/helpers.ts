@@ -161,6 +161,35 @@ export function extractStructuredContent<T>(raw: unknown): T | null {
   return null;
 }
 
+// The text of a tool-level failure (`isError` result), or null. Lets the UI
+// show the server's own reason instead of a generic one.
+export function toolErrorText(raw: unknown): string | null {
+  if (!raw || typeof raw !== "object" || !(raw as { isError?: unknown }).isError) return null;
+  const content = (raw as { content?: unknown }).content;
+  if (!Array.isArray(content)) return null;
+  for (const item of content) {
+    const c = item as { type?: unknown; text?: unknown } | null;
+    if (c?.type === "text" && typeof c.text === "string" && c.text) return c.text;
+  }
+  return null;
+}
+
+// After a send whose reply was lost (host timeout, dropped or malformed
+// result), ask the server whether the draft is gone. Gmail deletes a draft
+// once it is sent, so only a definite "gone" counts; any doubt reads as "not
+// sent" and the composer stays editable.
+export async function sendLanded(app: McpAppLike, draftId: string): Promise<boolean> {
+  try {
+    const raw = await app.callServerTool({
+      name: "gmail_composer.send_status",
+      arguments: { draft_id: draftId },
+    });
+    return extractStructuredContent<{ draft_exists?: boolean }>(raw)?.draft_exists === false;
+  } catch {
+    return false;
+  }
+}
+
 export function errMsg(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
