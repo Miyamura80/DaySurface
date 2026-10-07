@@ -2,6 +2,7 @@
 
 import os
 import threading
+from decimal import Decimal, Inexact, InvalidOperation, localcontext
 from typing import Any
 
 from loguru import logger as log
@@ -16,6 +17,81 @@ from src.payments.types import (
     PaymentStatus,
 )
 
+# How long a signed authorization stays valid; the client sets validBefore from it.
+_MAX_TIMEOUT_SECONDS = 300
+
+# USDC per x402 v1 network name: contract, EIP-712 domain, decimals. These are
+# the only networks (and USDC the only asset) this deployment can charge on;
+# any other config fails closed with a 500 before a challenge goes out. Values
+# from the SDK's V1_DEFAULT_ASSETS, which we can't import without the
+# ``x402[evm]`` extra and its Ethereum signing stack, used only by clients.
+_USDC: dict[str, dict[str, Any]] = {
+    "base": {
+        "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        "name": "USD Coin",
+        "version": "2",
+        "decimals": 6,
+    },
+    "base-sepolia": {
+        "address": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+        "name": "USDC",
+        "version": "2",
+        "decimals": 6,
+    },
+}
+
+
+def v1_accepts(req: PaymentRequirement, *, resource: str) -> dict[str, Any]:
+    """The x402 v1 ``accepts`` entry for ``req``, in wire (camelCase) form.
+
+    One source for both the 402 challenge the client signs against and the
+    requirements the facilitator checks the signature with, so the two cannot
+    disagree. Our requirement carries the human price ("0.001") and token
+    symbol; the exact-EVM scheme wants the token's contract address, the amount
+    in its smallest unit, and the EIP-712 domain the client signs with.
+
+    Raises ValueError for an asset other than USDC, a network with no known
+    USDC contract, or an amount USDC cannot represent exactly.
+    """
+    if req.asset != "USDC":
+        raise ValueError(
+            f"x402: unsupported asset {req.asset!r}; only USDC is supported"
+        )
+    token = _USDC.get(req.network)
+    if token is None:
+        raise ValueError(f"x402: no known token contract for network {req.network!r}")
+    try:
+        # Inexact trapped: a price with more digits than the context keeps
+        # must be refused, never rounded into a different charge.
+        with localcontext() as ctx:
+            ctx.traps[Inexact] = True
+            atomic = Decimal(req.amount).scaleb(token["decimals"])
+    except (InvalidOperation, Inexact) as exc:
+        raise ValueError(f"x402: amount {req.amount!r} is not an exact number") from exc
+    if (
+        not atomic.is_finite()
+        or atomic <= 0
+        or atomic != atomic.to_integral_value()
+        # The transfer authorization's value is a uint256.
+        or atomic > (1 << 256) - 1
+    ):
+        raise ValueError(
+            f"x402: amount {req.amount!r} is not payable: it must be a positive "
+            f"whole number of the token's smallest unit ({token['decimals']} "
+            "decimals) that fits in a uint256"
+        )
+    return {
+        "scheme": "exact",
+        "network": req.network,
+        "maxAmountRequired": str(int(atomic)),
+        "resource": resource,
+        "description": req.description or "",
+        "payTo": req.recipient,
+        "maxTimeoutSeconds": _MAX_TIMEOUT_SECONDS,
+        "asset": token["address"],
+        "extra": {"name": token["name"], "version": token["version"]},
+    }
+
 
 class X402Protocol(PaymentProtocol):
     """x402 stablecoin payment protocol via Coinbase SDK.
@@ -27,7 +103,6 @@ class X402Protocol(PaymentProtocol):
 
     def __init__(self, config: X402ProtocolConfig) -> None:
         self._config = config
-        self._server: Any = None
         self._wallet_address: str = ""
         self._private_key: str = ""
         self._initialized = False
@@ -42,7 +117,7 @@ class X402Protocol(PaymentProtocol):
         return self._initialized
 
     async def initialize(self) -> bool:
-        """Initialize the x402 resource server with SDK.
+        """Check the x402 SDK is importable and the operator wallet is configured.
 
         Returns True on success. Negative results are never cached
         so missing env vars can be provided later.
@@ -58,14 +133,13 @@ class X402Protocol(PaymentProtocol):
                 # Lazy by design (see class docstring): the x402 SDK stays off
                 # the module import path so a missing/broken SDK is caught here
                 # and retried, instead of failing at import time.
-                from x402 import x402ResourceServer  # noqa: PLC0415
+                import x402.http  # noqa: F401, PLC0415
 
                 # Pre-flight: wallet address is used as the payment
                 # recipient in build_payment_requirement(). The private
                 # key is validated here to ensure the operator has
-                # configured credentials, but is not passed to the
-                # resource server - the SDK's facilitator handles
-                # on-chain settlement independently.
+                # configured credentials, but is not passed to the SDK:
+                # the facilitator handles on-chain settlement independently.
                 wallet = os.getenv(self._config.wallet_address_env)
                 private_key = os.getenv(self._config.private_key_env)
 
@@ -83,7 +157,6 @@ class X402Protocol(PaymentProtocol):
                     )
                     return False
 
-                self._server = x402ResourceServer()
                 self._wallet_address = wallet
                 self._private_key = private_key
                 self._initialized = True
@@ -267,26 +340,23 @@ class X402Protocol(PaymentProtocol):
         return parse_payment_payload(payload.raw)
 
     def _to_sdk_requirements(self, req: PaymentRequirement) -> Any:
-        """Convert our PaymentRequirement to x402 SDK's PaymentRequirements."""
+        """Convert our PaymentRequirement to the SDK's v1 PaymentRequirements.
+
+        v1 because that is the version the paywall's 402 challenge advertises,
+        so it is the version clients sign. The paywall sets the description to
+        the route, which is also the challenge's resource.
+        """
         # Lazy by design: keep the x402 SDK off the module import path
         # (see class docstring).
-        from x402 import ResourceConfig  # noqa: PLC0415
+        from x402.schemas.v1 import PaymentRequirementsV1  # noqa: PLC0415
 
-        config = ResourceConfig(
-            scheme="exact-evm",
-            pay_to=req.recipient,
-            price=req.amount,
-            network=req.network,
+        return PaymentRequirementsV1.model_validate(
+            v1_accepts(req, resource=req.description or "")
         )
-        requirements = self._server.build_payment_requirements(config)
-        if requirements:
-            return requirements[0]
-        raise ValueError("Failed to build x402 payment requirements from config")
 
     def shutdown(self) -> None:
         """Reset protocol state and clear key material."""
         with self._lock:
             self._initialized = False
-            self._server = None
             self._wallet_address = ""
             self._private_key = ""

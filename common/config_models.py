@@ -251,6 +251,7 @@ class X402ProtocolConfig(BaseModel):
 
     enabled: bool = False
     facilitator_url: str = "https://x402.org/facilitator"
+    # x402 v1 network name; only "base" and "base-sepolia" can be charged on.
     network: str = "base-sepolia"
     wallet_address_env: str = "X402_WALLET_ADDRESS"
     private_key_env: str = "X402_PRIVATE_KEY"

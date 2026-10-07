@@ -40,6 +40,7 @@ from src.payments.types import (
     PaymentRequirement,
     PaymentStatus,
 )
+from src.payments.x402.protocol import v1_accepts
 
 _PROTOCOL = PaymentProtocolName.X402
 # x402 payload envelope version advertised in the 402 challenge.
@@ -96,23 +97,12 @@ def _canonical_hash(payload: dict) -> str:
     return hashlib.sha256(blob.encode()).hexdigest()
 
 
-def _build_challenge(requirement: PaymentRequirement, resource: str) -> dict:
+def _build_challenge(accepts: dict, facilitator_url: str | None) -> dict:
     """Build the x402 ``402`` response body describing how to pay."""
     return {
         "x402Version": _X402_VERSION,
         "error": "payment required",
-        "accepts": [
-            {
-                "scheme": "exact",
-                "network": requirement.network,
-                "maxAmountRequired": requirement.amount,
-                "resource": resource,
-                "description": requirement.description or "",
-                "payTo": requirement.recipient,
-                "asset": requirement.asset,
-                "facilitator": requirement.facilitator_url,
-            }
-        ],
+        "accepts": [accepts | {"facilitator": facilitator_url}],
     }
 
 
@@ -190,6 +180,9 @@ def enforce_payment(
                 description=route,
             )
         )
+        # Built for every request, not only the challenge: it also checks the
+        # configured network and price map to a payable token amount.
+        accepts = v1_accepts(requirement, resource=route)
     except ValueError as exc:
         # Unsupported asset / bad requirement: a server-side misconfiguration,
         # not a client error. Fail closed rather than advertise an unpayable
@@ -200,7 +193,9 @@ def enforce_payment(
         ) from exc
 
     if not payment_header:
-        raise PaymentRequiredError(_build_challenge(requirement, route))
+        raise PaymentRequiredError(
+            _build_challenge(accepts, requirement.facilitator_url)
+        )
 
     raw = _decode_payment_header(payment_header)
     payment_hash = _canonical_hash(raw)
