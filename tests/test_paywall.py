@@ -216,8 +216,9 @@ class TestPaywallChallenge(_PaywallCase):
         challenge = exc.value.challenge
         assert challenge["x402Version"] == 1
         accept = challenge["accepts"][0]
-        assert accept["maxAmountRequired"] == "0.001"
-        assert accept["asset"] == "USDC"
+        # Smallest unit at the token contract, the form a client signs.
+        assert accept["maxAmountRequired"] == "1000"
+        assert accept["asset"].startswith("0x")
         assert accept["resource"] == "paid_svc"
         # Nothing was settled or recorded.
         assert self.fake.settle_calls == 0
