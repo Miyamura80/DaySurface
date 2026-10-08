@@ -7,6 +7,8 @@ import type {
   FileAttachment,
   LabelChip,
   McpAppLike,
+  SendResult,
+  ToolCallResult,
 } from "./types";
 
 export type ToolResultBuffer = {
@@ -161,24 +163,19 @@ export function extractStructuredContent<T>(raw: unknown): T | null {
   return null;
 }
 
-// The text of a tool-level failure (`isError` result), or null. Lets the UI
-// show the server's own reason instead of a generic one.
-export function toolErrorText(raw: unknown): string | null {
-  if (!raw || typeof raw !== "object" || !(raw as { isError?: unknown }).isError) return null;
-  const content = (raw as { content?: unknown }).content;
-  if (!Array.isArray(content)) return null;
-  for (const item of content) {
+// The first text block of a tool-level failure, or null.
+function toolErrorText(result: ToolCallResult): string | null {
+  for (const item of result.content ?? []) {
     const c = item as { type?: unknown; text?: unknown } | null;
     if (c?.type === "text" && typeof c.text === "string" && c.text) return c.text;
   }
   return null;
 }
 
-// After a send whose reply was lost (host timeout, dropped or malformed
-// result), ask the server whether the draft is gone. Gmail deletes a draft
-// once it is sent, so only a definite "gone" counts; any doubt reads as "not
-// sent" and the composer stays editable.
-export async function sendLanded(app: McpAppLike, draftId: string): Promise<boolean> {
+// Gmail deletes a draft once it is sent, so after a lost send reply only a
+// definite "gone" counts as sent. Any doubt (the check fails too) reads as
+// "not sent" and the composer stays editable.
+async function draftGone(app: McpAppLike, draftId: string): Promise<boolean> {
   try {
     const raw = await app.callServerTool({
       name: "gmail_composer.send_status",
@@ -188,6 +185,30 @@ export async function sendLanded(app: McpAppLike, draftId: string): Promise<bool
   } catch {
     return false;
   }
+}
+
+// Send the draft and return Gmail's confirmation, or throw the error to show.
+// "Sent" is terminal, so a false positive is unrecoverable: a definite server
+// failure (isError) is shown as-is, even though a discarded draft is also
+// "gone". Only a lost reply (the call rejected, or resolved without a
+// message_id) asks the server whether the draft is gone.
+export async function confirmSend(
+  app: McpAppLike,
+  args: Record<string, unknown> & { draft_id: string },
+): Promise<SendResult> {
+  let raw: unknown;
+  try {
+    raw = await app.callServerTool({ name: "gmail_composer.send", arguments: args });
+  } catch (err) {
+    if (await draftGone(app, args.draft_id)) return {};
+    throw err;
+  }
+  const result = (raw ?? {}) as ToolCallResult;
+  if (result.isError) throw new Error(toolErrorText(result) ?? "the send failed");
+  const sent = extractStructuredContent<SendResult>(raw);
+  if (sent?.message_id) return sent;
+  if (await draftGone(app, args.draft_id)) return {};
+  throw new Error("the server did not confirm the send");
 }
 
 export function errMsg(err: unknown): string {

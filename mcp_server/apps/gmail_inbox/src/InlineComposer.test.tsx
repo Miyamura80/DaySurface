@@ -143,7 +143,6 @@ describe("InlineComposer send/autosave race", () => {
     fireEvent.click(screen.getByText("Send"));
     // A tool-level failure resolves the call but carries no message_id.
     await settle("gmail_composer.send", { isError: true, content: [{ type: "text", text: "nope" }] });
-    await settle("gmail_composer.send_status", draftStillThere);
 
     expect(screen.queryByText("Message sent")).toBeNull();
     expect(screen.getByLabelText("Body")).toBeTruthy();
@@ -174,6 +173,23 @@ describe("InlineComposer send/autosave race", () => {
 
     expect(screen.queryByText(/Saved/)).toBeNull();
     expect(screen.getByText(/smtp exploded/)).toBeTruthy();
+  });
+
+  it("trusts a server error even if the draft is gone (discarded elsewhere)", async () => {
+    const { app, settle, countOf } = makeMcpApp();
+    renderComposer(app);
+
+    fireEvent.click(screen.getByText("Send"));
+    // The draft was discarded by the agent or another tab: send refuses it.
+    await settle("gmail_composer.send", {
+      isError: true,
+      content: [{ type: "text", text: "This draft no longer exists in Gmail." }],
+    });
+
+    // A definite failure never probes, so "gone" can't be misread as sent.
+    expect(countOf("gmail_composer.send_status")).toBe(0);
+    expect(screen.queryByText("Message sent")).toBeNull();
+    expect(screen.getByText(/no longer exists/)).toBeTruthy();
   });
 
   it("shows sent when the send reply is lost but the draft is gone", async () => {

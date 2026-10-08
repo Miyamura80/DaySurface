@@ -6,8 +6,6 @@ LLM. ``user_id`` arrives on the wire but is overridden by the authenticated
 principal when one is bound; see ``mcp_server/app_tools/_auth_guard.py``.
 """
 
-from pydantic import BaseModel
-
 from mcp_server.app_tools._auth_guard import guard_user_id
 from mcp_server.server import mcp
 from models.gmail import (
@@ -27,10 +25,12 @@ from models.gmail import (
     GmailUpdateDraftInput,
     _UnsetType,
 )
+from models.gmail_composer import GmailComposerSendStatus
 from services.gmail_draft_helpers import DraftGoneError
 from services.gmail_drafts_svc import (
     gmail_discard_draft as _gmail_discard_draft,
 )
+from services.gmail_drafts_svc import gmail_draft_exists
 from services.gmail_drafts_svc import (
     gmail_get_draft as _gmail_get_draft,
 )
@@ -48,12 +48,6 @@ from services.gmail_messages_svc import (
 )
 
 _APP_META = {"ui": {"visibility": ["app"]}}
-
-
-class GmailComposerSendStatus(BaseModel):
-    """Whether a draft still exists, so the composer can tell an unconfirmed send apart."""
-
-    draft_exists: bool
 
 
 def _coerce_attachments(
@@ -174,15 +168,10 @@ def send(
     meta=_APP_META,
 )
 def send_status(draft_id: str, user_id: str = "") -> GmailComposerSendStatus:
-    # The composer calls this when a send's reply is lost (host timeout, dropped
-    # result). Gmail deletes a draft once it is sent, so "gone" means the send
-    # landed and the user must not be told it failed.
+    # The composer asks only when a send's reply was lost (host timeout, dropped
+    # result), never after a definite server error.
     uid = guard_user_id(user_id)
-    try:
-        _gmail_get_draft(GmailGetDraftInput(user_id=uid, draft_id=draft_id))
-    except DraftGoneError:
-        return GmailComposerSendStatus(draft_exists=False)
-    return GmailComposerSendStatus(draft_exists=True)
+    return GmailComposerSendStatus(draft_exists=gmail_draft_exists(uid, draft_id))
 
 
 @mcp.tool(

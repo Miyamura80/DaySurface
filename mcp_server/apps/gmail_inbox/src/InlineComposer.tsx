@@ -8,14 +8,13 @@ import type {
 } from "./types";
 import {
   buildAttachmentsPayload,
+  confirmSend,
   draftFieldsEqual,
   errMsg,
   extractDraft,
   extractStructuredContent,
   formatFileSize,
   isPreviewable,
-  sendLanded,
-  toolErrorText,
 } from "./helpers";
 import { useComposerAttachments } from "./useComposerAttachments";
 import { reportComposerAction } from "./modelContext";
@@ -231,25 +230,9 @@ export function InlineComposer({
       // `undefined` means "omit -> preserve all"; an array (including the empty
       // clear-all list) must be sent, so test against undefined, not truthiness.
       if (attachmentsArg !== undefined) args.attachments = attachmentsArg;
-      let raw: unknown;
-      let callError: unknown = null;
-      try {
-        raw = await mcpApp.callServerTool({ name: "gmail_composer.send", arguments: args });
-      } catch (err) {
-        callError = err;
-      }
-      // callServerTool resolves on a tool-level failure (isError) too, so a
-      // message_id is the only direct confirmation. Without one (failure, host
-      // timeout, lost reply) the send may still have landed: "sent" is terminal,
-      // so only the server saying the draft is gone may stand in for it.
-      const inner = extractStructuredContent<{ message_id?: string; thread_id?: string }>(raw);
-      const msgId = inner?.message_id ?? "";
-      if (!msgId && !(await sendLanded(mcpApp, draft.draft_id))) {
-        if (callError) throw callError;
-        throw new Error(toolErrorText(raw) ?? "the server did not confirm the send");
-      }
-      setSaveStatus({ kind: "sent", message_id: msgId });
-      void reportComposerAction(mcpApp, "sent", draft, { message_id: msgId || undefined, thread_id: inner?.thread_id });
+      const sent = await confirmSend(mcpApp, { ...args, draft_id: draft.draft_id });
+      setSaveStatus({ kind: "sent", message_id: sent.message_id });
+      void reportComposerAction(mcpApp, "sent", draft, sent);
       setTimeout(onSent, 1500);
     } catch (err) {
       // The send did not land, so the composer stays editable: reopen it to

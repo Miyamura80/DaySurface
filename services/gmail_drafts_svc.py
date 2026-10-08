@@ -279,6 +279,24 @@ def gmail_send(input: GmailSendInput) -> GmailSendResult:
     )
 
 
+def gmail_draft_exists(user_id: str, draft_id: str) -> bool:
+    """True while ``draft_id`` is still a Gmail draft.
+
+    Gmail deletes a draft once it is sent (or discarded), so after a send whose
+    reply was lost, ``False`` means the send landed. Other Gmail errors raise.
+    Not a ``@service``: only the composer's app-only tool needs it.
+    """
+    svc = _get_gmail_client(user_id)
+    try:
+        with draft_gone_on_404(draft_id):
+            svc.users().drafts().get(
+                userId="me", id=draft_id, format="minimal"
+            ).execute()
+    except DraftGoneError:
+        return False
+    return True
+
+
 @service(
     name="gmail_discard_draft",
     description="Delete a Gmail draft by id",

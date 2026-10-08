@@ -115,7 +115,18 @@ export type ComposerSaveStatus =
   | { kind: "saved"; at: Date }
   | { kind: "error"; message: string }
   | { kind: "sending" }
-  | { kind: "sent"; message_id: string };
+  | { kind: "sent"; message_id?: string };
+
+// The CallToolResult fields the app reads; callServerTool itself returns unknown.
+export type ToolCallResult = {
+  isError?: boolean;
+  content?: unknown[];
+  structuredContent?: unknown;
+};
+
+// gmail_composer.send's confirmation. Empty when the send was confirmed only
+// by the draft being gone (see confirmSend), so Gmail's ids are unknown.
+export type SendResult = { message_id?: string; thread_id?: string };
 
 export type FileAttachment = {
   filename: string;
