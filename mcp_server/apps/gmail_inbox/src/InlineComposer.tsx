@@ -8,6 +8,7 @@ import type {
 } from "./types";
 import {
   buildAttachmentsPayload,
+  confirmSend,
   draftFieldsEqual,
   errMsg,
   extractDraft,
@@ -229,15 +230,9 @@ export function InlineComposer({
       // `undefined` means "omit -> preserve all"; an array (including the empty
       // clear-all list) must be sent, so test against undefined, not truthiness.
       if (attachmentsArg !== undefined) args.attachments = attachmentsArg;
-      const raw = await mcpApp.callServerTool({ name: "gmail_composer.send", arguments: args });
-      // callServerTool resolves on a tool-level failure (isError) too, so only a
-      // server-confirmed message_id counts as sent. Since "sent" is terminal, a
-      // false positive here would be unrecoverable.
-      const inner = extractStructuredContent<{ message_id?: string; thread_id?: string }>(raw);
-      const msgId = inner?.message_id ?? "";
-      if (!msgId) throw new Error("the server did not confirm the send");
-      setSaveStatus({ kind: "sent", message_id: msgId });
-      void reportComposerAction(mcpApp, "sent", draft, { message_id: msgId, thread_id: inner?.thread_id });
+      const sent = await confirmSend(mcpApp, { ...args, draft_id: draft.draft_id });
+      setSaveStatus({ kind: "sent", message_id: sent.message_id });
+      void reportComposerAction(mcpApp, "sent", draft, sent);
       setTimeout(onSent, 1500);
     } catch (err) {
       // The send did not land, so the composer stays editable: reopen it to

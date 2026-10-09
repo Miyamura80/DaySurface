@@ -25,10 +25,12 @@ from models.gmail import (
     GmailUpdateDraftInput,
     _UnsetType,
 )
+from models.gmail_composer import GmailComposerSendStatus
 from services.gmail_draft_helpers import DraftGoneError
 from services.gmail_drafts_svc import (
     gmail_discard_draft as _gmail_discard_draft,
 )
+from services.gmail_drafts_svc import gmail_draft_exists
 from services.gmail_drafts_svc import (
     gmail_get_draft as _gmail_get_draft,
 )
@@ -158,6 +160,18 @@ def send(
             "This draft no longer exists in Gmail. It was probably already sent "
             "or discarded."
         ) from exc
+
+
+@mcp.tool(
+    name="gmail_composer.send_status",
+    description="Report whether a draft still exists after an unconfirmed send.",
+    meta=_APP_META,
+)
+def send_status(draft_id: str, user_id: str = "") -> GmailComposerSendStatus:
+    # The composer asks only when a send's reply was lost (host timeout, dropped
+    # result), never after a definite server error.
+    uid = guard_user_id(user_id)
+    return GmailComposerSendStatus(draft_exists=gmail_draft_exists(uid, draft_id))
 
 
 @mcp.tool(

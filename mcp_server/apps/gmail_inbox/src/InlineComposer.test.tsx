@@ -58,6 +58,8 @@ const draft: ComposerDraft = {
 };
 
 const sendOk = { structuredContent: { message_id: "m123", thread_id: "t1" } };
+const draftStillThere = { structuredContent: { draft_exists: true } };
+const draftGone = { structuredContent: { draft_exists: false } };
 
 function renderComposer(app: McpAppLike, onSent = vi.fn()) {
   render(
@@ -144,6 +146,8 @@ describe("InlineComposer send/autosave race", () => {
 
     expect(screen.queryByText("Message sent")).toBeNull();
     expect(screen.getByLabelText("Body")).toBeTruthy();
+    // The server's own reason is shown, not a generic one.
+    expect(screen.getByText(/nope/)).toBeTruthy();
 
     // closingRef was released, so the user can try again.
     fireEvent.click(screen.getByText("Send"));
@@ -162,12 +166,66 @@ describe("InlineComposer send/autosave race", () => {
     // Send fails, so the composer reopens for a retry - which releases the
     // closing latch. The autosave started before the send must still stay quiet.
     await fail("gmail_composer.send", "smtp exploded");
+    await settle("gmail_composer.send_status", draftStillThere);
     expect(screen.getByLabelText("Body")).toBeTruthy();
 
     await settle("gmail_composer.save_draft", { structuredContent: { draft_id: "d1" } });
 
     expect(screen.queryByText(/Saved/)).toBeNull();
     expect(screen.getByText(/smtp exploded/)).toBeTruthy();
+  });
+
+  it("trusts a server error even if the draft is gone (discarded elsewhere)", async () => {
+    const { app, settle, countOf } = makeMcpApp();
+    renderComposer(app);
+
+    fireEvent.click(screen.getByText("Send"));
+    // The draft was discarded by the agent or another tab: send refuses it.
+    await settle("gmail_composer.send", {
+      isError: true,
+      content: [{ type: "text", text: "This draft no longer exists in Gmail." }],
+    });
+
+    // A definite failure never probes, so "gone" can't be misread as sent.
+    expect(countOf("gmail_composer.send_status")).toBe(0);
+    expect(screen.queryByText("Message sent")).toBeNull();
+    expect(screen.getByText(/no longer exists/)).toBeTruthy();
+  });
+
+  it("shows sent when the send reply is lost but the draft is gone", async () => {
+    const { app, settle, fail } = makeMcpApp();
+    renderComposer(app);
+
+    fireEvent.click(screen.getByText("Send"));
+    // The host times out (or drops the result) after Gmail already sent it.
+    await fail("gmail_composer.send", "request timed out");
+    await settle("gmail_composer.send_status", draftGone);
+
+    expect(screen.getByText("Message sent")).toBeTruthy();
+    expect(screen.queryByText(/timed out/)).toBeNull();
+  });
+
+  it("shows sent when the send resolves without a message_id but the draft is gone", async () => {
+    const { app, settle } = makeMcpApp();
+    renderComposer(app);
+
+    fireEvent.click(screen.getByText("Send"));
+    await settle("gmail_composer.send", { content: [] });
+    await settle("gmail_composer.send_status", draftGone);
+
+    expect(screen.getByText("Message sent")).toBeTruthy();
+  });
+
+  it("stays editable when the status check itself fails", async () => {
+    const { app, fail } = makeMcpApp();
+    renderComposer(app);
+
+    fireEvent.click(screen.getByText("Send"));
+    await fail("gmail_composer.send", "request timed out");
+    await fail("gmail_composer.send_status", "offline");
+
+    expect(screen.queryByText("Message sent")).toBeNull();
+    expect(screen.getByText(/timed out/)).toBeTruthy();
   });
 
   it("calls onSent 1.5s after a confirmed send", async () => {

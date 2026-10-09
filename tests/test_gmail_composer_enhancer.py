@@ -125,12 +125,13 @@ class TestEnhancerRegistrationFallback(TestTemplate):
 class TestGmailComposerAppTools(TestTemplate):
     """The four gmail_composer.* tools must be registered with app-only visibility."""
 
-    def test_all_four_app_tools_registered(self):
+    def test_composer_app_tools_registered(self):
         names = {
             "gmail_composer.save_draft",
             "gmail_composer.send",
             "gmail_composer.discard",
             "gmail_composer.refresh",
+            "gmail_composer.send_status",
         }
         registered = set(mcp._tool_manager._tools)
         assert names.issubset(registered), names - registered
@@ -141,6 +142,7 @@ class TestGmailComposerAppTools(TestTemplate):
             "gmail_composer.send",
             "gmail_composer.discard",
             "gmail_composer.refresh",
+            "gmail_composer.send_status",
         ):
             tool = mcp._tool_manager._tools[tool_name]
             # FastMCP stores the meta dict on the Tool record under `meta`.
