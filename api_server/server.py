@@ -1,5 +1,7 @@
 """FastAPI application - CORS, session middleware, route registration."""
 
+import logging
+import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from importlib.metadata import PackageNotFoundError
@@ -40,6 +42,40 @@ from mcp_server.server import lifespan as mcp_lifespan
 from mcp_server.server import mount_on as mount_mcp_server
 from services import ClientRefusalError, RetryLaterError
 from services.gmail_svc import GmailAttachmentTooLargeError
+from src.utils.logging_config import setup_logging
+
+# Activate the project logging configuration at import time. Production launches
+# the app via the ``uvicorn api_server.server:app`` CLI (see Dockerfile CMD), so
+# the ``main()`` entrypoint below never runs there - calling setup_logging()
+# here is what installs the sensitive-data scrubber on every log record and
+# gates loguru's ``diagnose``/``backtrace`` off in production (DEV_ENV=prod ->
+# global_config.is_dev is False). The call is idempotent and safe under reload.
+setup_logging()
+
+# uvicorn's access logger is stdlib logging, separate from loguru and therefore
+# not reached by the scrubber above. Its request line includes the raw query
+# string, so the public Google OAuth callback (?code=...&state=...) would log
+# one-time authorization secrets verbatim. Redact those parameters from every
+# uvicorn.access record before it is formatted. The filter only rewrites string
+# positional args and never raises, so it cannot affect request handling.
+_OAUTH_SECRET_QS = re.compile(
+    r"\b(code|state|access_token|refresh_token|id_token|token)=[^&\s\"']+",
+    re.IGNORECASE,
+)
+
+
+class _AccessLogSecretRedactor(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.args, tuple):
+            record.args = tuple(
+                _OAUTH_SECRET_QS.sub(r"\1=[REDACTED]", a) if isinstance(a, str) else a
+                for a in record.args
+            )
+        return True
+
+
+logging.getLogger("uvicorn.access").addFilter(_AccessLogSecretRedactor())
+
 
 try:
     _APP_VERSION = _pkg_version("daysurface")

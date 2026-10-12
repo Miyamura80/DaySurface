@@ -75,11 +75,16 @@ def _error_page(message: str, status_code: int = 400) -> HTMLResponse:
 
 
 def _success_page(email: str) -> HTMLResponse:
+    # `email` originates from Google's id_token, but escape it before inlining
+    # so the page is context-safe output regardless of the value's provenance
+    # (mirrors _error_page; CSP default-src 'none' is defence-in-depth, not the
+    # primary control).
+    safe_email = html.escape(email, quote=True)
     return HTMLResponse(
         content=(
             "<!doctype html><html><body>"
             "<h1>Connected ✓</h1>"
-            f"<p>Gmail is now linked to {email}.</p>"
+            f"<p>Gmail is now linked to {safe_email}.</p>"
             # Under stateless HTTP the server cannot push a completion
             # notification to the MCP client (SEP-1036
             # notifications/elicitation/complete), so this page is the user's
