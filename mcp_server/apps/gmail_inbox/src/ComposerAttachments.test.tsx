@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { InlineComposer } from "./InlineComposer";
 import { MAX_ATTACHMENT_BYTES } from "./useComposerAttachments";
 import type { ComposerDraft, DraftAttachment, McpAppLike } from "./types";
@@ -140,42 +140,6 @@ describe("composer attachment preflight", () => {
     expect(screen.getByText(/would exceed/)).toBeTruthy();
   });
 
-  it("counts a file once when it appears in both the new and existing sets", async () => {
-    const { app } = makeMcpApp();
-    const big = Math.floor(MAX_ATTACHMENT_BYTES * 0.6);
-    const { rerender } = renderComposer(app);
-
-    // Pick a file and let its read finish, so it lands in `attachments`.
-    drop([fileOfSize("dup.pdf", big)]);
-    await waitFor(() => expect(screen.getByText("dup.pdf")).toBeTruthy());
-
-    // A save echoes it back onto the draft, so it is now in BOTH sets. Counting
-    // it twice would put the draft over the cap on paper and reject the next
-    // drop, even though only one copy of the file exists.
-    rerender([{ filename: "dup.pdf", mime_type: "application/pdf", size: big }]);
-
-    drop([fileOfSize("small.pdf", 1_000)]);
-    expect(screen.queryByText(/would exceed/)).toBeNull();
-  });
-
-  it("cancels only one duplicate per upload when several files share a name and size", async () => {
-    const { app } = makeMcpApp();
-    const each = 8_000_000;
-    const { rerender } = renderComposer(app);
-
-    drop([fileOfSize("dup.pdf", each)]);
-    await waitFor(() => expect(screen.getByText("dup.pdf")).toBeTruthy());
-
-    // Three genuinely distinct files that happen to share a name and size, one
-    // of which is the upload above. Cancelling all three would undercount by
-    // 16 MB and let the next drop through.
-    const dup = { filename: "dup.pdf", mime_type: "application/pdf", size: each };
-    rerender([dup, dup, dup]);
-
-    drop([fileOfSize("next.pdf", 2_000_000)]);
-    expect(screen.getByText(/would exceed/)).toBeTruthy();
-  });
-
   it("lets the user dismiss a rejection", () => {
     const { app } = makeMcpApp();
     renderComposer(app);
@@ -185,5 +149,164 @@ describe("composer attachment preflight", () => {
 
     fireEvent.click(screen.getByTitle("Dismiss"));
     expect(screen.queryByText(/Too large/)).toBeNull();
+  });
+});
+
+/**
+ * A fake save/send backend with Gmail's id behaviour: every write rebuilds the
+ * draft and hands each file a fresh attachment_id, and a ref to an id that is
+ * no longer on the draft is refused. With `gated`, each write waits for
+ * `release()`, so a test can hold one on the wire.
+ */
+function makeServer({ gated = false, sizes = {} as Record<string, number> } = {}) {
+  let n = 0;
+  let files: DraftAttachment[] = [];
+  const calls: { name: string; arguments: Record<string, unknown> }[] = [];
+  const gates: Array<() => void> = [];
+  const callServerTool = vi.fn(async (req: { name: string; arguments: Record<string, unknown> }) => {
+    calls.push(req);
+    const write = req.name === "gmail_composer.save_draft" || req.name === "gmail_composer.send";
+    if (!write) return null;
+    if (gated) await new Promise<void>((r) => gates.push(r));
+    const wanted = req.arguments.attachments as Array<Record<string, string>> | undefined;
+    if (wanted) {
+      files = wanted.map((item) => {
+        if (!item.attachment_id) {
+          return { filename: item.filename, mime_type: item.mime_type, size: sizes[item.filename] ?? 1 };
+        }
+        const kept = files.find((f) => f.attachment_id === item.attachment_id);
+        if (!kept) throw new Error(`attachment_id ${item.attachment_id} is not on draft`);
+        return kept;
+      });
+    }
+    files = files.map((f) => ({ ...f, attachment_id: `att-${++n}`, message_id: `msg-${n}` }));
+    if (req.name === "gmail_composer.send") return { structuredContent: { message_id: "sent-1" } };
+    return { structuredContent: { draft_id: "d1", attachments: files } };
+  });
+  const app: McpAppLike = { callServerTool, openLink: vi.fn(async () => ({})) };
+  const writes = () => calls.filter((c) => c.name === "gmail_composer.save_draft");
+  const release = async () => {
+    await act(async () => {});
+    const g = gates.shift();
+    if (!g) throw new Error("no write on the wire");
+    await act(async () => { g(); });
+  };
+  return { app, calls, writes, release };
+}
+
+const autosave = () => act(async () => { vi.advanceTimersByTime(800); });
+
+async function pickAndWait(name: string, size = 1_000) {
+  drop([fileOfSize(name, size)]);
+  await waitFor(() => expect(screen.getByText(name)).toBeTruthy());
+}
+
+function typeBody(value: string) {
+  fireEvent.change(screen.getByLabelText("Body"), { target: { value } });
+}
+
+describe("composer attachment persistence (#32)", () => {
+  beforeEach(() => { vi.useFakeTimers({ shouldAdvanceTime: true }); });
+  afterEach(() => { vi.useRealTimers(); vi.clearAllMocks(); });
+
+  it("uploads a picked file once, then keeps it by reference", async () => {
+    const { app, writes, calls } = makeServer();
+    renderComposer(app);
+
+    await pickAndWait("a.pdf");
+    await autosave();
+    expect(writes()[0].arguments.attachments).toEqual([
+      expect.objectContaining({ filename: "a.pdf", data_base64: expect.any(String) }),
+    ]);
+
+    typeBody("more");
+    await autosave();
+    expect(writes()[1].arguments.attachments).toEqual([{ attachment_id: "att-1" }]);
+
+    fireEvent.click(screen.getByText("Send"));
+    await waitFor(() => expect(screen.getByText("Message sent")).toBeTruthy());
+    const send = calls.find((c) => c.name === "gmail_composer.send");
+    expect(send?.arguments.attachments).toEqual([{ attachment_id: "att-2" }]);
+  });
+
+  it("does not grow a save's payload with the number of saves", async () => {
+    const { app, writes } = makeServer();
+    renderComposer(app);
+
+    await pickAndWait("a.pdf");
+    for (const body of ["one", "two", "three", "four"]) {
+      typeBody(body);
+      await autosave();
+    }
+    const sizes = writes().slice(1).map((w) => JSON.stringify(w.arguments.attachments).length);
+    expect(new Set(sizes).size).toBe(1);
+    expect(JSON.stringify(writes().slice(1)).includes("data_base64")).toBe(false);
+  });
+
+  it("serializes concurrent writes so neither file is dropped", async () => {
+    const { app, writes, release } = makeServer({ gated: true });
+    renderComposer(app);
+
+    await pickAndWait("a.pdf");
+    await autosave();
+    expect(writes()).toHaveLength(1);
+
+    // A second pick while the first save is on the wire must wait for it.
+    await pickAndWait("b.pdf");
+    await autosave();
+    expect(writes()).toHaveLength(1);
+
+    await release();
+    await act(async () => {});
+    expect(writes()).toHaveLength(2);
+    expect(writes()[1].arguments.attachments).toEqual([
+      { attachment_id: "att-1" },
+      expect.objectContaining({ filename: "b.pdf", data_base64: expect.any(String) }),
+    ]);
+    await release();
+    expect(screen.getByText("a.pdf")).toBeTruthy();
+    expect(screen.getByText("b.pdf")).toBeTruthy();
+  });
+
+  it("removes a confirmed file by leaving it out of the next save", async () => {
+    const { app, writes } = makeServer();
+    renderComposer(app);
+
+    await pickAndWait("a.pdf");
+    await autosave();
+    fireEvent.click(screen.getByTitle("Remove"));
+    await autosave();
+
+    expect(writes()[1].arguments.attachments).toEqual([]);
+    expect(screen.queryByText("a.pdf")).toBeNull();
+  });
+
+  it("references a draft's existing files by their latest ids after a text-only save", async () => {
+    const { app, writes } = makeServer();
+    renderComposer(app);
+
+    // A text edit first: attachments are omitted, but the server still
+    // rebuilds the draft. The next explicit set must cite the new ids.
+    typeBody("edit");
+    await autosave();
+    await pickAndWait("a.pdf");
+    await autosave();
+    typeBody("edit again");
+    await autosave();
+
+    expect(screen.queryByText(/is not on draft/)).toBeNull();
+    expect(writes()[2].arguments.attachments).toEqual([{ attachment_id: "att-1" }]);
+  });
+
+  it("counts a confirmed upload once toward the cap", async () => {
+    const big = Math.floor(MAX_ATTACHMENT_BYTES * 0.6);
+    const { app } = makeServer({ sizes: { "big.pdf": big } });
+    renderComposer(app);
+
+    await pickAndWait("big.pdf", big);
+    await autosave();
+    drop([fileOfSize("small.pdf", 1_000)]);
+
+    expect(screen.queryByText(/would exceed/)).toBeNull();
   });
 });

@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import type React from "react";
-import type {
-  ComposerDraft,
-  DraftAttachment,
-  ExistingAttachment,
-  FileAttachment,
-  McpAppLike,
-} from "./types";
+import type { ComposerDraft, DraftAttachment, McpAppLike } from "./types";
+import {
+  buildAttachmentWrite,
+  isPending,
+  reconcileSlots,
+  slotsFromDraft,
+  type AttachmentSlot,
+  type AttachmentWrite,
+} from "./attachmentSlots";
 import { base64ToBlobUrl, extractStructuredContent, formatFileSize } from "./helpers";
 import type { PreviewData } from "./AttachmentPreview";
 
@@ -24,29 +26,30 @@ const MAX_ATTACHMENT_LABEL = "25 MB";
 /** A file the user picked that never left the browser, with the reason. */
 export type RejectedAttachment = { filename: string; reason: string };
 
-function toExisting(attachments: DraftAttachment[]): ExistingAttachment[] {
-  return attachments
-    .filter((a): a is DraftAttachment & { filename: string } => !!a.filename)
-    .map((a) => ({
-      filename: a.filename,
-      mime_type: a.mime_type,
-      size: a.size,
-      attachment_id: a.attachment_id,
-      message_id: a.message_id,
-    }));
-}
-
 /**
- * Attachment state and the preview modal for the inline composer: the files
- * already on the draft, the ones the user just picked, and the blob-URL
- * lifecycle behind previewing either. Kept apart from the composer's draft
- * persistence, which is the only other thing that reads `attachmentsDirtyRef`.
+ * Attachment state and the preview modal for the inline composer. Every file,
+ * confirmed or still pending upload, is one slot in `slots`; the composer's
+ * write queue reads `slotsRef` when a write runs and folds each reply back in
+ * with `reconcile`, so a pick is uploaded once and then kept by reference.
+ * `onChange` fires after a pick or removal so the composer can persist it.
  */
-export function useComposerAttachments(draft: ComposerDraft, mcpApp: McpAppLike) {
-  const [attachments, setAttachments] = useState<FileAttachment[]>([]);
-  const [existingAttachments, setExistingAttachments] = useState<ExistingAttachment[]>(
-    () => toExisting(draft.attachments || []),
+export function useComposerAttachments(
+  draft: ComposerDraft,
+  mcpApp: McpAppLike,
+  onChange: () => void,
+) {
+  const keyRef = useRef(0);
+  const nextKey = () => ++keyRef.current;
+  const [slots, setSlotsState] = useState<AttachmentSlot[]>(
+    () => slotsFromDraft(draft.attachments || [], nextKey),
   );
+  // Mirrors `slots` synchronously: a queued write runs after renders it did not
+  // see, and must build on the latest set rather than a stale closure.
+  const slotsRef = useRef(slots);
+  const setSlots = (next: AttachmentSlot[]) => {
+    slotsRef.current = next;
+    setSlotsState(next);
+  };
   const [rejected, setRejected] = useState<RejectedAttachment[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // True once the user adds or removes an attachment. Until then, save/send
@@ -54,8 +57,8 @@ export function useComposerAttachments(draft: ComposerDraft, mcpApp: McpAppLike)
   // file; after a change we send the explicit desired set so a removal sticks.
   const attachmentsDirtyRef = useRef(false);
   // Bytes accepted by a preflight whose FileReader has not resolved yet. They
-  // are not in `attachments` until onload runs, so a second pick made during
-  // that window would not see them and the cumulative check would undercount -
+  // are not in `slots` until onload runs, so a second pick made during that
+  // window would not see them and the cumulative check would undercount -
   // exactly the fail-open the check exists to prevent.
   const pendingBytesRef = useRef(0);
   const [previewData, setPreviewData] = useState<PreviewData | null>(null);
@@ -67,14 +70,27 @@ export function useComposerAttachments(draft: ComposerDraft, mcpApp: McpAppLike)
     if (previewBlobRef.current) URL.revokeObjectURL(previewBlobRef.current);
   }, []);
 
-  // Sync existing attachments when draft updates (e.g. from refresh or agent).
-  // An absent key means "the update did not carry attachments", so keep what we
-  // have; an empty array means "this draft has none", which must clear the list.
-  // Skipping both left removed files on screen and counted against the cap.
+  // Sync confirmed files when the draft prop updates (refresh or agent edit),
+  // keeping picks that have not been uploaded yet. An absent key means "the
+  // update did not carry attachments", so keep what we have; an empty array
+  // means "this draft has none", which must clear the confirmed list.
+  const firstSyncRef = useRef(true);
   useEffect(() => {
+    if (firstSyncRef.current) { firstSyncRef.current = false; return; }
     if (!draft.attachments) return;
-    setExistingAttachments(toExisting(draft.attachments));
+    setSlots([
+      ...slotsFromDraft(draft.attachments, nextKey),
+      ...slotsRef.current.filter(isPending),
+    ]);
   }, [draft.attachments]);
+
+  const buildWrite = (): AttachmentWrite =>
+    buildAttachmentWrite(slotsRef.current, attachmentsDirtyRef.current);
+
+  const reconcile = (sent: AttachmentSlot[], server: DraftAttachment[] | undefined) => {
+    if (!Array.isArray(server)) return;
+    setSlots(reconcileSlots(slotsRef.current, sent, server, nextKey));
+  };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -104,35 +120,12 @@ export function useComposerAttachments(draft: ComposerDraft, mcpApp: McpAppLike)
     // Cumulative check against everything already on the draft, so a batch that
     // individually passes but collectively blows Gmail's whole-message limit is
     // refused before hundreds of MB of base64 are read. Fail CLOSED on an
-    // unknown existing size: ExistingAttachment.size is optional, and coalescing
-    // a missing one to 0 would undercount and let an over-limit batch through,
-    // so treat unknown as "cannot fit" rather than guessing low.
-    // A file the user just picked stays in `attachments` (nothing promotes it to
-    // a reference), and once a save echoes it back inside `draft.attachments` it
-    // also lands in `existingAttachments` - so a naive sum counts it twice and
-    // wrongly rejects a later drop that genuinely fits. Match on filename+size
-    // and count each file once. The real fix is to retire an upload once the
-    // server confirms it, tracked in the write-chain rework (issue #32).
-    // Cancel at most ONE existing entry per new upload. filename+size is not an
-    // identity - a draft can legitimately carry several files sharing both - so
-    // set-style matching would drop every copy and undercount badly. A budget
-    // keeps the correction to the actual overlap and errs toward over-counting,
-    // which only over-rejects rather than letting an over-cap batch through.
-    const dupBudget = new Map<string, number>();
-    for (const a of attachments) {
-      const k = `${a.filename}:${a.size}`;
-      dupBudget.set(k, (dupBudget.get(k) ?? 0) + 1);
-    }
-    let committedBytes =
-      attachments.reduce((s, a) => s + a.size, 0) + pendingBytesRef.current;
-    for (const a of existingAttachments) {
-      const budget = dupBudget.get(`${a.filename}:${a.size ?? -1}`) ?? 0;
-      if (budget > 0) {
-        dupBudget.set(`${a.filename}:${a.size ?? -1}`, budget - 1);
-        continue; // already counted via `attachments`
-      }
-      committedBytes += a.size ?? MAX_ATTACHMENT_BYTES;
-    }
+    // unknown size: a confirmed file's size is optional, and coalescing a
+    // missing one to 0 would undercount and let an over-limit batch through.
+    // Each file is exactly one slot, so nothing is counted twice.
+    const committedBytes =
+      slotsRef.current.reduce((sum, a) => sum + (a.size ?? MAX_ATTACHMENT_BYTES), 0) +
+      pendingBytesRef.current;
     const incomingBytes = accepted.reduce((s, f) => s + f.size, 0);
     const fits = committedBytes + incomingBytes <= MAX_ATTACHMENT_BYTES;
     if (!fits) {
@@ -158,10 +151,17 @@ export function useComposerAttachments(draft: ComposerDraft, mcpApp: McpAppLike)
         const result = reader.result as string;
         const base64 = result.split(",")[1] || "";
         attachmentsDirtyRef.current = true;
-        setAttachments((prev) => [
-          ...prev,
-          { filename: file.name, mime_type: file.type || "application/octet-stream", data_base64: base64, size: file.size },
+        setSlots([
+          ...slotsRef.current,
+          {
+            key: nextKey(),
+            filename: file.name,
+            mime_type: file.type || "application/octet-stream",
+            data_base64: base64,
+            size: file.size,
+          },
         ]);
+        onChange();
       };
       // Release on failure too, or an unreadable file would hold its bytes
       // against the cap for the rest of the session.
@@ -177,9 +177,10 @@ export function useComposerAttachments(draft: ComposerDraft, mcpApp: McpAppLike)
     setRejected((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const removeAttachment = (index: number) => {
+  const removeAttachment = (key: number) => {
     attachmentsDirtyRef.current = true;
-    setAttachments((prev) => prev.filter((_, i) => i !== index));
+    setSlots(slotsRef.current.filter((s) => s.key !== key));
+    onChange();
   };
 
   const closePreview = () => {
@@ -200,11 +201,11 @@ export function useComposerAttachments(draft: ComposerDraft, mcpApp: McpAppLike)
     setPreviewData({ url, filename, mime_type: mime });
   };
 
-  const previewNewAttachment = (att: FileAttachment) => {
-    showPreview(att.data_base64, att.mime_type, att.filename);
-  };
-
-  const previewExistingAttachment = async (att: ExistingAttachment) => {
+  const previewAttachment = async (att: AttachmentSlot) => {
+    if (att.data_base64 !== undefined) {
+      showPreview(att.data_base64, att.mime_type || "application/octet-stream", att.filename);
+      return;
+    }
     if (!att.attachment_id || !att.message_id) return;
     const seq = ++previewSeqRef.current;
     setPreviewLoading(true);
@@ -224,10 +225,8 @@ export function useComposerAttachments(draft: ComposerDraft, mcpApp: McpAppLike)
   };
 
   return {
-    attachments,
-    existingAttachments,
+    slots,
     rejected,
-    attachmentsDirtyRef,
     fileInputRef,
     previewData,
     previewLoading,
@@ -235,7 +234,8 @@ export function useComposerAttachments(draft: ComposerDraft, mcpApp: McpAppLike)
     removeAttachment,
     dismissRejected,
     closePreview,
-    previewNewAttachment,
-    previewExistingAttachment,
+    previewAttachment,
+    buildWrite,
+    reconcile,
   };
 }

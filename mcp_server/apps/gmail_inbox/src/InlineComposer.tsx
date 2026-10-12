@@ -7,7 +7,6 @@ import type {
   Thread,
 } from "./types";
 import {
-  buildAttachmentsPayload,
   confirmSend,
   draftFieldsEqual,
   errMsg,
@@ -15,7 +14,9 @@ import {
   extractStructuredContent,
   formatFileSize,
   isPreviewable,
+  toolErrorText,
 } from "./helpers";
+import type { AttachmentSlot } from "./attachmentSlots";
 import { useComposerAttachments } from "./useComposerAttachments";
 import { reportComposerAction } from "./modelContext";
 import { ComposerThreadPanel, renderComposerStatus } from "./ComposerThread";
@@ -68,10 +69,23 @@ export function InlineComposer({
   const [localThread, setLocalThread] = useState<Thread | null>(thread);
   const [loadingThread, setLoadingThread] = useState(false);
   const [pendingAgent, setPendingAgent] = useState<ComposerDraft | null>(null);
+  const localDirtyRef = useRef(false);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The fields the next write should carry: set synchronously on every edit, so
+  // a queued write sends what the user typed even before the prop round-trips.
+  const fieldsRef = useRef(draft);
+  // Every draft write (autosave and send) runs on this one chain, so no two
+  // overlap and each builds on the ids the previous reply confirmed. Without it
+  // two saves carrying different file sets could land out of order and drop a
+  // file, and a send could cite ids an in-flight save had already replaced.
+  const chainRef = useRef<Promise<unknown>>(Promise.resolve());
+  const enqueue = <T,>(task: () => Promise<T>): Promise<T> => {
+    const run = chainRef.current.then(task, task);
+    chainRef.current = run.catch(() => {});
+    return run;
+  };
   const {
-    attachments,
-    existingAttachments,
-    attachmentsDirtyRef,
+    slots,
     fileInputRef,
     rejected,
     previewData,
@@ -80,12 +94,11 @@ export function InlineComposer({
     removeAttachment,
     dismissRejected,
     closePreview,
-    previewNewAttachment,
-    previewExistingAttachment,
-  } = useComposerAttachments(draft, mcpApp);
+    previewAttachment,
+    buildWrite,
+    reconcile,
+  } = useComposerAttachments(draft, mcpApp, () => scheduleAutoSave());
 
-  const localDirtyRef = useRef(false);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Set once a send/discard is committed. Clearing the debounce timer is not
   // enough: an autosave whose request is already on the wire cannot be recalled,
   // and its late reply would overwrite the terminal "sent" state and drop the
@@ -98,7 +111,7 @@ export function InlineComposer({
   // current, so anything started before a terminal action stays silent forever.
   const writeGenRef = useRef(0);
   const draftRef = useRef(draft);
-  useEffect(() => { draftRef.current = draft; }, [draft]);
+  useEffect(() => { draftRef.current = draft; fieldsRef.current = draft; }, [draft]);
 
   // Listen for agent-initiated draft updates via ontoolresult
   useEffect(() => {
@@ -155,54 +168,69 @@ export function InlineComposer({
     return () => { cancelled = true; };
   }, [draft.draft_id]);
 
-  const persistDraft = async (d: ComposerDraft) => {
+  const fieldArgs = (d: ComposerDraft): Record<string, unknown> => ({
+    draft_id: d.draft_id,
+    to: d.to ?? "",
+    cc: d.cc ?? "",
+    bcc: d.bcc ?? "",
+    subject: d.subject ?? "",
+    body: d.body ?? "",
+  });
+
+  // Built when the write runs, not when it was scheduled: by then an earlier
+  // reply may have confirmed new ids or turned an upload into a reference.
+  const persistDraft = () => enqueue(async () => {
     if (closingRef.current) return;
     const gen = writeGenRef.current;
     const stale = () => closingRef.current || gen !== writeGenRef.current;
     setSaveStatus({ kind: "saving" });
-    const snapshot = d;
+    const snapshot = fieldsRef.current;
+    const write = buildWrite();
     try {
-      const args: Record<string, unknown> = {
-        draft_id: snapshot.draft_id,
-        to: snapshot.to ?? "",
-        cc: snapshot.cc ?? "",
-        bcc: snapshot.bcc ?? "",
-        subject: snapshot.subject ?? "",
-        body: snapshot.body ?? "",
-      };
-      // Preserve existing files (by reference) alongside new uploads; a bare
-      // new-uploads list would replace the whole set and drop them.
-      const attachmentsArg = buildAttachmentsPayload(
-        attachments,
-        existingAttachments,
-        attachmentsDirtyRef.current,
-      );
+      const args = fieldArgs(snapshot);
       // `undefined` means "omit -> preserve all"; an array (including the empty
       // clear-all list) must be sent, so test against undefined, not truthiness.
-      if (attachmentsArg !== undefined) args.attachments = attachmentsArg;
-      await mcpApp.callServerTool({ name: "gmail_composer.save_draft", arguments: args });
-      // Re-check after the await, not just on entry: a send committed while this
-      // request was in flight makes the reply stale, whichever way it resolved.
+      if (write.arg !== undefined) args.attachments = write.arg;
+      const raw = await mcpApp.callServerTool({ name: "gmail_composer.save_draft", arguments: args });
+      const result = (raw ?? {}) as { isError?: boolean };
+      if (result.isError) throw new Error(toolErrorText(raw) ?? "the save failed");
+      // Fold the confirmed ids in even when the reply is stale for the status
+      // line: they are the server's truth, and the queued send builds on them.
+      reconcile(write.sent, extractStructuredContent<ComposerDraft>(raw)?.attachments);
       if (stale()) return;
       setSaveStatus({ kind: "saved", at: new Date() });
-      const latest = draftRef.current;
+      const latest = fieldsRef.current;
       if (latest && draftFieldsEqual(latest, snapshot)) localDirtyRef.current = false;
     } catch (err) {
       if (stale()) return;
       setSaveStatus({ kind: "error", message: errMsg(err) });
     }
-  };
+  });
 
-  const scheduleAutoSave = (next: ComposerDraft) => {
+  const scheduleAutoSave = () => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => void persistDraft(next), 800);
+    saveTimerRef.current = setTimeout(() => void persistDraft(), 800);
   };
 
   const updateField = (key: keyof ComposerDraft, value: string) => {
-    const next = { ...draft, [key]: value };
+    const next = { ...fieldsRef.current, [key]: value };
+    fieldsRef.current = next;
     onDraftChange(next);
     localDirtyRef.current = true;
-    scheduleAutoSave(next);
+    scheduleAutoSave();
+  };
+
+  // A failed send may still have rewritten the draft (send updates, then
+  // sends), which replaces every attachment id. Re-read it so a retry cites
+  // live ids; only needed when the send carried an explicit file set.
+  const resyncAttachments = async (sent: AttachmentSlot[]) => {
+    try {
+      const raw = await mcpApp.callServerTool({
+        name: "gmail_composer.refresh",
+        arguments: { draft_id: draft.draft_id },
+      });
+      reconcile(sent, extractStructuredContent<ComposerDraft>(raw)?.attachments);
+    } catch { /* the next save reports any real failure */ }
   };
 
   const onSend = async () => {
@@ -212,27 +240,23 @@ export function InlineComposer({
     writeGenRef.current++;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     setSaveStatus({ kind: "sending" });
+    const fields = fieldsRef.current;
     try {
-      const args: Record<string, unknown> = {
-        draft_id: draft.draft_id,
-        to: draft.to ?? "",
-        cc: draft.cc ?? "",
-        bcc: draft.bcc ?? "",
-        subject: draft.subject ?? "",
-        body: draft.body ?? "",
-      };
-      // Same preservation as save_draft: keep existing files when new ones are added.
-      const attachmentsArg = buildAttachmentsPayload(
-        attachments,
-        existingAttachments,
-        attachmentsDirtyRef.current,
-      );
-      // `undefined` means "omit -> preserve all"; an array (including the empty
-      // clear-all list) must be sent, so test against undefined, not truthiness.
-      if (attachmentsArg !== undefined) args.attachments = attachmentsArg;
-      const sent = await confirmSend(mcpApp, { ...args, draft_id: draft.draft_id });
+      // Queued behind any in-flight save, so it carries that save's ids.
+      const sent = await enqueue(async () => {
+        const write = buildWrite();
+        const args = fieldArgs(fields);
+        // Same omit-vs-explicit rule as save_draft.
+        if (write.arg !== undefined) args.attachments = write.arg;
+        try {
+          return await confirmSend(mcpApp, { ...args, draft_id: draft.draft_id });
+        } catch (err) {
+          if (write.arg !== undefined) await resyncAttachments(write.sent);
+          throw err;
+        }
+      });
       setSaveStatus({ kind: "sent", message_id: sent.message_id });
-      void reportComposerAction(mcpApp, "sent", draft, sent);
+      void reportComposerAction(mcpApp, "sent", fields, sent);
       setTimeout(onSent, 1500);
     } catch (err) {
       // The send did not land, so the composer stays editable: reopen it to
@@ -264,6 +288,7 @@ export function InlineComposer({
   const applyAgentUpdate = () => {
     if (!pendingAgent) return;
     if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null; }
+    fieldsRef.current = pendingAgent;
     onDraftChange(pendingAgent);
     setPendingAgent(null);
     localDirtyRef.current = false;
@@ -349,14 +374,14 @@ export function InlineComposer({
           placeholder="Compose your reply…"
         />
 
-        {/* Attachments list (existing + newly added) */}
-        {(existingAttachments.length > 0 || attachments.length > 0) && (
+        {/* Attachments: confirmed files and picks still uploading, in order. */}
+        {slots.length > 0 && (
           <div style={{ padding: "8px 16px", display: "flex", flexWrap: "wrap", gap: 6 }}>
-            {existingAttachments.map((att, i) => (
+            {slots.map((att) => (
               <div
-                key={`existing-${i}`}
+                key={att.key}
                 style={{ ...attachmentChipStyle, cursor: isPreviewable(att.mime_type) ? "pointer" : "default" }}
-                onClick={() => isPreviewable(att.mime_type) && previewExistingAttachment(att)}
+                onClick={() => isPreviewable(att.mime_type) && previewAttachment(att)}
                 title={isPreviewable(att.mime_type) ? "Click to preview" : att.filename}
               >
                 <PaperclipHorizontal size={12} style={{ marginRight: 4, flexShrink: 0 }} />
@@ -368,23 +393,7 @@ export function InlineComposer({
                     {formatFileSize(att.size)}
                   </span>
                 )}
-              </div>
-            ))}
-            {attachments.map((att, i) => (
-              <div
-                key={`new-${i}`}
-                style={{ ...attachmentChipStyle, cursor: isPreviewable(att.mime_type) ? "pointer" : "default" }}
-                onClick={() => isPreviewable(att.mime_type) && previewNewAttachment(att)}
-                title={isPreviewable(att.mime_type) ? "Click to preview" : att.filename}
-              >
-                <PaperclipHorizontal size={12} style={{ marginRight: 4, flexShrink: 0 }} />
-                <span style={{ fontSize: 12, maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {att.filename}
-                </span>
-                <span style={{ fontSize: 11, color: "#5f6368", marginLeft: 4 }}>
-                  {formatFileSize(att.size)}
-                </span>
-                <button onClick={(e) => { e.stopPropagation(); removeAttachment(i); }} style={attachmentRemoveBtn} title="Remove">×</button>
+                <button onClick={(e) => { e.stopPropagation(); removeAttachment(att.key); }} style={attachmentRemoveBtn} title="Remove">×</button>
               </div>
             ))}
           </div>
