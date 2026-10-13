@@ -7,6 +7,13 @@ ENV PYTHONUNBUFFERED=1 \
     DEV_ENV=prod \
     PORT=8080
 
+# loguru reads these when first imported, so they govern its default handler for
+# the import-time logs emitted before setup_logging() replaces it: no DEBUG lines
+# and no diagnose/backtrace locals in production from the very first log line.
+ENV LOGURU_LEVEL=INFO \
+    LOGURU_DIAGNOSE=NO \
+    LOGURU_BACKTRACE=NO
+
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates \
  && rm -rf /var/lib/apt/lists/* \
