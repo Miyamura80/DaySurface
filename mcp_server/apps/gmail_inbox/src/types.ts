@@ -127,18 +127,3 @@ export type ToolCallResult = {
 // gmail_composer.send's confirmation. Empty when the send was confirmed only
 // by the draft being gone (see confirmSend), so Gmail's ids are unknown.
 export type SendResult = { message_id?: string; thread_id?: string };
-
-export type FileAttachment = {
-  filename: string;
-  mime_type: string;
-  data_base64: string;
-  size: number;
-};
-
-export type ExistingAttachment = {
-  filename: string;
-  mime_type?: string;
-  size?: number;
-  attachment_id?: string;
-  message_id?: string;
-};

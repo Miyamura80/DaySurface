@@ -3,8 +3,6 @@ import type {
   CuratedThread,
   CurationRecord,
   DraftAttachment,
-  ExistingAttachment,
-  FileAttachment,
   LabelChip,
   McpAppLike,
   SendResult,
@@ -164,8 +162,8 @@ export function extractStructuredContent<T>(raw: unknown): T | null {
 }
 
 // The first text block of a tool-level failure, or null.
-function toolErrorText(result: ToolCallResult): string | null {
-  for (const item of result.content ?? []) {
+function toolErrorText(raw: unknown): string | null {
+  for (const item of (raw as ToolCallResult | null)?.content ?? []) {
     const c = item as { type?: unknown; text?: unknown } | null;
     if (c?.type === "text" && typeof c.text === "string" && c.text) return c.text;
   }
@@ -211,6 +209,18 @@ export async function confirmSend(
   throw new Error("the server did not confirm the send");
 }
 
+// Call a write tool and return its result, throwing the server's own text when
+// it reports a tool-level failure (callServerTool resolves on isError too).
+export async function callWriteTool(
+  app: McpAppLike,
+  name: string,
+  args: Record<string, unknown>,
+): Promise<unknown> {
+  const raw = await app.callServerTool({ name, arguments: args });
+  if ((raw as ToolCallResult | null)?.isError) throw new Error(toolErrorText(raw) ?? `${name} failed`);
+  return raw;
+}
+
 export function errMsg(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
@@ -219,40 +229,6 @@ export function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-// Build the composer's `attachments` argument for save_draft / send.
-//
-// The backend replaces the draft's entire attachment set when `attachments`
-// is a non-empty list, preserving existing files that are re-listed by
-// `{attachment_id}` reference, and treats an OMITTED argument as
-// "preserve every existing file" (see gmail_update_draft).
-//
-// `changed` is whether the user has added or removed an attachment in this
-// composer session:
-//   - not changed  -> return undefined so the caller omits the argument and
-//     the backend keeps every file untouched (the common text-only-edit path,
-//     and the only safe way to preserve files that carry no referenceable id).
-//   - changed      -> return the explicit desired set: `{attachment_id}` refs
-//     for the existing files followed by the new uploads. Sending this on
-//     every save/send after a change is what lets a removal actually take
-//     effect: once a new upload has been persisted, omitting the argument
-//     would "preserve" it server-side and the removal would be lost.
-export function buildAttachmentsPayload(
-  newUploads: FileAttachment[],
-  existing: ExistingAttachment[],
-  changed: boolean,
-): Array<Record<string, unknown>> | undefined {
-  if (!changed) return undefined;
-  const refs = existing
-    .filter((a) => a.attachment_id)
-    .map((a) => ({ attachment_id: a.attachment_id }));
-  const uploads = newUploads.map(({ filename, mime_type, data_base64 }) => ({
-    filename,
-    mime_type,
-    data_base64,
-  }));
-  return [...refs, ...uploads];
 }
 
 export function isPreviewable(mime?: string): boolean {

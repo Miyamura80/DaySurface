@@ -132,6 +132,8 @@ class TestGmailComposerAppTools(TestTemplate):
             "gmail_composer.discard",
             "gmail_composer.refresh",
             "gmail_composer.send_status",
+            "gmail_composer.add_attachment",
+            "gmail_composer.remove_attachment",
         }
         registered = set(mcp._tool_manager._tools)
         assert names.issubset(registered), names - registered
@@ -143,6 +145,8 @@ class TestGmailComposerAppTools(TestTemplate):
             "gmail_composer.discard",
             "gmail_composer.refresh",
             "gmail_composer.send_status",
+            "gmail_composer.add_attachment",
+            "gmail_composer.remove_attachment",
         ):
             tool = mcp._tool_manager._tools[tool_name]
             # FastMCP stores the meta dict on the Tool record under `meta`.

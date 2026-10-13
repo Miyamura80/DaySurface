@@ -1,23 +1,15 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { CheckCircle, PaperclipHorizontal, Trash, Warning } from "@phosphor-icons/react";
-import type {
-  ComposerDraft,
-  ComposerSaveStatus,
-  McpAppLike,
-  Thread,
-} from "./types";
+import type { ComposerDraft, McpAppLike, Thread } from "./types";
 import {
-  buildAttachmentsPayload,
-  confirmSend,
   draftFieldsEqual,
-  errMsg,
   extractDraft,
   extractStructuredContent,
   formatFileSize,
   isPreviewable,
 } from "./helpers";
 import { useComposerAttachments } from "./useComposerAttachments";
-import { reportComposerAction } from "./modelContext";
+import { useDraftWriter } from "./useDraftWriter";
 import { ComposerThreadPanel, renderComposerStatus } from "./ComposerThread";
 import { PreviewModal } from "./AttachmentPreview";
 import { attachmentChipStyle, attachmentRejectedChipStyle } from "./messageStyles";
@@ -62,43 +54,26 @@ export function InlineComposer({
   onDiscard: () => void;
   onSent: () => void;
 }) {
-  const [saveStatus, setSaveStatus] = useState<ComposerSaveStatus>({ kind: "idle" });
   const [showCcBcc, setShowCcBcc] = useState(false);
   const [discardHover, setDiscardHover] = useState(false);
   const [localThread, setLocalThread] = useState<Thread | null>(thread);
   const [loadingThread, setLoadingThread] = useState(false);
   const [pendingAgent, setPendingAgent] = useState<ComposerDraft | null>(null);
+  const writer = useDraftWriter({ draft, mcpApp, onDraftChange, onDiscard, onSent });
+  const { saveStatus, slots, updateField } = writer;
   const {
-    attachments,
-    existingAttachments,
-    attachmentsDirtyRef,
     fileInputRef,
     rejected,
     previewData,
     previewLoading,
     handleFileSelect,
-    removeAttachment,
     dismissRejected,
     closePreview,
-    previewNewAttachment,
-    previewExistingAttachment,
-  } = useComposerAttachments(draft, mcpApp);
-
-  const localDirtyRef = useRef(false);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Set once a send/discard is committed. Clearing the debounce timer is not
-  // enough: an autosave whose request is already on the wire cannot be recalled,
-  // and its late reply would overwrite the terminal "sent" state and drop the
-  // user back into an editable composer for a draft Gmail has already sent.
-  const closingRef = useRef(false);
-  // Bumped whenever a terminal action commits. `closingRef` alone is not enough:
-  // a failed send releases it so the composer stays editable, and a pre-send
-  // autosave resolving just after that would find the latch open and write
-  // "saved" over the send error. A save only reports if its generation is still
-  // current, so anything started before a terminal action stays silent forever.
-  const writeGenRef = useRef(0);
-  const draftRef = useRef(draft);
-  useEffect(() => { draftRef.current = draft; }, [draft]);
+    previewAttachment,
+  } = useComposerAttachments(mcpApp, writer.slotsRef, writer.addFile);
+  // Frozen while a send is in flight: the send carries what was on screen at
+  // the click, so nothing typed, picked or removed after it may look included.
+  const sending = saveStatus.kind === "sending";
 
   // Listen for agent-initiated draft updates via ontoolresult
   useEffect(() => {
@@ -109,13 +84,12 @@ export function InlineComposer({
         if (prevHandler) prevHandler(raw);
         return;
       }
-      const current = draftRef.current;
-      if (localDirtyRef.current && current && !draftFieldsEqual(current, incoming)) {
+      const current = writer.fieldsRef.current;
+      if (writer.localDirtyRef.current && current && !draftFieldsEqual(current, incoming)) {
         setPendingAgent(incoming);
         return;
       }
-      onDraftChange(incoming);
-      localDirtyRef.current = false;
+      writer.applyDraft(incoming);
     };
     mcpApp.ontoolresult = handler;
     return () => { if (mcpApp.ontoolresult === handler) mcpApp.ontoolresult = prevHandler; };
@@ -155,118 +129,10 @@ export function InlineComposer({
     return () => { cancelled = true; };
   }, [draft.draft_id]);
 
-  const persistDraft = async (d: ComposerDraft) => {
-    if (closingRef.current) return;
-    const gen = writeGenRef.current;
-    const stale = () => closingRef.current || gen !== writeGenRef.current;
-    setSaveStatus({ kind: "saving" });
-    const snapshot = d;
-    try {
-      const args: Record<string, unknown> = {
-        draft_id: snapshot.draft_id,
-        to: snapshot.to ?? "",
-        cc: snapshot.cc ?? "",
-        bcc: snapshot.bcc ?? "",
-        subject: snapshot.subject ?? "",
-        body: snapshot.body ?? "",
-      };
-      // Preserve existing files (by reference) alongside new uploads; a bare
-      // new-uploads list would replace the whole set and drop them.
-      const attachmentsArg = buildAttachmentsPayload(
-        attachments,
-        existingAttachments,
-        attachmentsDirtyRef.current,
-      );
-      // `undefined` means "omit -> preserve all"; an array (including the empty
-      // clear-all list) must be sent, so test against undefined, not truthiness.
-      if (attachmentsArg !== undefined) args.attachments = attachmentsArg;
-      await mcpApp.callServerTool({ name: "gmail_composer.save_draft", arguments: args });
-      // Re-check after the await, not just on entry: a send committed while this
-      // request was in flight makes the reply stale, whichever way it resolved.
-      if (stale()) return;
-      setSaveStatus({ kind: "saved", at: new Date() });
-      const latest = draftRef.current;
-      if (latest && draftFieldsEqual(latest, snapshot)) localDirtyRef.current = false;
-    } catch (err) {
-      if (stale()) return;
-      setSaveStatus({ kind: "error", message: errMsg(err) });
-    }
-  };
-
-  const scheduleAutoSave = (next: ComposerDraft) => {
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => void persistDraft(next), 800);
-  };
-
-  const updateField = (key: keyof ComposerDraft, value: string) => {
-    const next = { ...draft, [key]: value };
-    onDraftChange(next);
-    localDirtyRef.current = true;
-    scheduleAutoSave(next);
-  };
-
-  const onSend = async () => {
-    // Single-flight: a repeat click while a send is in flight is a no-op.
-    if (closingRef.current) return;
-    closingRef.current = true;
-    writeGenRef.current++;
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    setSaveStatus({ kind: "sending" });
-    try {
-      const args: Record<string, unknown> = {
-        draft_id: draft.draft_id,
-        to: draft.to ?? "",
-        cc: draft.cc ?? "",
-        bcc: draft.bcc ?? "",
-        subject: draft.subject ?? "",
-        body: draft.body ?? "",
-      };
-      // Same preservation as save_draft: keep existing files when new ones are added.
-      const attachmentsArg = buildAttachmentsPayload(
-        attachments,
-        existingAttachments,
-        attachmentsDirtyRef.current,
-      );
-      // `undefined` means "omit -> preserve all"; an array (including the empty
-      // clear-all list) must be sent, so test against undefined, not truthiness.
-      if (attachmentsArg !== undefined) args.attachments = attachmentsArg;
-      const sent = await confirmSend(mcpApp, { ...args, draft_id: draft.draft_id });
-      setSaveStatus({ kind: "sent", message_id: sent.message_id });
-      void reportComposerAction(mcpApp, "sent", draft, sent);
-      setTimeout(onSent, 1500);
-    } catch (err) {
-      // The send did not land, so the composer stays editable: reopen it to
-      // autosaves and let the user retry.
-      closingRef.current = false;
-      setSaveStatus({ kind: "error", message: errMsg(err) });
-    }
-  };
-
-  const onDiscardNow = async () => {
-    if (closingRef.current) return;
-    closingRef.current = true;
-    writeGenRef.current++;
-    if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null; }
-    onDiscard();
-    try {
-      const raw = await mcpApp.callServerTool({
-        name: "gmail_composer.discard",
-        arguments: { draft_id: draft.draft_id },
-      });
-      // Like send, a tool-level failure still resolves: only a confirmed
-      // discard may tell the model the draft is gone.
-      if (extractStructuredContent<{ discarded?: boolean }>(raw)?.discarded) {
-        void reportComposerAction(mcpApp, "discarded", draft);
-      }
-    } catch { /* discard is best-effort */ }
-  };
-
   const applyAgentUpdate = () => {
     if (!pendingAgent) return;
-    if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null; }
-    onDraftChange(pendingAgent);
+    writer.applyDraft(pendingAgent);
     setPendingAgent(null);
-    localDirtyRef.current = false;
   };
 
   if (saveStatus.kind === "sent") {
@@ -317,6 +183,7 @@ export function InlineComposer({
             type="text"
             value={draft.to ?? ""}
             onChange={(e) => updateField("to", e.target.value)}
+            readOnly={sending}
             style={composerInputStyle}
             aria-label="To"
           />
@@ -329,11 +196,11 @@ export function InlineComposer({
           <>
             <div style={composerFieldRow}>
               <span style={composerFieldLabel}>Cc</span>
-              <input type="text" value={draft.cc ?? ""} onChange={(e) => updateField("cc", e.target.value)} style={composerInputStyle} aria-label="Cc" />
+              <input type="text" value={draft.cc ?? ""} onChange={(e) => updateField("cc", e.target.value)} readOnly={sending} style={composerInputStyle} aria-label="Cc" />
             </div>
             <div style={composerFieldRow}>
               <span style={composerFieldLabel}>Bcc</span>
-              <input type="text" value={draft.bcc ?? ""} onChange={(e) => updateField("bcc", e.target.value)} style={composerInputStyle} aria-label="Bcc" />
+              <input type="text" value={draft.bcc ?? ""} onChange={(e) => updateField("bcc", e.target.value)} readOnly={sending} style={composerInputStyle} aria-label="Bcc" />
             </div>
           </>
         )}
@@ -343,20 +210,21 @@ export function InlineComposer({
         <textarea
           value={draft.body ?? ""}
           onChange={(e) => updateField("body", e.target.value)}
+          readOnly={sending}
           rows={12}
           style={composerTextareaStyle}
           aria-label="Body"
           placeholder="Compose your reply…"
         />
 
-        {/* Attachments list (existing + newly added) */}
-        {(existingAttachments.length > 0 || attachments.length > 0) && (
+        {/* Attachments: confirmed files and picks still uploading, in order. */}
+        {slots.length > 0 && (
           <div style={{ padding: "8px 16px", display: "flex", flexWrap: "wrap", gap: 6 }}>
-            {existingAttachments.map((att, i) => (
+            {slots.map((att) => (
               <div
-                key={`existing-${i}`}
+                key={att.key}
                 style={{ ...attachmentChipStyle, cursor: isPreviewable(att.mime_type) ? "pointer" : "default" }}
-                onClick={() => isPreviewable(att.mime_type) && previewExistingAttachment(att)}
+                onClick={() => isPreviewable(att.mime_type) && previewAttachment(att)}
                 title={isPreviewable(att.mime_type) ? "Click to preview" : att.filename}
               >
                 <PaperclipHorizontal size={12} style={{ marginRight: 4, flexShrink: 0 }} />
@@ -368,23 +236,10 @@ export function InlineComposer({
                     {formatFileSize(att.size)}
                   </span>
                 )}
-              </div>
-            ))}
-            {attachments.map((att, i) => (
-              <div
-                key={`new-${i}`}
-                style={{ ...attachmentChipStyle, cursor: isPreviewable(att.mime_type) ? "pointer" : "default" }}
-                onClick={() => isPreviewable(att.mime_type) && previewNewAttachment(att)}
-                title={isPreviewable(att.mime_type) ? "Click to preview" : att.filename}
-              >
-                <PaperclipHorizontal size={12} style={{ marginRight: 4, flexShrink: 0 }} />
-                <span style={{ fontSize: 12, maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {att.filename}
-                </span>
-                <span style={{ fontSize: 11, color: "#5f6368", marginLeft: 4 }}>
-                  {formatFileSize(att.size)}
-                </span>
-                <button onClick={(e) => { e.stopPropagation(); removeAttachment(i); }} style={attachmentRemoveBtn} title="Remove">×</button>
+                {/* A file Gmail stores without an id is kept by every write but can't be removed. */}
+                {!sending && (att.kind === "pending" || att.attachment_id) && (
+                  <button onClick={(e) => { e.stopPropagation(); writer.removeFile(att.key); }} style={attachmentRemoveBtn} title="Remove">×</button>
+                )}
               </div>
             ))}
           </div>
@@ -422,10 +277,10 @@ export function InlineComposer({
         {/* Toolbar */}
         <div style={composerToolbarStyle}>
           <div style={composerToolbarLeft}>
-            <button onClick={onSend} style={composerSendBtnStyle}>
-              {saveStatus.kind === "sending" ? "Sending…" : "Send"}
+            <button onClick={writer.send} style={composerSendBtnStyle}>
+              {sending ? "Sending…" : "Send"}
             </button>
-            <button style={composerToolbarIconBtn} title="Attach files" onClick={() => fileInputRef.current?.click()}>
+            <button style={composerToolbarIconBtn} title="Attach files" disabled={sending} onClick={() => fileInputRef.current?.click()}>
               <PaperclipHorizontal size={18} />
             </button>
           </div>
@@ -434,7 +289,8 @@ export function InlineComposer({
               {renderComposerStatus(saveStatus)}
             </span>
             <button
-              onClick={onDiscardNow}
+              onClick={writer.discard}
+              disabled={sending}
               style={{
                 ...composerTrashBtn,
                 color: discardHover ? "#d93025" : "#5f6368",

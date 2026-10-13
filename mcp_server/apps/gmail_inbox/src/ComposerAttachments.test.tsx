@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { InlineComposer } from "./InlineComposer";
 import { MAX_ATTACHMENT_BYTES } from "./useComposerAttachments";
 import type { ComposerDraft, DraftAttachment, McpAppLike } from "./types";
@@ -140,42 +140,6 @@ describe("composer attachment preflight", () => {
     expect(screen.getByText(/would exceed/)).toBeTruthy();
   });
 
-  it("counts a file once when it appears in both the new and existing sets", async () => {
-    const { app } = makeMcpApp();
-    const big = Math.floor(MAX_ATTACHMENT_BYTES * 0.6);
-    const { rerender } = renderComposer(app);
-
-    // Pick a file and let its read finish, so it lands in `attachments`.
-    drop([fileOfSize("dup.pdf", big)]);
-    await waitFor(() => expect(screen.getByText("dup.pdf")).toBeTruthy());
-
-    // A save echoes it back onto the draft, so it is now in BOTH sets. Counting
-    // it twice would put the draft over the cap on paper and reject the next
-    // drop, even though only one copy of the file exists.
-    rerender([{ filename: "dup.pdf", mime_type: "application/pdf", size: big }]);
-
-    drop([fileOfSize("small.pdf", 1_000)]);
-    expect(screen.queryByText(/would exceed/)).toBeNull();
-  });
-
-  it("cancels only one duplicate per upload when several files share a name and size", async () => {
-    const { app } = makeMcpApp();
-    const each = 8_000_000;
-    const { rerender } = renderComposer(app);
-
-    drop([fileOfSize("dup.pdf", each)]);
-    await waitFor(() => expect(screen.getByText("dup.pdf")).toBeTruthy());
-
-    // Three genuinely distinct files that happen to share a name and size, one
-    // of which is the upload above. Cancelling all three would undercount by
-    // 16 MB and let the next drop through.
-    const dup = { filename: "dup.pdf", mime_type: "application/pdf", size: each };
-    rerender([dup, dup, dup]);
-
-    drop([fileOfSize("next.pdf", 2_000_000)]);
-    expect(screen.getByText(/would exceed/)).toBeTruthy();
-  });
-
   it("lets the user dismiss a rejection", () => {
     const { app } = makeMcpApp();
     renderComposer(app);
@@ -185,5 +149,298 @@ describe("composer attachment preflight", () => {
 
     fireEvent.click(screen.getByTitle("Dismiss"));
     expect(screen.queryByText(/Too large/)).toBeNull();
+  });
+});
+
+type Call = { name: string; arguments: Record<string, unknown> };
+type Mode = "ok" | "lose-reply" | "fail";
+
+/**
+ * A fake composer backend with Gmail's id behaviour: every write rebuilds the
+ * draft and hands each file a fresh attachment_id, and a remove citing an id no
+ * longer on the draft is refused. `modes` makes the next call to a tool apply
+ * then lose its reply ("lose-reply") or fail without applying ("fail");
+ * `rename` changes a file's name on echo, as a MIME round-trip can.
+ */
+function makeServer(
+  opts: { gated?: boolean; files?: DraftAttachment[]; rename?: Record<string, string>; sizes?: Record<string, number> } = {},
+) {
+  let n = 0;
+  let files: DraftAttachment[] = [...(opts.files ?? [])];
+  const calls: Call[] = [];
+  const gates: Array<() => void> = [];
+  const modes: Record<string, Mode[]> = {};
+  const rotate = () => { files = files.map((f) => ({ ...f, attachment_id: `att-${++n}`, message_id: `msg-${n}` })); };
+  const apply = (req: Call) => {
+    const a = req.arguments;
+    if (req.name === "gmail_composer.add_attachment") {
+      const name = String(a.filename);
+      files = [...files, { filename: opts.rename?.[name] ?? name, mime_type: String(a.mime_type), size: opts.sizes?.[name] ?? 1 }];
+    } else if (req.name === "gmail_composer.remove_attachment") {
+      if (!files.some((f) => f.attachment_id === a.attachment_id)) {
+        throw new Error(`attachment_id ${a.attachment_id} is not on draft`);
+      }
+      files = files.filter((f) => f.attachment_id !== a.attachment_id);
+    }
+    rotate();
+  };
+  const callServerTool = vi.fn(async (req: Call) => {
+    calls.push(req);
+    if (req.name === "gmail_composer.refresh") {
+      if (modes[req.name]?.shift() === "fail") throw new Error("offline");
+      return { structuredContent: { draft_id: "d1", attachments: files } };
+    }
+    const writes = ["save_draft", "send", "add_attachment", "remove_attachment"].map((t) => `gmail_composer.${t}`);
+    if (!writes.includes(req.name)) return null;
+    if (opts.gated) await new Promise<void>((r) => gates.push(r));
+    const mode = modes[req.name]?.shift() ?? "ok";
+    if (mode === "fail") return { isError: true, content: [{ type: "text", text: "gmail said no" }] };
+    apply(req);
+    if (mode === "lose-reply") throw new Error("request timed out");
+    if (req.name === "gmail_composer.send") return { structuredContent: { message_id: "sent-1" } };
+    return { structuredContent: { draft_id: "d1", attachments: files } };
+  });
+  const app: McpAppLike = { callServerTool, openLink: vi.fn(async () => ({})) };
+  const named = (tool: string) => calls.filter((c) => c.name === `gmail_composer.${tool}`);
+  const release = async () => {
+    await act(async () => {});
+    const g = gates.shift();
+    if (!g) throw new Error("no write on the wire");
+    await act(async () => { g(); });
+  };
+  const next = (tool: string, mode: Mode) => { (modes[`gmail_composer.${tool}`] ||= []).push(mode); };
+  return { app, calls, named, release, next, files: () => files, rotate };
+}
+
+const autosave = () => act(async () => { vi.advanceTimersByTime(800); });
+const settled = () => act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+
+async function pick(name: string, size = 1_000) {
+  drop([fileOfSize(name, size)]);
+  await waitFor(() => expect(screen.getByText(name)).toBeTruthy());
+  await settled();
+}
+
+function typeBody(value: string) {
+  fireEvent.change(screen.getByLabelText("Body"), { target: { value } });
+}
+
+describe("composer attachment writes (#32)", () => {
+  beforeEach(() => { vi.useFakeTimers({ shouldAdvanceTime: true }); });
+  afterEach(() => { vi.useRealTimers(); vi.clearAllMocks(); });
+
+  it("uploads a pick exactly once; text saves and send never carry files", async () => {
+    const { app, calls, named } = makeServer();
+    renderComposer(app);
+
+    await pick("a.pdf");
+    for (const body of ["one", "two", "three"]) {
+      typeBody(body);
+      await autosave();
+    }
+    fireEvent.click(screen.getByText("Send"));
+    await waitFor(() => expect(screen.getByText("Message sent")).toBeTruthy());
+
+    expect(named("add_attachment")).toHaveLength(1);
+    expect(calls.filter((c) => "data_base64" in c.arguments)).toHaveLength(1);
+    for (const c of [...named("save_draft"), ...named("send")]) {
+      expect(c.arguments).not.toHaveProperty("attachments");
+    }
+  });
+
+  it("runs writes one at a time so neither of two quick picks is lost", async () => {
+    const { app, named, release, files } = makeServer({ gated: true });
+    renderComposer(app);
+
+    drop([fileOfSize("a.pdf", 1_000)]);
+    await waitFor(() => expect(named("add_attachment")).toHaveLength(1));
+    drop([fileOfSize("b.pdf", 1_000)]);
+    await waitFor(() => expect(screen.getByText("b.pdf")).toBeTruthy());
+    await settled();
+    expect(named("add_attachment")).toHaveLength(1);
+
+    await release();
+    await release();
+    expect(files().map((f) => f.filename)).toEqual(["a.pdf", "b.pdf"]);
+    expect(screen.getByText("a.pdf")).toBeTruthy();
+    expect(screen.getByText("b.pdf")).toBeTruthy();
+  });
+
+  it("removes a file by its latest id, after a text save replaced every id", async () => {
+    const { app, named, files } = makeServer({ files: [{ filename: "x.pdf", size: 5, attachment_id: "att-0" }] });
+    renderComposer(app, [{ filename: "x.pdf", size: 5, attachment_id: "att-0" }]);
+
+    typeBody("edit");
+    await autosave();
+    fireEvent.click(screen.getByTitle("Remove"));
+    await settled();
+
+    expect(named("remove_attachment")).toHaveLength(1);
+    expect(files()).toEqual([]);
+    expect(screen.queryByText("x.pdf")).toBeNull();
+    expect(screen.queryByText(/Couldn't remove/)).toBeNull();
+  });
+
+  it("re-reads and retries a remove whose id went stale behind its back", async () => {
+    const { app, named, files, rotate } = makeServer({ files: [{ filename: "x.pdf", size: 5, attachment_id: "att-0" }] });
+    renderComposer(app, [{ filename: "x.pdf", size: 5, attachment_id: "att-0" }]);
+
+    rotate(); // an agent edit the composer never heard about
+    fireEvent.click(screen.getByTitle("Remove"));
+    await settled();
+
+    expect(named("remove_attachment")).toHaveLength(2);
+    expect(files()).toEqual([]);
+    expect(screen.queryByText(/Couldn't remove/)).toBeNull();
+  });
+
+  it("shows a pick once when its upload landed but the reply was lost", async () => {
+    const { app, next, files } = makeServer();
+    renderComposer(app);
+
+    next("add_attachment", "lose-reply");
+    await pick("a.pdf");
+
+    expect(files()).toHaveLength(1);
+    expect(screen.getAllByText("a.pdf")).toHaveLength(1);
+    expect(screen.queryByText(/Upload failed/)).toBeNull();
+  });
+
+  it("reports a pick the server refused and does not show it as attached", async () => {
+    const { app, next, files } = makeServer();
+    renderComposer(app);
+
+    next("add_attachment", "fail");
+    drop([fileOfSize("a.pdf", 1_000)]);
+    await waitFor(() => expect(screen.getByText(/Upload failed: gmail said no/)).toBeTruthy());
+
+    expect(files()).toEqual([]);
+    expect(screen.queryByTitle("Remove")).toBeNull();
+  });
+
+  it("does not duplicate a file whose name changes on the way back", async () => {
+    const { app, named, files } = makeServer({ rename: { "résumé.pdf": "re\u0301sume\u0301.pdf" } });
+    renderComposer(app);
+
+    drop([fileOfSize("résumé.pdf", 1_000)]);
+    await waitFor(() => expect(named("add_attachment")).toHaveLength(1));
+    await settled();
+    typeBody("edit");
+    await autosave();
+
+    expect(named("add_attachment")).toHaveLength(1);
+    expect(files()).toHaveLength(1);
+    expect(screen.getAllByTitle("Remove")).toHaveLength(1);
+  });
+
+  it("sends after an upload queued before the click, and freezes the form meanwhile", async () => {
+    const { app, calls, release } = makeServer({ gated: true });
+    renderComposer(app);
+
+    drop([fileOfSize("a.pdf", 1_000)]);
+    await waitFor(() => expect(screen.getByText("a.pdf")).toBeTruthy());
+    fireEvent.click(screen.getByText("Send"));
+    await settled();
+
+    expect((screen.getByLabelText("Body") as HTMLTextAreaElement).readOnly).toBe(true);
+    expect((screen.getByTitle("Attach files") as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByTitle("Remove")).toBeNull();
+
+    await release();
+    await release();
+    expect(calls.map((c) => c.name).filter((n) => n !== "gmail_composer.get_thread")).toEqual([
+      "gmail_composer.add_attachment",
+      "gmail_composer.send",
+    ]);
+    expect(screen.getByText("Message sent")).toBeTruthy();
+  });
+
+  it("counts a confirmed upload once toward the cap", async () => {
+    const big = Math.floor(MAX_ATTACHMENT_BYTES * 0.6);
+    const { app } = makeServer({ sizes: { "big.pdf": big } });
+    renderComposer(app);
+
+    await pick("big.pdf", big);
+    expect(screen.queryByText(/would exceed/)).toBeNull();
+    drop([fileOfSize("small.pdf", 1_000)]);
+
+    expect(screen.queryByText(/would exceed/)).toBeNull();
+  });
+
+  it("holds a send clicked while a file is still being read", async () => {
+    const { app, calls } = makeServer();
+    renderComposer(app);
+
+    drop([fileOfSize("a.pdf", 1_000)]);
+    fireEvent.click(screen.getByText("Send"));
+    await waitFor(() => expect(screen.getByText("Message sent")).toBeTruthy());
+
+    expect(calls.map((c) => c.name).filter((n) => n !== "gmail_composer.get_thread")).toEqual([
+      "gmail_composer.add_attachment",
+      "gmail_composer.send",
+    ]);
+  });
+
+  it("removes a renamed file the user dropped while it was uploading", async () => {
+    const { app, named, release, files } = makeServer({ gated: true, rename: { "résumé.pdf": "re\u0301sume\u0301.pdf" } });
+    renderComposer(app);
+
+    drop([fileOfSize("résumé.pdf", 1_000)]);
+    await waitFor(() => expect(named("add_attachment")).toHaveLength(1));
+    fireEvent.click(screen.getByTitle("Remove"));
+    await release();
+    await release();
+
+    expect(named("remove_attachment")).toHaveLength(1);
+    expect(files()).toEqual([]);
+  });
+
+  it("reports a remove it could not confirm instead of calling it saved", async () => {
+    const { app, next, files } = makeServer({ files: [{ filename: "x.pdf", size: 5, attachment_id: "att-0" }] });
+    renderComposer(app, [{ filename: "x.pdf", size: 5, attachment_id: "att-0" }]);
+
+    next("remove_attachment", "fail");
+    next("refresh", "fail");
+    fireEvent.click(screen.getByTitle("Remove"));
+    await settled();
+
+    expect(files()).toHaveLength(1);
+    expect(screen.getByText(/Couldn't remove x.pdf/)).toBeTruthy();
+  });
+
+  it("disables discard while a send is in flight", async () => {
+    const { app } = makeServer({ gated: true });
+    renderComposer(app);
+
+    fireEvent.click(screen.getByText("Send"));
+    await settled();
+
+    expect((screen.getByTitle("Discard draft") as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("does not take an agent's file for a pick whose add failed", async () => {
+    const { app, next, files } = makeServer();
+    renderComposer(app);
+
+    next("add_attachment", "fail");
+    // The agent attached its own file while the pick's add was failing.
+    files().push({ filename: "agent.pdf", size: 1, attachment_id: "att-agent" });
+    drop([fileOfSize("mine.pdf", 1_000)]);
+
+    await waitFor(() => expect(screen.getByText(/Upload failed/)).toBeTruthy());
+    expect(screen.getByText("agent.pdf")).toBeTruthy();
+  });
+
+  it("lets a pick removed mid-read skip its read without an error", async () => {
+    const { app, named } = makeServer();
+    renderComposer(app);
+
+    drop([fileOfSize("a.pdf", 1_000)]);
+    fireEvent.click(screen.getByTitle("Remove"));
+    await settled();
+    await settled();
+
+    expect(named("add_attachment")).toHaveLength(0);
+    expect(screen.queryByText(/Upload failed/)).toBeNull();
   });
 });

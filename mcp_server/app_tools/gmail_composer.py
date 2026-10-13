@@ -6,19 +6,25 @@ LLM. ``user_id`` arrives on the wire but is overridden by the authenticated
 principal when one is bound; see ``mcp_server/app_tools/_auth_guard.py``.
 """
 
+from collections.abc import Iterator
+from contextlib import contextmanager
+
 from mcp_server.app_tools._auth_guard import guard_user_id
 from mcp_server.server import mcp
 from models.gmail import (
     UNSET,
     AttachmentInput,
     AttachmentReference,
+    GmailAddAttachmentInput,
     GmailAttachmentData,
     GmailDiscardDraftInput,
     GmailDiscardDraftResult,
     GmailDraft,
+    GmailDraftAttachmentsResult,
     GmailGetAttachmentInput,
     GmailGetDraftInput,
     GmailGetThreadInput,
+    GmailRemoveAttachmentInput,
     GmailSendInput,
     GmailSendResult,
     GmailThread,
@@ -26,6 +32,12 @@ from models.gmail import (
     _UnsetType,
 )
 from models.gmail_composer import GmailComposerSendStatus
+from services.gmail_attachments_svc import (
+    gmail_add_attachment as _gmail_add_attachment,
+)
+from services.gmail_attachments_svc import (
+    gmail_remove_attachment as _gmail_remove_attachment,
+)
 from services.gmail_draft_helpers import DraftGoneError
 from services.gmail_drafts_svc import (
     gmail_discard_draft as _gmail_discard_draft,
@@ -48,6 +60,19 @@ from services.gmail_messages_svc import (
 )
 
 _APP_META = {"ui": {"visibility": ["app"]}}
+
+
+@contextmanager
+def _gone_for_user() -> Iterator[None]:
+    """Reword ``DraftGoneError`` for the composer, whose user reads it."""
+    try:
+        yield
+    except DraftGoneError as exc:
+        # DraftGoneError's text is written for the model; the user sees this.
+        raise ValueError(
+            "This draft no longer exists in Gmail. It was probably already sent "
+            "or discarded."
+        ) from exc
 
 
 def _coerce_attachments(
@@ -140,7 +165,7 @@ def send(
     # UNSET defaults preserve omitted fields (see save_draft); the composer's
     # send path saves the visible fields then sends, leaving files intact.
     uid = guard_user_id(user_id)
-    try:
+    with _gone_for_user():
         _gmail_update_draft(
             GmailUpdateDraftInput(
                 user_id=uid,
@@ -154,12 +179,50 @@ def send(
             )
         )
         return _gmail_send(GmailSendInput(user_id=uid, draft_id=draft_id))
-    except DraftGoneError as exc:
-        # DraftGoneError's text is written for the model; the user sees this.
-        raise ValueError(
-            "This draft no longer exists in Gmail. It was probably already sent "
-            "or discarded."
-        ) from exc
+
+
+@mcp.tool(
+    name="gmail_composer.add_attachment",
+    description="Attach one file to the draft and return its attachment list.",
+    meta=_APP_META,
+)
+def add_attachment(
+    draft_id: str,
+    filename: str,
+    mime_type: str,
+    data_base64: str,
+    user_id: str = "",
+) -> GmailDraftAttachmentsResult:
+    # One file per call, so a pick's bytes go up exactly once; text autosaves
+    # omit attachments and leave the file set alone.
+    uid = guard_user_id(user_id)
+    with _gone_for_user():
+        return _gmail_add_attachment(
+            GmailAddAttachmentInput(
+                user_id=uid,
+                draft_id=draft_id,
+                attachment=AttachmentInput(
+                    filename=filename, mime_type=mime_type, data_base64=data_base64
+                ),
+            )
+        )
+
+
+@mcp.tool(
+    name="gmail_composer.remove_attachment",
+    description="Remove one file from the draft and return its attachment list.",
+    meta=_APP_META,
+)
+def remove_attachment(
+    draft_id: str, attachment_id: str, user_id: str = ""
+) -> GmailDraftAttachmentsResult:
+    uid = guard_user_id(user_id)
+    with _gone_for_user():
+        return _gmail_remove_attachment(
+            GmailRemoveAttachmentInput(
+                user_id=uid, draft_id=draft_id, attachment_id=attachment_id
+            )
+        )
 
 
 @mcp.tool(

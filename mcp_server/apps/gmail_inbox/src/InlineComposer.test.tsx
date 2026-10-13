@@ -31,22 +31,26 @@ function makeMcpApp() {
       return d.promise;
     },
   );
+  // Writes run on the composer's queue, a microtask after the click.
+  const flush = () => act(async () => {});
   const take = (name: string) => {
     const d = pending[name]?.shift();
     if (!d) throw new Error(`no pending ${name} call to settle`);
     return d;
   };
   const settle = async (name: string, value: unknown) => {
+    await flush();
     const d = take(name);
     await act(async () => { d.resolve(value); await d.promise.catch(() => {}); });
   };
   const fail = async (name: string, message: string) => {
+    await flush();
     const d = take(name);
     await act(async () => { d.reject(new Error(message)); await d.promise.catch(() => {}); });
   };
   const countOf = (name: string) => calls.filter((c) => c.name === name).length;
   const app: McpAppLike = { callServerTool, openLink: vi.fn(async () => ({})) };
-  return { app, calls, settle, fail, countOf };
+  return { app, calls, settle, fail, countOf, flush };
 }
 
 const draft: ComposerDraft = {
@@ -88,42 +92,59 @@ describe("InlineComposer send/autosave race", () => {
   beforeEach(() => { vi.useFakeTimers({ shouldAdvanceTime: true }); });
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks(); });
 
-  it("keeps the sent panel when an in-flight autosave replies after the send", async () => {
-    const { app, settle, countOf } = makeMcpApp();
+  it("holds the send until an in-flight autosave replies", async () => {
+    const { app, settle, countOf, flush } = makeMcpApp();
     renderComposer(app);
 
     // Autosave is on the wire and deliberately left unresolved.
     await editAndFireAutosave();
     expect(countOf("gmail_composer.save_draft")).toBe(1);
 
+    // Two writes never overlap: the send waits, so it can't race the save.
     fireEvent.click(screen.getByText("Send"));
-    await settle("gmail_composer.send", sendOk);
-    expect(screen.getByText("Message sent")).toBeTruthy();
+    await flush();
+    expect(countOf("gmail_composer.send")).toBe(0);
+    expect(screen.getAllByText("Sending…").length).toBeGreaterThan(0);
 
-    // The straggler lands last and reports success - it must stay silent.
     await settle("gmail_composer.save_draft", { structuredContent: { draft_id: "d1" } });
+    expect(screen.queryByText(/Saved/)).toBeNull();
+    await settle("gmail_composer.send", sendOk);
 
     expect(screen.getByText("Message sent")).toBeTruthy();
     expect(screen.queryByLabelText("Body")).toBeNull();
   });
 
-  it("keeps the sent panel when the straggling autosave fails", async () => {
+  it("still sends when the autosave ahead of it fails", async () => {
     const { app, settle, fail } = makeMcpApp();
     renderComposer(app);
 
     await editAndFireAutosave();
     fireEvent.click(screen.getByText("Send"));
+
+    // The save's error must not steal the UI from the send queued behind it.
+    await fail("gmail_composer.save_draft", "network blip");
+    expect(screen.queryByText(/network blip/)).toBeNull();
     await settle("gmail_composer.send", sendOk);
 
-    // The outstanding save_draft errors out; that error must not steal the UI.
-    await fail("gmail_composer.save_draft", "network blip");
-
     expect(screen.getByText("Message sent")).toBeTruthy();
-    expect(screen.queryByLabelText("Body")).toBeNull();
+  });
+
+  it("sends the latest typed text, not the text at the time the save was queued", async () => {
+    const { app, settle, calls } = makeMcpApp();
+    renderComposer(app);
+
+    await editAndFireAutosave();
+    fireEvent.change(screen.getByLabelText("Body"), { target: { value: "Final words." } });
+    fireEvent.click(screen.getByText("Send"));
+    await settle("gmail_composer.save_draft", { structuredContent: { draft_id: "d1" } });
+    await settle("gmail_composer.send", sendOk);
+
+    const send = calls.find((c) => c.name === "gmail_composer.send");
+    expect(send?.arguments.body).toBe("Final words.");
   });
 
   it("does not fire a second send while one is in flight", async () => {
-    const { app, settle, countOf } = makeMcpApp();
+    const { app, settle, countOf, flush } = makeMcpApp();
     renderComposer(app);
 
     const send = screen.getByText("Send");
@@ -131,13 +152,14 @@ describe("InlineComposer send/autosave race", () => {
     fireEvent.click(send);
     fireEvent.click(send);
 
+    await flush();
     expect(countOf("gmail_composer.send")).toBe(1);
     await settle("gmail_composer.send", sendOk);
     expect(screen.getByText("Message sent")).toBeTruthy();
   });
 
   it("stays editable and retryable when the server does not confirm the send", async () => {
-    const { app, settle, countOf } = makeMcpApp();
+    const { app, settle, countOf, flush } = makeMcpApp();
     renderComposer(app);
 
     fireEvent.click(screen.getByText("Send"));
@@ -151,26 +173,26 @@ describe("InlineComposer send/autosave race", () => {
 
     // closingRef was released, so the user can try again.
     fireEvent.click(screen.getByText("Send"));
+    await flush();
     expect(countOf("gmail_composer.send")).toBe(2);
     await settle("gmail_composer.send", sendOk);
     expect(screen.getByText("Message sent")).toBeTruthy();
   });
 
-  it("keeps a failed send's error visible when a pre-send autosave lands after it", async () => {
+  it("keeps a failed send's error visible after the pre-send autosave reply", async () => {
     const { app, settle, fail } = makeMcpApp();
     renderComposer(app);
 
     await editAndFireAutosave();
     fireEvent.click(screen.getByText("Send"));
 
-    // Send fails, so the composer reopens for a retry - which releases the
-    // closing latch. The autosave started before the send must still stay quiet.
+    // The autosave started before the send replies first; it must stay quiet.
+    await settle("gmail_composer.save_draft", { structuredContent: { draft_id: "d1" } });
+    // Send fails, so the composer reopens for a retry.
     await fail("gmail_composer.send", "smtp exploded");
     await settle("gmail_composer.send_status", draftStillThere);
+
     expect(screen.getByLabelText("Body")).toBeTruthy();
-
-    await settle("gmail_composer.save_draft", { structuredContent: { draft_id: "d1" } });
-
     expect(screen.queryByText(/Saved/)).toBeNull();
     expect(screen.getByText(/smtp exploded/)).toBeTruthy();
   });
