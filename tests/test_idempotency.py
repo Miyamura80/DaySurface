@@ -68,6 +68,8 @@ EXPECTED_MUTATING_SERVICES = frozenset(
         "webhook_subscribe",
         "webhook_unsubscribe",
         "webhook_rotate_secret",
+        # Account
+        "sign_out",
     }
 )
 
