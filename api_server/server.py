@@ -42,15 +42,9 @@ from mcp_server.server import lifespan as mcp_lifespan
 from mcp_server.server import mount_on as mount_mcp_server
 from services import ClientRefusalError, RetryLaterError
 from services.gmail_svc import GmailAttachmentTooLargeError
-from src.utils.logging_config import setup_logging
 
-# Activate the project logging configuration at import time. Production launches
-# the app via the ``uvicorn api_server.server:app`` CLI (see Dockerfile CMD), so
-# the ``main()`` entrypoint below never runs there - calling setup_logging()
-# here is what installs the sensitive-data scrubber on every log record and
-# gates loguru's ``diagnose``/``backtrace`` off in production (DEV_ENV=prod ->
-# global_config.is_dev is False). The call is idempotent and safe under reload.
-setup_logging()
+# Logging (scrubber + prod diagnose gating) is configured in api_server/__init__.py,
+# which Python executes before this module so the setup precedes every import here.
 
 # uvicorn's access logger is stdlib logging, separate from loguru and therefore
 # not reached by the scrubber above. Its request line includes the raw query
