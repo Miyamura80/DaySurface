@@ -19,6 +19,7 @@ from api_server.middleware.error_handler import client_refusal_handler
 from models.gmail import (
     AttachmentInput,
     GmailAddAttachmentInput,
+    GmailComposeInput,
     GmailDiscardDraftInput,
     GmailGetDraftInput,
     GmailReplyInput,
@@ -297,3 +298,39 @@ class TestComposerSendStatus(TestTemplate):
         mock.users().drafts().get().execute.configure_mock(side_effect=_http_error(500))
         with _gmail(mock), pytest.raises(HttpError):
             send_status(draft_id="d", user_id="alice")
+
+
+class TestComposerAttachmentTools(TestTemplate):
+    """The composer edits files one at a time, never re-sending kept ones."""
+
+    def _draft(self) -> str:
+        from services.gmail_drafts_svc import gmail_compose  # noqa: PLC0415
+
+        return gmail_compose(
+            GmailComposeInput(user_id="alice", to="b@y", subject="hi", body="x")
+        ).draft_id
+
+    def test_add_then_remove_round_trips_the_file_list(self):
+        from mcp_server.app_tools.gmail_composer import (  # noqa: PLC0415
+            add_attachment,
+            remove_attachment,
+        )
+
+        with _gmail(_FakeGmailResource()):
+            draft_id = self._draft()
+            add_attachment(draft_id, "a.txt", "text/plain", "YQ==", user_id="alice")
+            added = add_attachment(
+                draft_id, "b.txt", "text/plain", "Yg==", user_id="alice"
+            )
+            assert [a.filename for a in added.attachments] == ["a.txt", "b.txt"]
+
+            first = added.attachments[0].attachment_id
+            assert first
+            left = remove_attachment(draft_id, first, user_id="alice")
+        assert [a.filename for a in left.attachments] == ["b.txt"]
+
+    def test_a_gone_draft_reads_as_sent_or_discarded(self):
+        from mcp_server.app_tools.gmail_composer import add_attachment  # noqa: PLC0415
+
+        with _gmail(_gone_mailbox()), pytest.raises(ValueError, match="no longer"):
+            add_attachment("d", "a.txt", "text/plain", "YQ==", user_id="alice")

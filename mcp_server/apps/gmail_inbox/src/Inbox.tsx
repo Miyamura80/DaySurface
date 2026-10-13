@@ -388,6 +388,7 @@ export function Inbox({ mcpApp, resultBuffer }: InboxProps) {
     <>
       {composerDraft ? (
         <InlineComposer
+          key={composerDraft.draft_id} // one instance (write queue, picks, ids) per draft
           draft={composerDraft}
           thread={thread}
           mcpApp={mcpApp}

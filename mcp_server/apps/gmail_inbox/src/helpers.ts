@@ -162,7 +162,7 @@ export function extractStructuredContent<T>(raw: unknown): T | null {
 }
 
 // The first text block of a tool-level failure, or null.
-export function toolErrorText(raw: unknown): string | null {
+function toolErrorText(raw: unknown): string | null {
   for (const item of (raw as ToolCallResult | null)?.content ?? []) {
     const c = item as { type?: unknown; text?: unknown } | null;
     if (c?.type === "text" && typeof c.text === "string" && c.text) return c.text;
@@ -207,6 +207,18 @@ export async function confirmSend(
   if (sent?.message_id) return sent;
   if (await draftGone(app, args.draft_id)) return {};
   throw new Error("the server did not confirm the send");
+}
+
+// Call a write tool and return its result, throwing the server's own text when
+// it reports a tool-level failure (callServerTool resolves on isError too).
+export async function callWriteTool(
+  app: McpAppLike,
+  name: string,
+  args: Record<string, unknown>,
+): Promise<unknown> {
+  const raw = await app.callServerTool({ name, arguments: args });
+  if ((raw as ToolCallResult | null)?.isError) throw new Error(toolErrorText(raw) ?? `${name} failed`);
+  return raw;
 }
 
 export function errMsg(err: unknown): string {
