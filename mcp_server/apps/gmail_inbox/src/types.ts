@@ -126,6 +126,6 @@ export type ToolCallResult = {
   structuredContent?: unknown;
 };
 
-// gmail_composer.send's confirmation. Empty when the send was confirmed only
-// by the draft being gone (see confirmSend), so Gmail's ids are unknown.
-export type SendResult = { message_id?: string; thread_id?: string };
+// gmail_composer.send's confirmation, or the server's sent record of it after
+// a lost reply (see confirmSend).
+export type SendResult = { message_id?: string; thread_id?: string | null };

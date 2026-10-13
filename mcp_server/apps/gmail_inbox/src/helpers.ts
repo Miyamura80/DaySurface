@@ -170,26 +170,34 @@ function toolErrorText(raw: unknown): string | null {
   return null;
 }
 
-// Gmail deletes a draft once it is sent, so after a lost send reply only a
-// definite "gone" counts as sent. Any doubt (the check fails too) reads as
-// "not sent" and the composer stays editable.
-async function draftGone(app: McpAppLike, draftId: string): Promise<boolean> {
+const GONE_UNRECORDED =
+  "This draft is no longer in Gmail, and the server has no record of sending it. Check your Sent folder.";
+
+// After a lost send reply, ask the server what became of the draft. Its own
+// sent record is the only proof of a send: Gmail also deletes a discarded
+// draft, so "gone" alone is not "sent". Returns the recorded send, or throws
+// GONE_UNRECORDED when the draft is gone without one, or `err` when the draft
+// still exists or the check fails too, so the composer stays editable.
+async function resolveLostSend(app: McpAppLike, draftId: string, err: unknown): Promise<SendResult> {
+  let status: { draft_exists?: boolean; sent?: SendResult | null } | null;
   try {
     const raw = await app.callServerTool({
       name: "gmail_composer.send_status",
       arguments: { draft_id: draftId },
     });
-    return extractStructuredContent<{ draft_exists?: boolean }>(raw)?.draft_exists === false;
+    status = extractStructuredContent(raw);
   } catch {
-    return false;
+    throw err;
   }
+  if (status?.sent?.message_id) return status.sent;
+  if (status?.draft_exists === false) throw new Error(GONE_UNRECORDED);
+  throw err;
 }
 
 // Send the draft and return Gmail's confirmation, or throw the error to show.
 // "Sent" is terminal, so a false positive is unrecoverable: a definite server
-// failure (isError) is shown as-is, even though a discarded draft is also
-// "gone". Only a lost reply (the call rejected, or resolved without a
-// message_id) asks the server whether the draft is gone.
+// failure (isError) is shown as-is. Only a lost reply (the call rejected, or
+// resolved without a message_id) asks the server for its sent record.
 export async function confirmSend(
   app: McpAppLike,
   args: Record<string, unknown> & { draft_id: string },
@@ -198,15 +206,13 @@ export async function confirmSend(
   try {
     raw = await app.callServerTool({ name: "gmail_composer.send", arguments: args });
   } catch (err) {
-    if (await draftGone(app, args.draft_id)) return {};
-    throw err;
+    return resolveLostSend(app, args.draft_id, err);
   }
   const result = (raw ?? {}) as ToolCallResult;
   if (result.isError) throw new Error(toolErrorText(result) ?? "the send failed");
   const sent = extractStructuredContent<SendResult>(raw);
   if (sent?.message_id) return sent;
-  if (await draftGone(app, args.draft_id)) return {};
-  throw new Error("the server did not confirm the send");
+  return resolveLostSend(app, args.draft_id, new Error("the server did not confirm the send"));
 }
 
 // Call a write tool and return its result, throwing the server's own text when

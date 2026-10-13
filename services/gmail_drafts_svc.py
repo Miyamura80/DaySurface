@@ -16,7 +16,10 @@ from datetime import UTC, datetime
 from typing import Any
 
 from loguru import logger as log
+from sqlalchemy.exc import SQLAlchemyError
 
+from db.engine import use_db_session
+from db.models.sent_drafts import SentDraft
 from models.gmail import (
     GmailComposeInput,
     GmailDiscardDraftInput,
@@ -270,12 +273,67 @@ def gmail_compose(input: GmailComposeInput) -> GmailDraft:
 )
 @on_draft
 def gmail_send(input: GmailSendInput) -> GmailSendResult:
+    """Send the draft, or return the recorded result if it was already sent.
+
+    Gmail deletes a sent draft, so a retry after a lost reply would otherwise
+    fail as "draft gone". The record makes the send idempotent per draft.
+    """
+    already = find_sent(input.user_id, input.draft_id)
+    if already is not None:
+        return already
     svc = _get_gmail_client(input.user_id)
     sent = svc.users().drafts().send(userId="me", body={"id": input.draft_id}).execute()
-    return GmailSendResult(
+    result = GmailSendResult(
         message_id=sent.get("id") or "",
         thread_id=sent.get("threadId"),
         sent_at=datetime.now(UTC),
+    )
+    if result.message_id:
+        record_sent(input.user_id, input.draft_id, result)
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Sent-draft record (see db/models/sent_drafts.py). Not services: gmail_send
+# writes it and the composer's app-only tools read it.
+# ---------------------------------------------------------------------------
+
+
+def record_sent(user_id: str, draft_id: str, result: GmailSendResult) -> None:
+    """Remember that ``draft_id`` went out as ``result``.
+
+    Called after Gmail confirmed the send, so a database failure here is logged
+    and swallowed: failing the call would report a send that already happened
+    as failed, which is worse than losing the record.
+    """
+    try:
+        with use_db_session() as session:
+            session.merge(
+                SentDraft(
+                    user_id=user_id,
+                    draft_id=draft_id,
+                    message_id=result.message_id,
+                    thread_id=result.thread_id,
+                    sent_at=result.sent_at,
+                )
+            )
+            session.commit()
+    except SQLAlchemyError as exc:
+        log.warning("Could not record sent draft id={}: {}", draft_id, exc)
+
+
+def find_sent(user_id: str, draft_id: str) -> GmailSendResult | None:
+    """The recorded result of sending ``draft_id``, or None if it has no record."""
+    with use_db_session() as session:
+        row = session.get(SentDraft, (user_id, draft_id))
+    if row is None:
+        return None
+    # Stored as UTC; SQLite hands it back naive, Postgres aware.
+    sent_at = row.sent_at
+    if sent_at.tzinfo is None:
+        sent_at = sent_at.replace(tzinfo=UTC)
+    return GmailSendResult(
+        message_id=row.message_id, thread_id=row.thread_id, sent_at=sent_at
     )
 
 
