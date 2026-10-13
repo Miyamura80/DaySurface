@@ -25,7 +25,7 @@ class SentDraft(Base):
     message_id: Mapped[str] = mapped_column(String(255), nullable=False)
     thread_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
-    # Indexed for a future retention sweep (DELETE WHERE sent_at < cutoff).
+    # Indexed for the retention sweep in services/gmail_drafts_svc.py:record_sent.
     sent_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

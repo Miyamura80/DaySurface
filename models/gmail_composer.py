@@ -1,5 +1,7 @@
 """Contracts for the gmail_composer MCP App's app-only tools."""
 
+from typing import Literal
+
 from pydantic import BaseModel
 
 from models.gmail import GmailSendResult
@@ -8,9 +10,10 @@ from models.gmail import GmailSendResult
 class GmailComposerSendStatus(BaseModel):
     """What became of a draft, so the composer can resolve a lost send reply.
 
-    ``sent`` is set when this server sent the draft. A draft that is gone with
-    no ``sent`` record was discarded, or sent or deleted outside this server.
+    ``sent``: this server sent it, and ``result`` holds that send. ``unsent``:
+    the draft still exists. ``gone``: the draft is gone with no send on record,
+    so it was discarded, or sent or deleted outside this server.
     """
 
-    draft_exists: bool
-    sent: GmailSendResult | None = None
+    state: Literal["sent", "unsent", "gone"]
+    result: GmailSendResult | None = None

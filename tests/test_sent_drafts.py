@@ -6,16 +6,25 @@ composer whose send reply was lost could only guess, and a retry failed with
 """
 
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import httplib2
+import pytest
 from googleapiclient.errors import HttpError
 from sqlalchemy.exc import OperationalError
 
+from db import engine as db_engine
+from db.models.sent_drafts import SentDraft
 from mcp_server.app_tools.gmail_composer import send, send_status
 from models.gmail import GmailSendInput, GmailSendResult
-from services.gmail_drafts_svc import find_sent, gmail_send, record_sent
+from services.gmail_draft_helpers import DraftGoneError
+from services.gmail_drafts_svc import (
+    SENT_RECORD_RETENTION,
+    find_sent,
+    gmail_send,
+    record_sent,
+)
 from tests.gmail_fakes import (
     draft_resource,
     make_mock_service,
@@ -62,8 +71,14 @@ def _sending_mailbox(*, draft_live: bool = False) -> MagicMock:
     return mock
 
 
-def _send() -> object:
+def _send() -> GmailSendResult:
     return gmail_send(GmailSendInput(user_id="alice", draft_id="d"))
+
+
+def _result(message_id: str = "m1", sent_at: datetime | None = None):
+    return GmailSendResult(
+        message_id=message_id, thread_id="t1", sent_at=sent_at or datetime.now(UTC)
+    )
 
 
 class TestSentDraftRecord(TestTemplate):
@@ -73,6 +88,7 @@ class TestSentDraftRecord(TestTemplate):
             recorded = find_sent("alice", "d")
         assert recorded is not None
         assert (recorded.message_id, recorded.thread_id) == ("m1", "t1")
+        assert recorded.sent_at.tzinfo is not None
 
     def test_the_record_is_per_user(self):
         with _gmail(_sending_mailbox()):
@@ -80,25 +96,44 @@ class TestSentDraftRecord(TestTemplate):
             assert find_sent("bob", "d") is None
 
     def test_a_repeat_send_returns_the_first_result(self):
-        mock = _sending_mailbox()
-        with _gmail(mock):
+        # Also the losing side of two concurrent sends: Gmail answers 404.
+        with _gmail(_sending_mailbox()):
             first = _send()
-            second = _send()
-        assert second == first
-        # The repeat never reaches Gmail, whose draft is already gone.
-        assert mock.users().drafts().send().execute.call_count == 1
+            assert _send() == first
 
-    def test_a_failed_record_write_is_swallowed(self):
+    def test_a_gone_draft_with_no_record_still_fails(self):
+        mock = make_mock_service()
+        mock.users().drafts().send().execute.configure_mock(side_effect=_gone())
+        with _gmail(mock), pytest.raises(DraftGoneError):
+            _send()
+
+    def test_a_failed_record_write_still_reports_the_send(self):
         # The send already happened; reporting it failed would be worse than
         # losing the record.
-        result = GmailSendResult(
-            message_id="m1", thread_id="t1", sent_at=datetime.now(UTC)
-        )
-        with patch(
-            "services.gmail_drafts_svc.use_db_session",
-            side_effect=OperationalError("insert", {}, Exception("db down")),
+        with (
+            _gmail(_sending_mailbox()),
+            patch(
+                "services.gmail_drafts_svc.use_db_session",
+                side_effect=OperationalError("insert", {}, Exception("db down")),
+            ),
         ):
-            record_sent("alice", "d", result)
+            assert _send().message_id == "m1"
+
+    def test_a_second_write_keeps_the_first_send(self):
+        with patch_db():
+            record_sent("alice", "d", _result("m1"))
+            record_sent("alice", "d", _result("m2"))
+            recorded = find_sent("alice", "d")
+        assert recorded is not None and recorded.message_id == "m1"
+
+    def test_writing_prunes_expired_records(self):
+        stale = datetime.now(UTC) - SENT_RECORD_RETENTION - timedelta(hours=1)
+        with patch_db():
+            record_sent("alice", "old", _result(sent_at=stale))
+            record_sent("alice", "new", _result())
+            with db_engine.use_db_session() as session:
+                kept = {row.draft_id for row in session.query(SentDraft)}
+        assert kept == {"new"}
 
 
 class TestComposerUsesTheRecord(TestTemplate):
@@ -106,21 +141,26 @@ class TestComposerUsesTheRecord(TestTemplate):
         with _gmail(_sending_mailbox()):
             _send()
             status = send_status(draft_id="d", user_id="alice")
-        assert status.draft_exists is False
-        assert status.sent is not None and status.sent.message_id == "m1"
+        assert status.state == "sent"
+        assert status.result is not None and status.result.message_id == "m1"
 
-    def test_a_discarded_draft_has_no_sent_record(self):
+    def test_a_discarded_draft_reads_as_gone(self):
         with _gmail(_sending_mailbox()):
             status = send_status(draft_id="d", user_id="alice")
-        assert status.draft_exists is False
-        assert status.sent is None
+        assert (status.state, status.result) == ("gone", None)
 
     def test_a_retried_composer_send_returns_the_first_send(self):
         mock = _sending_mailbox(draft_live=True)
         with _gmail(mock):
             first = send(draft_id="d", user_id="alice", body="hi")
-            # Retry after a lost reply: the draft is gone, so saving it would
-            # fail. The record answers before the save is attempted.
+            # Retry after a lost reply: the draft is gone, so the save fails
+            # first; the record answers for it.
             mock.users().drafts().update().execute.configure_mock(side_effect=_gone())
             second = send(draft_id="d", user_id="alice", body="hi")
         assert second == first
+
+    def test_a_composer_send_of_a_discarded_draft_says_so(self):
+        mock = _sending_mailbox()
+        mock.users().drafts().update().execute.configure_mock(side_effect=_gone())
+        with _gmail(mock), pytest.raises(ValueError, match="no longer exists"):
+            send(draft_id="d", user_id="alice", body="hi")

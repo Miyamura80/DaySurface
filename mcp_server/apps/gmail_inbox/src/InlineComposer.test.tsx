@@ -62,10 +62,10 @@ const draft: ComposerDraft = {
 };
 
 const sendOk = { structuredContent: { message_id: "m123", thread_id: "t1" } };
-const draftStillThere = { structuredContent: { draft_exists: true } };
-const draftGone = { structuredContent: { draft_exists: false, sent: null } };
+const draftStillThere = { structuredContent: { state: "unsent" } };
+const draftGone = { structuredContent: { state: "gone" } };
 const recordedSend = {
-  structuredContent: { draft_exists: false, sent: { message_id: "m123", thread_id: "t1" } },
+  structuredContent: { state: "sent", result: { message_id: "m123", thread_id: "t1" } },
 };
 
 function renderComposer(app: McpAppLike, onSent = vi.fn()) {

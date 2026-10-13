@@ -12,11 +12,12 @@ user has no active token row; the FastMCP factory surfaces it as
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from loguru import logger as log
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import delete
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from db.engine import use_db_session
 from db.models.sent_drafts import SentDraft
@@ -38,6 +39,7 @@ from models.gmail import (
     GmailDraftSummary as _DraftSummary,
 )
 from services import service
+from services.curation_ledger import as_utc
 from services.gmail_draft_helpers import (
     DraftGoneError,
     _fetch_draft_model,
@@ -275,14 +277,20 @@ def gmail_compose(input: GmailComposeInput) -> GmailDraft:
 def gmail_send(input: GmailSendInput) -> GmailSendResult:
     """Send the draft, or return the recorded result if it was already sent.
 
-    Gmail deletes a sent draft, so a retry after a lost reply would otherwise
-    fail as "draft gone". The record makes the send idempotent per draft.
+    Gmail deletes a sent draft, so a retry after a lost reply (or a concurrent
+    send of the same draft) would otherwise fail as "draft gone".
     """
-    already = find_sent(input.user_id, input.draft_id)
-    if already is not None:
-        return already
     svc = _get_gmail_client(input.user_id)
-    sent = svc.users().drafts().send(userId="me", body={"id": input.draft_id}).execute()
+    try:
+        with draft_gone_on_404(input.draft_id):
+            sent = (
+                svc.users()
+                .drafts()
+                .send(userId="me", body={"id": input.draft_id})
+                .execute()
+            )
+    except DraftGoneError as exc:
+        return sent_or_reraise(input.user_id, input.draft_id, exc)
     result = GmailSendResult(
         message_id=sent.get("id") or "",
         thread_id=sent.get("threadId"),
@@ -298,17 +306,23 @@ def gmail_send(input: GmailSendInput) -> GmailSendResult:
 # writes it and the composer's app-only tools read it.
 # ---------------------------------------------------------------------------
 
+# A lost send reply is retried within minutes; a week is ample headroom.
+SENT_RECORD_RETENTION = timedelta(days=7)
+
 
 def record_sent(user_id: str, draft_id: str, result: GmailSendResult) -> None:
-    """Remember that ``draft_id`` went out as ``result``.
+    """Remember that ``draft_id`` went out as ``result``; prune expired rows.
 
     Called after Gmail confirmed the send, so a database failure here is logged
     and swallowed: failing the call would report a send that already happened
-    as failed, which is worse than losing the record.
+    as failed, which is worse than losing the record. The write is also the
+    retention hook, so the table never outgrows ``SENT_RECORD_RETENTION``.
     """
+    cutoff = datetime.now(UTC) - SENT_RECORD_RETENTION
     try:
         with use_db_session() as session:
-            session.merge(
+            session.execute(delete(SentDraft).where(SentDraft.sent_at < cutoff))
+            session.add(
                 SentDraft(
                     user_id=user_id,
                     draft_id=draft_id,
@@ -318,6 +332,9 @@ def record_sent(user_id: str, draft_id: str, result: GmailSendResult) -> None:
                 )
             )
             session.commit()
+    except IntegrityError:
+        # Written at most once per draft: the first send's ids stand.
+        log.debug("Sent draft id={} was already recorded", draft_id)
     except SQLAlchemyError as exc:
         log.warning("Could not record sent draft id={}: {}", draft_id, exc)
 
@@ -328,20 +345,32 @@ def find_sent(user_id: str, draft_id: str) -> GmailSendResult | None:
         row = session.get(SentDraft, (user_id, draft_id))
     if row is None:
         return None
-    # Stored as UTC; SQLite hands it back naive, Postgres aware.
-    sent_at = row.sent_at
-    if sent_at.tzinfo is None:
-        sent_at = sent_at.replace(tzinfo=UTC)
     return GmailSendResult(
-        message_id=row.message_id, thread_id=row.thread_id, sent_at=sent_at
+        message_id=row.message_id,
+        thread_id=row.thread_id,
+        sent_at=as_utc(row.sent_at),
     )
+
+
+def sent_or_reraise(
+    user_id: str, draft_id: str, exc: DraftGoneError
+) -> GmailSendResult:
+    """For a draft found gone: its recorded send, else ``exc`` re-raised.
+
+    The single place that decides "gone" means "sent": only this server's own
+    record proves it, because Gmail also deletes a discarded draft.
+    """
+    sent = find_sent(user_id, draft_id)
+    if sent is None:
+        raise exc
+    return sent
 
 
 def gmail_draft_exists(user_id: str, draft_id: str) -> bool:
     """True while ``draft_id`` is still a Gmail draft.
 
-    Gmail deletes a draft once it is sent (or discarded), so after a send whose
-    reply was lost, ``False`` means the send landed. Other Gmail errors raise.
+    ``False`` means it was sent or discarded (Gmail deletes it either way);
+    only ``find_sent`` can prove a send. Other Gmail errors raise.
     Not a ``@service``: only the composer's app-only tool needs it.
     """
     svc = _get_gmail_client(user_id)

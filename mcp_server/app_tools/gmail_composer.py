@@ -39,7 +39,11 @@ from services.gmail_attachments_svc import (
     gmail_remove_attachment as _gmail_remove_attachment,
 )
 from services.gmail_draft_helpers import DraftGoneError
-from services.gmail_drafts_svc import find_sent, gmail_draft_exists
+from services.gmail_drafts_svc import (
+    find_sent,
+    gmail_draft_exists,
+    sent_or_reraise,
+)
 from services.gmail_drafts_svc import (
     gmail_discard_draft as _gmail_discard_draft,
 )
@@ -165,25 +169,25 @@ def send(
     # UNSET defaults preserve omitted fields (see save_draft); the composer's
     # send path saves the visible fields then sends, leaving files intact.
     uid = guard_user_id(user_id)
-    # A retry after a lost reply: the draft is gone because it went out, so
-    # answer with the first send instead of failing the save below.
-    already = find_sent(uid, draft_id)
-    if already is not None:
-        return already
     with _gone_for_user():
-        _gmail_update_draft(
-            GmailUpdateDraftInput(
-                user_id=uid,
-                draft_id=draft_id,
-                to=to,
-                subject=subject,
-                body=body,
-                cc=cc,
-                bcc=bcc,
-                attachments=_patch_attachments(attachments),
+        try:
+            _gmail_update_draft(
+                GmailUpdateDraftInput(
+                    user_id=uid,
+                    draft_id=draft_id,
+                    to=to,
+                    subject=subject,
+                    body=body,
+                    cc=cc,
+                    bcc=bcc,
+                    attachments=_patch_attachments(attachments),
+                )
             )
-        )
-        return _gmail_send(GmailSendInput(user_id=uid, draft_id=draft_id))
+            return _gmail_send(GmailSendInput(user_id=uid, draft_id=draft_id))
+        except DraftGoneError as exc:
+            # A retry after a lost reply: the save finds the draft gone because
+            # it already went out, so answer with that first send.
+            return sent_or_reraise(uid, draft_id, exc)
 
 
 @mcp.tool(
@@ -241,8 +245,10 @@ def send_status(draft_id: str, user_id: str = "") -> GmailComposerSendStatus:
     uid = guard_user_id(user_id)
     sent = find_sent(uid, draft_id)
     if sent is not None:
-        return GmailComposerSendStatus(draft_exists=False, sent=sent)
-    return GmailComposerSendStatus(draft_exists=gmail_draft_exists(uid, draft_id))
+        return GmailComposerSendStatus(state="sent", result=sent)
+    if gmail_draft_exists(uid, draft_id):
+        return GmailComposerSendStatus(state="unsent")
+    return GmailComposerSendStatus(state="gone")
 
 
 @mcp.tool(
