@@ -417,4 +417,30 @@ describe("composer attachment writes (#32)", () => {
 
     expect((screen.getByTitle("Discard draft") as HTMLButtonElement).disabled).toBe(true);
   });
+
+  it("does not take an agent's file for a pick whose add failed", async () => {
+    const { app, next, files } = makeServer();
+    renderComposer(app);
+
+    next("add_attachment", "fail");
+    // The agent attached its own file while the pick's add was failing.
+    files().push({ filename: "agent.pdf", size: 1, attachment_id: "att-agent" });
+    drop([fileOfSize("mine.pdf", 1_000)]);
+
+    await waitFor(() => expect(screen.getByText(/Upload failed/)).toBeTruthy());
+    expect(screen.getByText("agent.pdf")).toBeTruthy();
+  });
+
+  it("lets a pick removed mid-read skip its read without an error", async () => {
+    const { app, named } = makeServer();
+    renderComposer(app);
+
+    drop([fileOfSize("a.pdf", 1_000)]);
+    fireEvent.click(screen.getByTitle("Remove"));
+    await settled();
+    await settled();
+
+    expect(named("add_attachment")).toHaveLength(0);
+    expect(screen.queryByText(/Upload failed/)).toBeNull();
+  });
 });

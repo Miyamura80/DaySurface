@@ -184,12 +184,16 @@ export function useDraftWriter({
       () => {},
     );
     return enqueue(async () => {
+      // Removed before its turn: nothing was uploaded, so nothing to undo. Checked
+      // before and after the read, so a removed pick neither holds the queue for
+      // its read nor reports that read's failure.
+      const gone = () => doneRef.current || !slotsRef.current.some((s) => s.key === slot.key);
+      if (gone()) return null;
       let b64: string;
-      try { b64 = await data; } catch { drop(); return "could not read the file"; }
-      // Removed before its turn: nothing was uploaded, so nothing to undo.
-      if (doneRef.current || !slotsRef.current.some((s) => s.key === slot.key)) return null;
+      try { b64 = await data; } catch { if (gone()) return null; drop(); return "could not read the file"; }
+      if (gone()) return null;
       const before = expectedOf(confirmed());
-      const after = [...before, { key: slot.key, filename: slot.filename, anyName: true }];
+      const after = [...before, { key: slot.key, filename: slot.filename }];
       report({ kind: "saving" });
       try {
         const raw = await callWriteTool(mcpApp, "gmail_composer.add_attachment", {
@@ -198,7 +202,11 @@ export function useDraftWriter({
           mime_type: slot.mime_type,
           data_base64: b64,
         });
-        setConfirmed(labelReply(after, replyFiles(raw) ?? [], nextKey), slot.key);
+        // This reply is the add's own, so its last file is the pick whatever
+        // name it came back with. A re-read after a failure gets no such trust:
+        // there the name must match, or the pick counts as not landed.
+        const appended = after.map((e) => (e.key === slot.key ? { ...e, anyName: true } : e));
+        setConfirmed(labelReply(appended, replyFiles(raw) ?? [], nextKey), slot.key);
         report({ kind: "saved", at: new Date() });
         return null;
       } catch (err) {
