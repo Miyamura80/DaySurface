@@ -28,7 +28,7 @@ export function PdfViewer({ url }: { url: string }) {
       .then((r) => r.arrayBuffer())
       .then((buf) => {
         if (cancelled) return;
-        return pdfjsLib.getDocument({ data: new Uint8Array(buf), isEvalSupported: false }).promise;
+        return pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
       })
       .then((doc) => {
         if (cancelled || !doc) return;
@@ -55,7 +55,7 @@ export function PdfViewer({ url }: { url: string }) {
     canvas.height = viewport.height;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    await pg.render({ canvasContext: ctx, viewport }).promise;
+    await pg.render({ canvas: null, canvasContext: ctx, viewport }).promise;
   }, []);
 
   useEffect(() => {

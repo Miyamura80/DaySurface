@@ -1,0 +1,67 @@
+name: MCP Apps Check
+
+on:
+  push:
+    branches:
+      - '**'
+    paths:
+      - 'mcp_server/apps/**'
+      - '.github/workflows/mcp-apps-check.yaml'
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'mcp_server/apps/**'
+      - '.github/workflows/mcp-apps-check.yaml'
+  workflow_dispatch:
+
+concurrency:
+  group: mcp-apps-check-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Same discovery rule as `make apps_check`: every mcp_server/apps/<name>/
+  # with a package.json, so a new app is checked without editing this file.
+  discover:
+    if: github.event_name == 'pull_request' || github.event.pull_request == null
+    runs-on: ubuntu-latest
+    outputs:
+      apps: ${{ steps.list.outputs.apps }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: List apps
+        id: list
+        run: |
+          apps=$(for f in mcp_server/apps/*/package.json; do basename "$(dirname "$f")"; done | jq -R . | jq -sc .)
+          echo "apps=$apps" >> "$GITHUB_OUTPUT"
+
+  check:
+    needs: discover
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJSON(needs.discover.outputs.apps) }}
+    defaults:
+      run:
+        working-directory: ./mcp_server/apps/${{ matrix.app }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # appContract.test.ts only guards McpAppLike against the real ext-apps
+      # App at compile time, so the typecheck is what makes that test bite.
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Test
+        run: bun run test
