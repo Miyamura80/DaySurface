@@ -81,15 +81,17 @@ export type CurationRecord = {
 export type GetCurationResult = { records: CurationRecord[]; coverage?: Coverage };
 
 export type McpAppLike = {
-  ontoolresult?: (result: unknown) => void;
+  // Method syntax on purpose: its parameter is checked bivariantly, so the
+  // real App (whose setter takes typed tool-result params) still assigns here.
+  ontoolresult?(result: unknown): void;
   callServerTool: (args: {
     name: string;
     arguments: Record<string, unknown>;
   }) => Promise<unknown>;
   openLink: (params: { url: string }) => Promise<unknown>;
   sendMessage?: (params: {
-    role: string;
-    content: { type: string; text: string }[];
+    role: "user";
+    content: { type: "text"; text: string }[];
   }) => Promise<unknown>;
   updateModelContext?: (params: {
     content?: { type: "text"; text: string }[];

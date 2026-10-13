@@ -24,15 +24,17 @@ import { styles } from "./styles";
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerSrc;
 
 export type McpAppLike = {
-  ontoolresult?: (result: unknown) => void;
+  // Method syntax on purpose: its parameter is checked bivariantly, so the
+  // real App (whose setter takes typed tool-result params) still assigns here.
+  ontoolresult?(result: unknown): void;
   callServerTool: (args: {
     name: string;
     arguments: Record<string, unknown>;
   }) => Promise<unknown>;
   openLink: (params: { url: string }) => Promise<unknown>;
   sendMessage?: (params: {
-    role: string;
-    content: { type: string; text: string }[];
+    role: "user";
+    content: { type: "text"; text: string }[];
   }) => Promise<unknown>;
 };
 
@@ -101,7 +103,7 @@ const PAGE_TARGET_WIDTH = 640;
 
 async function renderAllPages(dataBase64: string): Promise<RenderedPage[]> {
   const bytes = Uint8Array.from(atob(dataBase64), (c) => c.charCodeAt(0));
-  const doc = await pdfjsLib.getDocument({ data: bytes, isEvalSupported: false })
+  const doc = await pdfjsLib.getDocument({ data: bytes })
     .promise;
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const pages: RenderedPage[] = [];
@@ -120,6 +122,7 @@ async function renderAllPages(dataBase64: string): Promise<RenderedPage[]> {
       throw new Error(`could not create a rendering context for page ${pageNo}`);
     }
     await page.render({
+      canvas: null,
       canvasContext: ctx,
       viewport,
       // Draw form-field values (filled by pdf_edit) even when the PDF only

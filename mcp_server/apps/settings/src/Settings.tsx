@@ -23,7 +23,9 @@ type SecretResult = { id: string; secret: string };
 // Minimal structural view of the ext-apps App the panel actually uses. The
 // appContract test pins this against the real SDK surface.
 export type McpAppLike = {
-  ontoolresult?: (result: unknown) => void;
+  // Method syntax on purpose: its parameter is checked bivariantly, so the
+  // real App (whose setter takes typed tool-result params) still assigns here.
+  ontoolresult?(result: unknown): void;
   callServerTool: (args: {
     name: string;
     arguments: Record<string, unknown>;

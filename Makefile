@@ -125,6 +125,17 @@ build_apps: ## Build all MCP App frontends to dist/mcp-app.html (requires bun)
 	done
 	@echo "$(GREEN)✅ All MCP Apps built.$(RESET)"
 
+.PHONY: apps_check
+apps_check: ## Typecheck + vitest every MCP App frontend (requires bun)
+	@command -v bun >/dev/null 2>&1 || { echo "$(RED)bun is not installed. Install from https://bun.sh$(RESET)"; exit 1; }
+	@for dir in mcp_server/apps/*/; do \
+		if [ -f "$$dir/package.json" ]; then \
+			echo "$(YELLOW)🔍 Checking $$dir$(RESET)"; \
+			(cd "$$dir" && bun install --frozen-lockfile --silent && bun run typecheck && bun run test) || exit 1; \
+		fi; \
+	done
+	@echo "$(GREEN)✅ All MCP Apps typecheck and pass tests.$(RESET)"
+
 dev_host: ## Run upstream @modelcontextprotocol/ext-apps basic-host for manual smoke testing
 	@command -v bun >/dev/null 2>&1 || { echo "$(RED)bun is not installed. Install from https://bun.sh$(RESET)"; exit 1; }
 	@echo "$(YELLOW)Cloning ext-apps basic-host (one-time)...$(RESET)"
@@ -326,7 +337,7 @@ docs_links_check: check_uv ## Check absolute links in docs content resolve to re
 	@uv run python scripts/check_docs_links.py
 	@echo "$(GREEN)✅Docs link check completed.$(RESET)"
 
-ci: ruff vulture import_lint ty docs_lint docs_test check_deps file_len_check blind_except_check tool_surface_docs_check docs_links_check ## Run all CI checks (ruff, vulture, import_lint, ty, docs_lint, docs_test, check_deps, file_len_check, blind_except_check, tool_surface_docs_check, docs_links_check)
+ci: ruff vulture import_lint ty docs_lint docs_test apps_check check_deps file_len_check blind_except_check tool_surface_docs_check docs_links_check ## Run all CI checks (ruff, vulture, import_lint, ty, docs_lint, docs_test, apps_check, check_deps, file_len_check, blind_except_check, tool_surface_docs_check, docs_links_check)
 	@echo "$(GREEN)✅CI checks completed.$(RESET)"
 
 .PHONY: sync-agent-config

@@ -33,7 +33,7 @@ make vulture        # Find dead code
 make ty             # Run type checker
 make lint_links     # Check for broken links in markdown files (README, etc.)
 make docs_test      # Run the docs site's vitest suite (docs/lib/*.test.ts)
-make ci             # Run all CI checks (ruff, vulture, import_lint, ty, docs_lint, docs_test, check_deps, file_len_check, blind_except_check, tool_surface_docs_check, docs_links_check)
+make ci             # Run all CI checks (ruff, vulture, import_lint, ty, docs_lint, docs_test, apps_check, check_deps, file_len_check, blind_except_check, tool_surface_docs_check, docs_links_check)
 
 # Dependencies
 uv sync             # Install dependencies (not pip install)
@@ -233,9 +233,10 @@ See `mcp_server/MCP_UI_ARCHITECTURE.md` for design rationale and
 - **Conformance tier:** `make mcp_conformance` (MCPJam protocol + apps
   suites, CI-gated, needs Node). OAuth conformance is manual - see
   `docs/content/docs/mcp/oauth.mdx`.
-- App frontends: vitest per app (`bun run test` in `mcp_server/apps/<name>/`,
-  not in CI); each app has an `appContract.test.ts` pinning the real
-  `ext-apps` `App` surface against the `McpAppLike` mock type.
+- App frontends: `make apps_check` runs `tsc --noEmit` + vitest per app (in
+  `make ci`; PRs touching `mcp_server/apps/**` run it via `mcp-apps-check.yaml`).
+  Each app's `appContract.test.ts` pins the real `ext-apps` `App` surface
+  against the `McpAppLike` mock type; it only bites under the typecheck.
 - **Rendered-iframe tier (L4, #37):** `make test_apps_e2e` drives the **real
   Goose desktop GUI** (Electron) as an MCP client and asserts the `ui://` app
   actually renders + round-trips in a real host - including a click →
