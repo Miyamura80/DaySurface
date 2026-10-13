@@ -18,7 +18,7 @@ from __future__ import annotations
 from collections.abc import Generator, Iterable
 from contextlib import contextmanager
 from datetime import UTC, datetime
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, overload
 
 from loguru import logger as log
 from sqlalchemy.exc import SQLAlchemyError
@@ -168,6 +168,10 @@ def _filtered(
     )
 
 
+@overload
+def as_utc(value: datetime) -> datetime: ...
+@overload
+def as_utc(value: datetime | None) -> datetime | None: ...
 def as_utc(value: datetime | None) -> datetime | None:
     """Normalise to aware UTC before storing or comparing.
 

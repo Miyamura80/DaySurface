@@ -277,11 +277,11 @@ class TestDuplicateReplyGuard(TestTemplate):
 class TestComposerSendStatus(TestTemplate):
     """An unconfirmed send asks whether the draft is gone before saying it failed."""
 
-    def test_gone_draft_reads_as_sent(self):
+    def test_gone_draft_without_a_record_reads_as_gone(self):
         from mcp_server.app_tools.gmail_composer import send_status  # noqa: PLC0415
 
         with _gmail(_gone_mailbox()):
-            assert send_status(draft_id="d", user_id="alice").draft_exists is False
+            assert send_status(draft_id="d", user_id="alice").state == "gone"
 
     def test_live_draft_reads_as_not_sent(self):
         from mcp_server.app_tools.gmail_composer import send_status  # noqa: PLC0415
@@ -289,7 +289,7 @@ class TestComposerSendStatus(TestTemplate):
         mock = make_mock_service()
         mock.users().drafts().get().execute.return_value = draft_resource()
         with _gmail(mock):
-            assert send_status(draft_id="d", user_id="alice").draft_exists is True
+            assert send_status(draft_id="d", user_id="alice").state == "unsent"
 
     def test_other_gmail_errors_propagate(self):
         from mcp_server.app_tools.gmail_composer import send_status  # noqa: PLC0415

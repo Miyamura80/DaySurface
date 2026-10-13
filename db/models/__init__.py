@@ -6,6 +6,7 @@ from db.models.gmail_push import ProcessedPubsubMessage
 from db.models.idempotency_keys import IdempotencyRecord
 from db.models.payment_settlements import PaymentSettlement
 from db.models.profiles import Profile
+from db.models.sent_drafts import SentDraft
 from db.models.subscription_types import (
     PaymentStatus,
     SubscriptionStatus,
@@ -24,6 +25,7 @@ __all__ = [
     "PaymentStatus",
     "ProcessedPubsubMessage",
     "Profile",
+    "SentDraft",
     "SubscriptionStatus",
     "SubscriptionTier",
     "ThreadCuration",
