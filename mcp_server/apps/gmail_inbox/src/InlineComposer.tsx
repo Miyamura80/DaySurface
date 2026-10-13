@@ -290,6 +290,7 @@ export function InlineComposer({
             </span>
             <button
               onClick={writer.discard}
+              disabled={sending}
               style={{
                 ...composerTrashBtn,
                 color: discardHover ? "#d93025" : "#5f6368",

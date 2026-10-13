@@ -20,10 +20,19 @@ const MAX_ATTACHMENT_LABEL = "25 MB";
 /** A file the user picked that never made it onto the draft, with the reason. */
 export type RejectedAttachment = { filename: string; reason: string };
 
+function readBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve((reader.result as string).split(",")[1] || "");
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
 /**
  * Picking files and previewing them for the inline composer. Uploading belongs
- * to the draft writer: a pick that passes the preflight is read and handed to
- * `addFile`, which queues its upload and resolves to an error if it failed.
+ * to the draft writer: a pick that passes the preflight goes straight to
+ * `addFile` with its read still pending, which queues its upload and resolves to an error if it failed.
  */
 export function useComposerAttachments(
   mcpApp: McpAppLike,
@@ -32,11 +41,6 @@ export function useComposerAttachments(
 ) {
   const [rejected, setRejected] = useState<RejectedAttachment[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  // Bytes accepted by a preflight whose FileReader has not resolved yet. They
-  // are not a slot until onload runs, so a second pick made during that window
-  // would not see them and the cumulative check would undercount - exactly the
-  // fail-open the check exists to prevent.
-  const pendingBytesRef = useRef(0);
   const [previewData, setPreviewData] = useState<PreviewData | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const previewBlobRef = useRef<string | null>(null);
@@ -78,10 +82,10 @@ export function useComposerAttachments(
     // refused before hundreds of MB of base64 are read. Fail CLOSED on an
     // unknown size: a confirmed file's size is optional, and coalescing a
     // missing one to 0 would undercount and let an over-limit batch through.
-    // Each file is exactly one slot, so nothing is counted twice.
+    // Each file is exactly one slot from the moment it is picked (still reading
+    // included), so nothing is counted twice or missed.
     const committedBytes =
-      (slotsRef.current ?? []).reduce((sum, a) => sum + (a.size ?? MAX_ATTACHMENT_BYTES), 0) +
-      pendingBytesRef.current;
+      (slotsRef.current ?? []).reduce((sum, a) => sum + (a.size ?? MAX_ATTACHMENT_BYTES), 0);
     const incomingBytes = accepted.reduce((s, f) => s + f.size, 0);
     const fits = committedBytes + incomingBytes <= MAX_ATTACHMENT_BYTES;
     if (!fits) {
@@ -92,31 +96,14 @@ export function useComposerAttachments(
     if (rejects.length) setRejected((prev) => [...prev, ...rejects]);
     if (!fits || accepted.length === 0) return;
 
-    // Claim the bytes synchronously, before any read starts, so a pick made
-    // while these are still reading sees them in the cumulative check above.
-    pendingBytesRef.current += incomingBytes;
-
-    accepted.forEach((file) => {
-      const reader = new FileReader();
-      const release = () => { pendingBytesRef.current -= file.size; };
-      reader.onload = () => {
-        release();
-        const result = reader.result as string;
-        void addFile({
-          filename: file.name,
-          mime_type: file.type || "application/octet-stream",
-          data_base64: result.split(",")[1] || "",
-          size: file.size,
-        }).then((err) => { if (err) reject({ filename: file.name, reason: `Upload failed: ${err}` }); });
-      };
-      // Release on failure too, or an unreadable file would hold its bytes
-      // against the cap for the rest of the session.
-      reader.onerror = () => {
-        release();
-        reject({ filename: file.name, reason: "Could not read file" });
-      };
-      reader.readAsDataURL(file);
-    });
+    for (const file of accepted) {
+      void addFile({
+        filename: file.name,
+        mime_type: file.type || "application/octet-stream",
+        size: file.size,
+        data: readBase64(file),
+      }).then((err) => { if (err) reject({ filename: file.name, reason: `Upload failed: ${err}` }); });
+    }
   };
 
   const dismissRejected = (index: number) => {
@@ -143,7 +130,8 @@ export function useComposerAttachments(
 
   const previewAttachment = async (att: AttachmentSlot) => {
     if (att.kind === "pending") {
-      showPreview(att.data_base64, att.mime_type, att.filename);
+      // Still being read: nothing to show yet.
+      if (att.data_base64 !== undefined) showPreview(att.data_base64, att.mime_type, att.filename);
       return;
     }
     if (!att.attachment_id || !att.message_id) return;

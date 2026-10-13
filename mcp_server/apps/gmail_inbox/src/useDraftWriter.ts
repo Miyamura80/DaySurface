@@ -11,8 +11,8 @@ import {
   type PendingSlot,
 } from "./attachmentSlots";
 
-/** A picked file, read and ready to upload. */
-export type PickedFile = Omit<PendingSlot, "kind" | "key">;
+/** A picked file; `data` resolves to its base64 once the browser has read it. */
+export type PickedFile = Omit<PendingSlot, "kind" | "key" | "data_base64"> & { data: Promise<string> };
 
 const expectedOf = (slots: ConfirmedSlot[]): ExpectedFile[] =>
   slots.map(({ key, filename }) => ({ key, filename }));
@@ -170,22 +170,33 @@ export function useDraftWriter({
     localDirtyRef.current = false;
   };
 
-  /** Upload one pick. Resolves to an error message if it did not land. */
-  const addFile = (file: PickedFile): Promise<string | null> => {
-    const slot: PendingSlot = { kind: "pending", key: nextKey(), ...file };
+  /**
+   * Upload one pick. Its slot and its place in the queue are taken now, before
+   * the read finishes, so a send clicked mid-read still waits for it. Resolves
+   * to an error message if it did not land.
+   */
+  const addFile = ({ data, ...meta }: PickedFile): Promise<string | null> => {
+    const slot: PendingSlot = { kind: "pending", key: nextKey(), ...meta };
     setSlots([...slotsRef.current, slot]);
+    const drop = () => setSlots(slotsRef.current.filter((s) => s.key !== slot.key));
+    void data.then(
+      (b64) => setSlots(slotsRef.current.map((s) => (s.key === slot.key ? { ...slot, data_base64: b64 } : s))),
+      () => {},
+    );
     return enqueue(async () => {
+      let b64: string;
+      try { b64 = await data; } catch { drop(); return "could not read the file"; }
       // Removed before its turn: nothing was uploaded, so nothing to undo.
       if (doneRef.current || !slotsRef.current.some((s) => s.key === slot.key)) return null;
       const before = expectedOf(confirmed());
-      const after = [...before, { key: slot.key, filename: slot.filename }];
+      const after = [...before, { key: slot.key, filename: slot.filename, anyName: true }];
       report({ kind: "saving" });
       try {
         const raw = await callWriteTool(mcpApp, "gmail_composer.add_attachment", {
           draft_id: draftId,
           filename: slot.filename,
           mime_type: slot.mime_type,
-          data_base64: slot.data_base64,
+          data_base64: b64,
         });
         setConfirmed(labelReply(after, replyFiles(raw) ?? [], nextKey), slot.key);
         report({ kind: "saved", at: new Date() });
@@ -193,7 +204,7 @@ export function useDraftWriter({
       } catch (err) {
         const healed = await recover([after, before]);
         if (healed) setConfirmed(healed, slot.key);
-        else setSlots(slotsRef.current.filter((s) => s.key !== slot.key));
+        else drop();
         const landed = !!healed?.some((s) => s.key === slot.key);
         report(landed ? { kind: "saved", at: new Date() } : { kind: "idle" });
         return landed ? null : errMsg(err);
@@ -227,11 +238,14 @@ export function useDraftWriter({
             return;
           } catch (err) {
             const healed = await recover([after, before]);
-            if (healed) setConfirmed(healed);
-            const still = healed?.find((s) => s.key === key);
+            const failed = { kind: "error" as const, message: `Couldn't remove ${target.filename}: ${errMsg(err)}` };
+            // Only a successful re-read without the file proves it is gone.
+            if (!healed) { report(failed); return; }
+            setConfirmed(healed);
+            const still = healed.find((s) => s.key === key);
             if (!still) { report({ kind: "saved", at: new Date() }); return; }
             if (still.attachment_id !== target.attachment_id) continue;
-            report({ kind: "error", message: `Couldn't remove ${target.filename}: ${errMsg(err)}` });
+            report(failed);
             return;
           }
         }

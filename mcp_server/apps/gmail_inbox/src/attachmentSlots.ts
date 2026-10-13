@@ -6,7 +6,9 @@ import type { DraftAttachment } from "./types";
  * - `confirmed`: on the draft, as the server last reported it. `attachment_id`
  *   is absent for parts Gmail stores inline; such a file is kept by every write
  *   but cannot be removed by id.
- * - `pending`: picked but not yet uploaded. Its bytes go up once, in its own
+ * - `pending`: picked but not yet uploaded. It takes its place (and its share
+ *   of the size cap) the moment it is picked; `data_base64` arrives when the
+ *   browser finishes reading it. Its bytes go up once, in its own
  *   `add_attachment` call, and the reply turns it into a confirmed slot.
  *
  * `key` is local and stable. `attachment_id` is not: the server rebuilds the
@@ -29,13 +31,17 @@ export type PendingSlot = {
   filename: string;
   mime_type: string;
   size: number;
-  data_base64: string;
+  data_base64?: string;
 };
 
 export type AttachmentSlot = ConfirmedSlot | PendingSlot;
 
-/** A slot the next reply is expected to report, in the server's order. */
-export type ExpectedFile = { key: number; filename: string };
+/**
+ * A slot the next reply is expected to report, in the server's order.
+ * `anyName` keeps the key whatever name comes back: the file an add just
+ * appended is the last entry by construction, even if Gmail re-encoded it.
+ */
+export type ExpectedFile = { key: number; filename: string; anyName?: boolean };
 
 /**
  * Label a server attachment list with local keys.
@@ -56,7 +62,7 @@ export function labelReply(
   const lined = named.length === expected.length;
   return named.map((a, i) => ({
     kind: "confirmed",
-    key: lined && expected[i].filename === a.filename ? expected[i].key : nextKey(),
+    key: lined && (expected[i].anyName || expected[i].filename === a.filename) ? expected[i].key : nextKey(),
     filename: a.filename,
     mime_type: a.mime_type,
     size: a.size,

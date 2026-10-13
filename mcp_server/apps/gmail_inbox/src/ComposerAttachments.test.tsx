@@ -186,7 +186,10 @@ function makeServer(
   };
   const callServerTool = vi.fn(async (req: Call) => {
     calls.push(req);
-    if (req.name === "gmail_composer.refresh") return { structuredContent: { draft_id: "d1", attachments: files } };
+    if (req.name === "gmail_composer.refresh") {
+      if (modes[req.name]?.shift() === "fail") throw new Error("offline");
+      return { structuredContent: { draft_id: "d1", attachments: files } };
+    }
     const writes = ["save_draft", "send", "add_attachment", "remove_attachment"].map((t) => `gmail_composer.${t}`);
     if (!writes.includes(req.name)) return null;
     if (opts.gated) await new Promise<void>((r) => gates.push(r));
@@ -362,5 +365,56 @@ describe("composer attachment writes (#32)", () => {
     drop([fileOfSize("small.pdf", 1_000)]);
 
     expect(screen.queryByText(/would exceed/)).toBeNull();
+  });
+
+  it("holds a send clicked while a file is still being read", async () => {
+    const { app, calls } = makeServer();
+    renderComposer(app);
+
+    drop([fileOfSize("a.pdf", 1_000)]);
+    fireEvent.click(screen.getByText("Send"));
+    await waitFor(() => expect(screen.getByText("Message sent")).toBeTruthy());
+
+    expect(calls.map((c) => c.name).filter((n) => n !== "gmail_composer.get_thread")).toEqual([
+      "gmail_composer.add_attachment",
+      "gmail_composer.send",
+    ]);
+  });
+
+  it("removes a renamed file the user dropped while it was uploading", async () => {
+    const { app, named, release, files } = makeServer({ gated: true, rename: { "résumé.pdf": "re\u0301sume\u0301.pdf" } });
+    renderComposer(app);
+
+    drop([fileOfSize("résumé.pdf", 1_000)]);
+    await waitFor(() => expect(named("add_attachment")).toHaveLength(1));
+    fireEvent.click(screen.getByTitle("Remove"));
+    await release();
+    await release();
+
+    expect(named("remove_attachment")).toHaveLength(1);
+    expect(files()).toEqual([]);
+  });
+
+  it("reports a remove it could not confirm instead of calling it saved", async () => {
+    const { app, next, files } = makeServer({ files: [{ filename: "x.pdf", size: 5, attachment_id: "att-0" }] });
+    renderComposer(app, [{ filename: "x.pdf", size: 5, attachment_id: "att-0" }]);
+
+    next("remove_attachment", "fail");
+    next("refresh", "fail");
+    fireEvent.click(screen.getByTitle("Remove"));
+    await settled();
+
+    expect(files()).toHaveLength(1);
+    expect(screen.getByText(/Couldn't remove x.pdf/)).toBeTruthy();
+  });
+
+  it("disables discard while a send is in flight", async () => {
+    const { app } = makeServer({ gated: true });
+    renderComposer(app);
+
+    fireEvent.click(screen.getByText("Send"));
+    await settled();
+
+    expect((screen.getByTitle("Discard draft") as HTMLButtonElement).disabled).toBe(true);
   });
 });
