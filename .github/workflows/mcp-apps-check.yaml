@@ -19,13 +19,30 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  check:
+  # Same discovery rule as `make apps_check`: every mcp_server/apps/<name>/
+  # with a package.json, so a new app is checked without editing this file.
+  discover:
     if: github.event_name == 'pull_request' || github.event.pull_request == null
+    runs-on: ubuntu-latest
+    outputs:
+      apps: ${{ steps.list.outputs.apps }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: List apps
+        id: list
+        run: |
+          apps=$(for f in mcp_server/apps/*/package.json; do basename "$(dirname "$f")"; done | jq -R . | jq -sc .)
+          echo "apps=$apps" >> "$GITHUB_OUTPUT"
+
+  check:
+    needs: discover
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        app: [gmail_inbox, pdf_signer, settings]
+        app: ${{ fromJSON(needs.discover.outputs.apps) }}
     defaults:
       run:
         working-directory: ./mcp_server/apps/${{ matrix.app }}
