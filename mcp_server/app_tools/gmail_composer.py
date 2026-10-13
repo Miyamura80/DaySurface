@@ -248,6 +248,11 @@ def send_status(draft_id: str, user_id: str = "") -> GmailComposerSendStatus:
         return GmailComposerSendStatus(state="sent", result=sent)
     if gmail_draft_exists(uid, draft_id):
         return GmailComposerSendStatus(state="unsent")
+    # gmail_send records only after Gmail confirms and deletes the draft, so a
+    # probe landing in between sees it gone; look once more before saying so.
+    sent = find_sent(uid, draft_id)
+    if sent is not None:
+        return GmailComposerSendStatus(state="sent", result=sent)
     return GmailComposerSendStatus(state="gone")
 
 

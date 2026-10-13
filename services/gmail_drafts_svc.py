@@ -318,10 +318,9 @@ def record_sent(user_id: str, draft_id: str, result: GmailSendResult) -> None:
     as failed, which is worse than losing the record. The write is also the
     retention hook, so the table never outgrows ``SENT_RECORD_RETENTION``.
     """
-    cutoff = datetime.now(UTC) - SENT_RECORD_RETENTION
+    _prune_sent_records()
     try:
         with use_db_session() as session:
-            session.execute(delete(SentDraft).where(SentDraft.sent_at < cutoff))
             session.add(
                 SentDraft(
                     user_id=user_id,
@@ -337,6 +336,18 @@ def record_sent(user_id: str, draft_id: str, result: GmailSendResult) -> None:
         log.debug("Sent draft id={} was already recorded", draft_id)
     except SQLAlchemyError as exc:
         log.warning("Could not record sent draft id={}: {}", draft_id, exc)
+
+
+def _prune_sent_records() -> None:
+    """Drop rows past ``SENT_RECORD_RETENTION``, in its own transaction so a
+    duplicate insert rolling back cannot undo it."""
+    cutoff = datetime.now(UTC) - SENT_RECORD_RETENTION
+    try:
+        with use_db_session() as session:
+            session.execute(delete(SentDraft).where(SentDraft.sent_at < cutoff))
+            session.commit()
+    except SQLAlchemyError as exc:
+        log.warning("Could not prune sent draft records: {}", exc)
 
 
 def find_sent(user_id: str, draft_id: str) -> GmailSendResult | None:

@@ -18,6 +18,7 @@ from db import engine as db_engine
 from db.models.sent_drafts import SentDraft
 from mcp_server.app_tools.gmail_composer import send, send_status
 from models.gmail import GmailSendInput, GmailSendResult
+from models.gmail_composer import GmailComposerSendStatus
 from services.gmail_draft_helpers import DraftGoneError
 from services.gmail_drafts_svc import (
     SENT_RECORD_RETENTION,
@@ -126,6 +127,16 @@ class TestSentDraftRecord(TestTemplate):
             recorded = find_sent("alice", "d")
         assert recorded is not None and recorded.message_id == "m1"
 
+    def test_a_duplicate_write_still_prunes(self):
+        stale = datetime.now(UTC) - SENT_RECORD_RETENTION - timedelta(hours=1)
+        with patch_db():
+            record_sent("alice", "d", _result())
+            record_sent("alice", "old", _result(sent_at=stale))
+            record_sent("alice", "d", _result("m2"))
+            with db_engine.use_db_session() as session:
+                kept = {row.draft_id for row in session.query(SentDraft)}
+        assert kept == {"d"}
+
     def test_writing_prunes_expired_records(self):
         stale = datetime.now(UTC) - SENT_RECORD_RETENTION - timedelta(hours=1)
         with patch_db():
@@ -164,3 +175,21 @@ class TestComposerUsesTheRecord(TestTemplate):
         mock.users().drafts().update().execute.configure_mock(side_effect=_gone())
         with _gmail(mock), pytest.raises(ValueError, match="no longer exists"):
             send(draft_id="d", user_id="alice", body="hi")
+
+    def test_send_status_rechecks_after_finding_the_draft_gone(self):
+        # The probe lands between Gmail deleting the draft and the record write.
+        with (
+            _gmail(_sending_mailbox()),
+            patch(
+                "mcp_server.app_tools.gmail_composer.find_sent",
+                side_effect=[None, _result()],
+            ),
+        ):
+            status = send_status(draft_id="d", user_id="alice")
+        assert status.state == "sent"
+
+    def test_a_sent_status_needs_its_result(self):
+        with pytest.raises(ValueError, match="exactly when"):
+            GmailComposerSendStatus(state="sent")
+        with pytest.raises(ValueError, match="exactly when"):
+            GmailComposerSendStatus(state="gone", result=_result())
