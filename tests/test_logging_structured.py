@@ -2,12 +2,14 @@ import json
 import logging
 from collections.abc import Iterator
 from contextlib import contextmanager
+from unittest.mock import patch
 
 from loguru import logger
 
 from src.utils.logging_config import (
     _InterceptHandler,
     _json_format,
+    _route_stdlib_logging,
     scrub_sensitive_data,
 )
 from tests.test_template import TestTemplate
@@ -88,3 +90,12 @@ class TestStructuredLogging(TestTemplate):
         assert info["level"] == "info"
         assert warn == warn | {"level": "warn", "message": "disk low"}
         assert info["location"].startswith("test_logging_structured.py:")
+
+    def test_root_level_follows_the_debug_setting(self):
+        for debug, level in ((False, logging.INFO), (True, logging.DEBUG)):
+            with (
+                patch("logging.basicConfig") as basic_config,
+                patch("logging.captureWarnings"),
+            ):
+                _route_stdlib_logging(debug=debug)
+            assert basic_config.call_args.kwargs["level"] == level

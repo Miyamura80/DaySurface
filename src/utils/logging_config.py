@@ -286,7 +286,7 @@ class _InterceptHandler(logging.Handler):
         ).log(level, record.getMessage())
 
 
-def _route_stdlib_logging() -> None:
+def _route_stdlib_logging(*, debug: bool) -> None:
     """Send every stdlib logger through loguru so all output shares one format.
 
     uvicorn installs its own stream handlers before it imports the app; clearing
@@ -294,8 +294,16 @@ def _route_stdlib_logging() -> None:
     propagate to the root intercept instead. Logger-level filters, like the
     access-log redactor in ``api_server.server``, still run first. With a root
     handler in place, FastMCP's ``logging.basicConfig`` call becomes a no-op.
+
+    The root level follows the debug setting rather than NOTSET, so libraries'
+    DEBUG chatter is dropped at the source instead of being formatted and
+    forwarded only for loguru's filter to discard it.
     """
-    logging.basicConfig(handlers=[_InterceptHandler()], level=logging.INFO, force=True)
+    logging.basicConfig(
+        handlers=[_InterceptHandler()],
+        level=logging.DEBUG if debug else logging.INFO,
+        force=True,
+    )
     for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
         uv_logger = logging.getLogger(name)
         uv_logger.handlers.clear()
@@ -417,7 +425,7 @@ def setup_logging(  # noqa: C901
                 catch=True,
                 filter=log_filter,
             )
-            _route_stdlib_logging()
+            _route_stdlib_logging(debug=_should_log_level("debug", overrides))
         else:
             logger.add(
                 sys.stderr,
