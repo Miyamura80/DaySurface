@@ -11,10 +11,12 @@ Enabled by setting ``WORKOS_AUTHKIT_DOMAIN`` (the AuthKit issuer URL, e.g.
 indicator configured in the WorkOS dashboard.
 """
 
+import hashlib
 from urllib.parse import urlsplit
 
 import jwt
 from jwt import PyJWKClient
+from loguru import logger as log
 
 from common import global_config
 
@@ -91,7 +93,30 @@ def verify_authkit_token(token: str) -> AuthKitUser | None:
         # Malformed scope claim: reject the token instead of erroring.
         return None
 
+    _log_consent_probe(payload, user_id)
     return AuthKitUser(user_id=user_id, email=payload.get("email"), scopes=scopes)
+
+
+def _log_consent_probe(payload: dict, user_id: str) -> None:
+    """TEMPORARY: record which consent each verified token belongs to.
+
+    Logout will be enforced by rejecting tokens whose consent id (the ``sid``
+    claim) was first seen before the user signed out. That only works if a
+    reconnect issues a new ``sid`` while a refresh keeps the old one. This line
+    lets us confirm both from production logs before building it. The ``sid`` is
+    logged as a short hash, never raw. Remove once the logout design is settled.
+    """
+    sid = payload.get("sid")
+    consent = (
+        hashlib.sha256(sid.encode()).hexdigest()[:12] if isinstance(sid, str) else None
+    )
+    log.info(
+        "authkit consent probe: user={} client={} consent={} iat={}",
+        user_id,
+        payload.get("client_id"),
+        f"c{consent}" if consent else "none",
+        payload.get("iat"),
+    )
 
 
 def _resolve_scopes(raw: object) -> list[str] | None:
