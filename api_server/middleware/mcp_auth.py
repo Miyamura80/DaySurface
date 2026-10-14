@@ -95,11 +95,13 @@ def _authenticate(scope: Scope) -> AuthenticatedUser | None:
     }
 
     auth_header = headers.get("authorization", "")
-    if auth_header.startswith("Bearer ") and oauth_server.is_self_mode():
+    scheme, _, credentials = auth_header.partition(" ")
+    if scheme.lower() == "bearer" and oauth_server.is_self_mode():
         # DaySurface issued, stores and can revoke these tokens. The MCP spec
         # forbids accepting tokens from any other authorization server, so
-        # AuthKit and WorkOS JWTs are not tried in this mode.
-        token = auth_header.removeprefix("Bearer ").strip()
+        # AuthKit and WorkOS JWTs are not tried in this mode. The scheme is
+        # case-insensitive (RFC 9110 section 11.1).
+        token = credentials.strip()
         access = lookup_access_token(token)
         if access is None or not access.subject:
             return None

@@ -117,7 +117,7 @@
   },
   {
     "name": "sign_out",
-    "description": "Sign out of DaySurface everywhere: revoke every token DaySurface issued to the user's apps and end their sign-in, so each connected app must sign in again. Gmail stays linked (gmail_disconnect does that)."
+    "description": "Sign out of DaySurface everywhere: revoke every token DaySurface issued to the user's apps and end their sign-in, so each connected app must sign in again. Gmail stays linked (gmail_disconnect does that). Available only when DaySurface issues the sign-in tokens (MCP_AUTH_MODE=self); otherwise it refuses."
   },
   {
     "name": "webhook_list",

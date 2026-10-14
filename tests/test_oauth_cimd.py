@@ -55,8 +55,30 @@ class TestClientMetadataDocuments(TestTemplate):
             )
 
     def test_private_hosts_are_never_fetched(self):
-        with pytest.raises(cimd.ClientMetadataError):
+        with (
+            patch.object(cimd, "build_client", side_effect=AssertionError("fetched")),
+            pytest.raises(cimd.ClientMetadataError, match="not allowed"),
+        ):
             cimd.resolve_client("https://127.0.0.1/meta.json")
+
+    def test_malformed_redirect_uri_is_a_metadata_error(self):
+        with pytest.raises(cimd.ClientMetadataError):
+            cimd.parse_document(
+                CLIENT_ID, client_document(redirect_uris=["https://[::1/callback"])
+            )
+
+    def test_caches_stay_bounded(self):
+        cimd.clear_cache()
+        try:
+            with patch.object(cimd, "_MAX_CACHE_ENTRIES", 3):
+                for n in range(10):
+                    with pytest.raises(cimd.ClientMetadataError):
+                        cimd.resolve_client(f"https://127.0.0.1/meta-{n}.json")
+                assert len(cimd._failures) <= 3
+                # The newest failures are the ones kept.
+                assert "https://127.0.0.1/meta-9.json" in cimd._failures
+        finally:
+            cimd.clear_cache()
 
     def test_non_ascii_client_ids_are_refused(self):
         # Cyrillic "і" in a look-alike host.

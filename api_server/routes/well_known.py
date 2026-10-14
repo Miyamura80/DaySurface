@@ -22,6 +22,11 @@ The discovery documents that live here:
   follow the redirect; serving the document inline as a 200 is what actually
   satisfies them. The upstream document is fetched once and cached.
 
+  With ``MCP_AUTH_MODE=self`` DaySurface is the authorization server itself:
+  the protected-resource document points at this origin, and this path serves
+  DaySurface's own metadata (``api_server.oauth.authorization_server_metadata``),
+  built locally rather than fetched.
+
 * **MCP Server Card** (SEP-2127) - pre-connect *discovery*: the identity
   (name, title, description, version, icon) plus the endpoint (``serverUrl`` /
   ``remotes``) and tool surface (``tools[]``) a registry or agent previews

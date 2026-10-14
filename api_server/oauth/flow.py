@@ -39,7 +39,7 @@ from loguru import logger as log
 from mcp.server.auth.provider import construct_redirect_uri
 
 from api_server.oauth import cimd, signing
-from api_server.oauth.provider import store_authorization_code, user_signed_out_since
+from api_server.oauth.provider import store_authorization_code
 from common import global_config
 
 WORKOS_AUTHORIZE_URL = "https://api.workos.com/user_management/authorize"
@@ -284,10 +284,6 @@ def workos_callback(
         log.warning("oauth: WorkOS code exchange failed: {}", type(exc).__name__)
         return _redirect_to_client(pending, flow_id, error="server_error")
 
-    if user_signed_out_since(user_id, allowed_at):
-        # The user signed out while this sign-in was under way.
-        return _redirect_to_client(pending, flow_id, error="access_denied")
-
     our_code = store_authorization_code(
         client_id=pending["client_id"],
         user_id=user_id,
@@ -299,5 +295,9 @@ def workos_callback(
         scopes=list(pending.get("scopes") or []),
         resource=pending["resource"],
         workos_session_id=workos_session_id,
+        started_at=allowed_at,
     )
+    if our_code is None:
+        # The user signed out while this sign-in was under way.
+        return _redirect_to_client(pending, flow_id, error="access_denied")
     return _redirect_to_client(pending, flow_id, code=our_code)

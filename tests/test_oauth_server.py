@@ -66,8 +66,9 @@ class TestOAuthServer(OAuthServerCase):
         tokens = self._exchange(code, verifier)
         with self.Session() as session:
             stored = {row.token_hash for row in session.scalars(select(OAuthToken))}
-        assert tokens["access_token"] not in stored
-        assert hashlib.sha256(tokens["access_token"].encode()).hexdigest() in stored
+        for kind in ("access_token", "refresh_token"):
+            assert tokens[kind] not in stored
+            assert hashlib.sha256(tokens[kind].encode()).hexdigest() in stored
 
     def test_wrong_pkce_verifier_is_refused(self):
         code, _ = self._sign_in()
@@ -246,7 +247,8 @@ class TestOAuthServer(OAuthServerCase):
         assert "iss" not in parse_qs(urlsplit(location).query)
 
     def test_malformed_code_challenge_is_refused(self):
-        for challenge in ("short", "x" * 129, "a" * 42 + "!"):
+        # An S256 challenge is exactly 43 base64url characters.
+        for challenge in ("short", "a" * 44, "a" * 128, "a" * 42 + "!", "a" * 42 + "."):
             location = self._authorize(challenge)
             query = parse_qs(urlsplit(location).query)
             assert location.startswith(REDIRECT_URI), challenge
@@ -284,9 +286,40 @@ class TestOAuthServer(OAuthServerCase):
                 new_callable=PropertyMock,
                 return_value=False,
             ),
-            pytest.raises(RuntimeError),
+            pytest.raises(RuntimeError, match="SESSION_SECRET_KEY"),
         ):
             oauth_server.create_sdk_routes()
+
+    def test_self_mode_requires_the_public_url_outside_development(self):
+        with (
+            patch.object(global_config, "MCP_PUBLIC_URL", None),
+            patch.object(
+                type(global_config),
+                "is_dev",
+                new_callable=PropertyMock,
+                return_value=False,
+            ),
+            pytest.raises(RuntimeError, match="MCP_PUBLIC_URL"),
+        ):
+            oauth_server.create_sdk_routes()
+
+    def test_same_origin_client_redirects_still_carry_the_issuer(self):
+        same_origin = f"{ISSUER}/client/callback"
+        self.document = client_document(redirect_uris=[same_origin])
+        _, challenge = pkce()
+        location = self._authorize(
+            challenge, redirect_uri=same_origin, scope="not-a-scope"
+        )
+        assert location.startswith(same_origin)
+        assert parse_qs(urlsplit(location).query)["iss"] == [ISSUER]
+
+    def test_bearer_scheme_is_case_insensitive(self):
+        code, verifier = self._sign_in()
+        token = self._exchange(code, verifier)["access_token"]
+        scope = {"headers": [(b"authorization", f"bearer {token}".encode())]}
+        user = _authenticate(scope)
+        assert user is not None
+        assert user.user_id == USER_ID
 
     def test_mcp_rejects_foreign_bearer_tokens_in_self_mode(self):
         with patch("api_server.middleware.mcp_auth.verify_authkit_token") as authkit:
