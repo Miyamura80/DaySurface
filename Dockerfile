@@ -1,9 +1,12 @@
 FROM python:3.12-slim AS base
 
+# UV_COMPILE_BYTECODE: ship .pyc so no module is compiled at boot (faster start, and
+# no SyntaxWarnings from third-party sources such as textblob on every boot).
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     UV_LINK_MODE=copy \
     UV_NO_CACHE=1 \
+    UV_COMPILE_BYTECODE=1 \
     DEV_ENV=prod \
     PORT=8080
 
@@ -26,6 +29,10 @@ RUN uv sync --frozen --no-dev --no-install-project
 
 COPY . .
 RUN uv sync --frozen --no-dev
+
+# The venv is complete, so stop `uv run` (here and in railway.json) from re-syncing
+# it at start: that sync pulled in the dev group and printed ~6 stderr lines per boot.
+ENV UV_NO_SYNC=1
 
 EXPOSE 8080
 
