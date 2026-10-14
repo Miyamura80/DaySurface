@@ -116,6 +116,10 @@
     "description": "Hand a filled PDF document over to the user for signing. Locks the document (no further edits) and opens the signing ceremony: the user reviews the document and types their full legal name themselves - signing can never be performed by the assistant. placement says where the signature stamp goes: a signature field's name from pdf_open's fields[], or {page, x, y} in PDF user-space coordinates (origin bottom-left, points) for flat PDFs. Call pdf_export afterwards to deliver the signed file."
   },
   {
+    "name": "sign_out",
+    "description": "Sign out of DaySurface everywhere: revoke every token DaySurface issued to the user's apps and end their sign-in, so each connected app must sign in again. Gmail stays linked (gmail_disconnect does that)."
+  },
+  {
     "name": "webhook_list",
     "description": "List the caller's webhook subscriptions (secrets are never returned)"
   },

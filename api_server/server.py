@@ -13,6 +13,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
+import api_server.oauth as oauth_server
 from api_server.middleware.error_handler import (
     ErrorHandlerMiddleware,
     RequestIdMiddleware,
@@ -23,6 +24,7 @@ from api_server.middleware.error_handler import (
 from api_server.middleware.mcp_auth import MCPAuthMiddleware
 from api_server.middleware.rate_limit import RateLimitMiddleware
 from api_server.middleware.security_headers import SecurityHeadersMiddleware
+from api_server.oauth import flow as oauth_flow
 from api_server.routes import (
     agentic_payments,
     ask,
@@ -219,6 +221,13 @@ app.include_router(google_webhooks.router)
 app.include_router(agentic_payments.router)
 app.include_router(ask.router)
 app.include_router(waitlist.router)
+
+# --- OAuth authorization server for MCP clients ----------------------------
+# Only with MCP_AUTH_MODE=self (api_server/oauth/). Registered before the MCP
+# mount below, which sits at "/" and would otherwise answer /authorize and /token.
+if oauth_server.is_self_mode():
+    app.include_router(oauth_flow.router)
+    app.router.routes.extend(oauth_server.create_sdk_routes())
 
 # --- MCP server (streamable HTTP) -----------------------------------------
 # Mounts FastMCP at /mcp so CLI/API/MCP share one process, port, and middleware.
