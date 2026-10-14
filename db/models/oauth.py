@@ -10,10 +10,11 @@ presenting one that was already used revokes the whole family (OAuth 2.1
 section 4.3.1 refresh-token reuse detection).
 """
 
+import hashlib
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import Boolean, DateTime, String, Text, func, select
+from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from db.base import Base
 
@@ -22,12 +23,28 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
+def lock_user(session: Session, user_id: str) -> None:
+    """Serialize code and token issuance and sign-out for one user, until commit.
+
+    A Postgres transaction-scoped advisory lock. Every path that issues a code
+    or tokens, and sign-out, takes it before touching that user's rows, so a
+    sign-out cannot interleave with an exchange and miss what it issues. The
+    lock is always taken first, so two paths cannot deadlock. SQLite (tests)
+    serializes writers on its own, so there is nothing to take there.
+    """
+    if session.get_bind().dialect.name != "postgresql":
+        return
+    digest = hashlib.sha256(f"oauth-user:{user_id}".encode()).digest()
+    key = int.from_bytes(digest[:8], "big", signed=True)
+    session.execute(select(func.pg_advisory_xact_lock(key)))
+
+
 class OAuthCode(Base):
     __tablename__ = "oauth_codes"
 
     code_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
     client_id: Mapped[str] = mapped_column(String(2048), nullable=False)
-    user_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    user_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     redirect_uri: Mapped[str] = mapped_column(Text, nullable=False)
     redirect_uri_provided_explicitly: Mapped[bool] = mapped_column(
         Boolean, nullable=False

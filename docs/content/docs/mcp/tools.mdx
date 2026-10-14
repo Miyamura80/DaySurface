@@ -3,8 +3,8 @@ title: Tools
 description: The 32 Gmail, PDF, webhook, and account tools your assistant gets once connected
 ---
 
-Once connected, your assistant has 32 tools, all backed by the official Gmail
-API. Tools marked **UI** render an interactive MCP App in clients that support
+Once connected, your assistant has 32 tools; every Gmail tool is backed by the
+official Gmail API. Tools marked **UI** render an interactive MCP App in clients that support
 it (an inbox dashboard, a draft composer, a signing surface) and fall back to
 plain structured output everywhere else.
 
@@ -18,7 +18,7 @@ principal - clients never pass it.
 | `gmail_connect` | Begin the Google OAuth flow. Returns a sign-in URL and a state token. |
 | `gmail_status` | Whether an account is linked, plus its address, scopes, and grant time. |
 | `gmail_disconnect` | Revoke and erase the linked account's stored tokens. |
-| `sign_out` | Sign out everywhere: revoke every token DaySurface issued to your apps, so each must sign in again. Gmail stays linked. |
+| `sign_out` | Sign out everywhere: revoke every token DaySurface issued to your apps, so each must sign in again. Gmail stays linked. Only on servers running DaySurface's own sign-in (`MCP_AUTH_MODE=self`); elsewhere it refuses. |
 
 ## Inbox & threads
 

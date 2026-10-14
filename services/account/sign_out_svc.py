@@ -21,7 +21,7 @@ from sqlalchemy import select, update
 
 from common import global_config
 from db.engine import use_db_session
-from db.models.oauth import OAuthCode, OAuthSignOut, OAuthToken
+from db.models.oauth import OAuthCode, OAuthSignOut, OAuthToken, lock_user
 from models.account import SignOutInput, SignOutResult
 from services import ClientRefusalError, service
 
@@ -31,21 +31,25 @@ _TIMEOUT_SECONDS = 10.0
 
 def _revoke_tokens(user_id: str) -> tuple[int, list[str]]:
     """Revoke the user's live tokens and codes; return the count and WorkOS sessions."""
-    now = datetime.now(UTC)
     with use_db_session() as session:
-        session_ids = sorted(
-            {
-                sid
-                for (sid,) in session.execute(
-                    select(OAuthToken.workos_session_id).where(
-                        OAuthToken.user_id == user_id,
-                        OAuthToken.revoked_at.is_(None),
-                        OAuthToken.workos_session_id.is_not(None),
-                    )
-                )
-                if sid
-            }
+        lock_user(session, user_id)
+        now = datetime.now(UTC)
+        token_sessions = session.scalars(
+            select(OAuthToken.workos_session_id).where(
+                OAuthToken.user_id == user_id,
+                OAuthToken.revoked_at.is_(None),
+                OAuthToken.workos_session_id.is_not(None),
+            )
         )
+        # A code not yet exchanged carries the WorkOS session of its sign-in.
+        code_sessions = session.scalars(
+            select(OAuthCode.workos_session_id).where(
+                OAuthCode.user_id == user_id,
+                OAuthCode.used_at.is_(None),
+                OAuthCode.workos_session_id.is_not(None),
+            )
+        )
+        session_ids = sorted({sid for sid in [*token_sessions, *code_sessions] if sid})
         result = session.execute(
             update(OAuthToken)
             .where(OAuthToken.user_id == user_id, OAuthToken.revoked_at.is_(None))
@@ -99,7 +103,9 @@ def _end_workos_sessions(session_ids: list[str]) -> int:
     description=(
         "Sign out of DaySurface everywhere: revoke every token DaySurface issued "
         "to the user's apps and end their sign-in, so each connected app must "
-        "sign in again. Gmail stays linked (gmail_disconnect does that)."
+        "sign in again. Gmail stays linked (gmail_disconnect does that). "
+        "Available only when DaySurface issues the sign-in tokens "
+        "(MCP_AUTH_MODE=self); otherwise it refuses."
     ),
     input_model=SignOutInput,
     output_model=SignOutResult,

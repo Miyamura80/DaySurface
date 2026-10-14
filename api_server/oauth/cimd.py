@@ -18,6 +18,7 @@ The fetch targets a client-chosen URL, so it is treated as hostile:
   queue. Fetches share the worker threads that serve /mcp, so a flood of slow
   client ids must not be able to occupy them.
 * Results are cached: a valid document for five minutes, a failure for one.
+  Each cache holds at most 1,000 entries.
 """
 
 import json
@@ -38,6 +39,9 @@ _MAX_CLIENT_ID_LENGTH = 2000  # oauth_codes.client_id is String(2048)
 _CACHE_SECONDS = 300
 _FAILURE_CACHE_SECONDS = 60
 _MAX_CONCURRENT_FETCHES = 4
+# Entries kept per cache. Expired entries are dropped first, then the oldest,
+# so a flood of distinct client ids cannot grow memory without bound.
+_MAX_CACHE_ENTRIES = 1000
 # Scopes a client may request. The identity scopes are what MCP clients ask for
 # when they want refresh tokens and a profile; the rest are DaySurface's own.
 # A token always grants full access unless it carries DaySurface scopes (see
@@ -52,6 +56,18 @@ _cache: dict[str, tuple[float, "OAuthClientInformationFull"]] = {}
 _failures: dict[str, tuple[float, str]] = {}
 _cache_lock = threading.Lock()
 _fetch_slots = threading.BoundedSemaphore(_MAX_CONCURRENT_FETCHES)
+
+
+def _remember(cache: dict, client_id: str, value: tuple) -> None:
+    """Store ``value`` in ``cache``, keeping the cache bounded. Hold _cache_lock."""
+    cache.pop(client_id, None)
+    if len(cache) >= _MAX_CACHE_ENTRIES:
+        now = time.monotonic()
+        for key in [key for key, entry in cache.items() if entry[0] <= now]:
+            del cache[key]
+    while len(cache) >= _MAX_CACHE_ENTRIES:
+        del cache[next(iter(cache))]  # dicts keep insertion order: oldest first
+    cache[client_id] = value
 
 
 class ClientMetadataError(ValueError):
@@ -122,12 +138,16 @@ class MetadataDocumentClient(OAuthClientInformationFull):
 def _validate_redirect_uri(uri: object) -> str:
     if not isinstance(uri, str) or not uri.isascii():
         raise ClientMetadataError("redirect_uris must be ASCII strings")
-    parts = urlsplit(uri)
+    try:
+        parts = urlsplit(uri)
+        hostname = parts.hostname
+    except ValueError as exc:  # e.g. an unbalanced IPv6 bracket
+        raise ClientMetadataError("redirect_uris must be valid URLs") from exc
     if parts.fragment:
         raise ClientMetadataError("redirect_uris must not contain a fragment")
-    if parts.scheme == "https" and parts.hostname:
+    if parts.scheme == "https" and hostname:
         return uri
-    if parts.scheme == "http" and parts.hostname in _LOOPBACK_HOSTS:
+    if parts.scheme == "http" and hostname in _LOOPBACK_HOSTS:
         return uri
     raise ClientMetadataError("redirect_uris must use https or a loopback address")
 
@@ -243,12 +263,16 @@ def resolve_client(client_id: str) -> OAuthClientInformationFull:
         client = parse_document(client_id, _fetch_document(client_id))
     except ClientMetadataError as exc:
         with _cache_lock:
-            _failures[client_id] = (time.monotonic() + _FAILURE_CACHE_SECONDS, str(exc))
+            _remember(
+                _failures,
+                client_id,
+                (time.monotonic() + _FAILURE_CACHE_SECONDS, str(exc)),
+            )
         raise
     finally:
         _fetch_slots.release()
     with _cache_lock:
-        _cache[client_id] = (time.monotonic() + _CACHE_SECONDS, client)
+        _remember(_cache, client_id, (time.monotonic() + _CACHE_SECONDS, client))
         _failures.pop(client_id, None)
     return client
 

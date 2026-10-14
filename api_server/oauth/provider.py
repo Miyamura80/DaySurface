@@ -17,6 +17,10 @@ Token handling, per OAuth 2.1 and the MCP authorization spec (2026-07-28):
   widen what the token may do.
 * A code can be exchanged once; a replayed code revokes what it issued.
 * After a user signs out, no code or sign-in that began earlier yields tokens.
+
+Everything that issues a code or tokens, and sign-out itself, first takes a
+per-user lock (``db.models.oauth.lock_user``), so a sign-out cannot interleave with an
+exchange or refresh and leave a token it did not see.
 """
 
 import hashlib
@@ -39,20 +43,20 @@ from mcp.server.auth.provider import (
 from mcp.shared.auth import OAuthClientInformationFull
 from mcp.shared.auth import OAuthToken as TokenResponse
 from pydantic import AnyUrl
-from sqlalchemy import update
+from sqlalchemy import select, update
 
 from api_server.auth.authkit_auth import _resolve_scopes, mcp_resource_url
 from api_server.oauth import cimd, signing
 from db.engine import use_db_session
-from db.models.oauth import OAuthCode, OAuthSignOut, OAuthToken
+from db.models.oauth import OAuthCode, OAuthSignOut, OAuthToken, lock_user
 
 CODE_LIFETIME = timedelta(minutes=5)
 ACCESS_TOKEN_LIFETIME = timedelta(hours=1)
 REFRESH_TOKEN_LIFETIME = timedelta(days=30)
 # Absolute cap on one grant: rotation never extends a family past this.
 FAMILY_LIFETIME = timedelta(days=90)
-# RFC 7636: S256 challenges are 43 characters; the verifier alphabet, 43-128 long.
-_CODE_CHALLENGE = re.compile(r"[A-Za-z0-9\-._~]{43,128}")
+# RFC 7636: an S256 challenge is a SHA-256 digest, base64url without padding.
+_CODE_CHALLENGE = re.compile(r"[A-Za-z0-9_-]{43}")
 
 _CODE_PREFIX = "dsc_"
 _ACCESS_PREFIX = "dsa_"
@@ -81,14 +85,10 @@ def _split_scopes(scopes: str) -> list[str]:
 
 
 def _signed_out_since(session, user_id: str, moment: datetime) -> bool:
-    row = session.get(OAuthSignOut, user_id)
-    return row is not None and _as_utc(row.signed_out_at) >= _as_utc(moment)
-
-
-def user_signed_out_since(user_id: str, moment: datetime) -> bool:
-    """Whether ``user_id`` signed out at or after ``moment``."""
-    with use_db_session() as session:
-        return _signed_out_since(session, user_id, moment)
+    signed_out_at = session.scalar(
+        select(OAuthSignOut.signed_out_at).where(OAuthSignOut.user_id == user_id)
+    )
+    return signed_out_at is not None and _as_utc(signed_out_at) >= _as_utc(moment)
 
 
 def _widens_access(original: list[str], requested: list[str]) -> bool:
@@ -130,10 +130,18 @@ def store_authorization_code(
     scopes: list[str],
     resource: str,
     workos_session_id: str | None,
-) -> str:
-    """Persist a new authorization code and return its plaintext value."""
+    started_at: datetime,
+) -> str | None:
+    """Persist a new authorization code and return its plaintext value.
+
+    Returns ``None``, storing nothing, when the user signed out at or after
+    ``started_at`` (the moment they allowed this sign-in).
+    """
     code = _new_secret(_CODE_PREFIX)
     with use_db_session() as session:
+        lock_user(session, user_id)
+        if _signed_out_since(session, user_id, started_at):
+            return None
         session.add(
             OAuthCode(
                 code_hash=token_hash(code),
@@ -330,6 +338,14 @@ class DaySurfaceOAuthProvider(
         def _exchange() -> TokenResponse:
             code_hash = token_hash(authorization_code.code)
             with use_db_session() as session:
+                user_id = session.scalar(
+                    select(OAuthCode.user_id).where(OAuthCode.code_hash == code_hash)
+                )
+                if user_id is None:
+                    raise TokenError(
+                        error="invalid_grant", error_description="unknown code"
+                    )
+                lock_user(session, user_id)
                 # Single use, atomically: only the first exchange flips used_at.
                 claimed = session.execute(
                     update(OAuthCode)
@@ -339,7 +355,10 @@ class DaySurfaceOAuthProvider(
                     .values(used_at=_now())
                 )
                 if not claimed.rowcount:  # ty: ignore[unresolved-attribute]
-                    session.rollback()
+                    # Lost the race to a concurrent exchange of the same code:
+                    # a replay, so revoke what the winner issued.
+                    _revoke_family(session, code_hash)
+                    session.commit()
                     raise TokenError(
                         error="invalid_grant",
                         error_description="authorization code was already used",
@@ -415,6 +434,14 @@ class DaySurfaceOAuthProvider(
         def _exchange() -> TokenResponse:
             old_hash = token_hash(refresh_token.token)
             with use_db_session() as session:
+                user_id = session.scalar(
+                    select(OAuthToken.user_id).where(OAuthToken.token_hash == old_hash)
+                )
+                if user_id is None:
+                    raise TokenError(
+                        error="invalid_grant", error_description="unknown refresh token"
+                    )
+                lock_user(session, user_id)
                 # Rotate atomically: only one caller can consume this token.
                 consumed = session.execute(
                     update(OAuthToken)
