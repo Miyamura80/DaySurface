@@ -1,12 +1,13 @@
 """Signing out of DaySurface's own OAuth server."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from sqlalchemy import select
 
 from api_server.middleware.mcp_auth import _authenticate
+from api_server.oauth import flow
 from common import global_config
 from db.models.oauth import OAuthCode, lock_user
 from models.account import SignOutInput
@@ -60,7 +61,7 @@ class TestSignOut(OAuthServerCase):
 
     def test_sign_out_spends_codes_not_yet_exchanged(self):
         code, verifier = self._sign_in()
-        with patch.object(sign_out_svc, "_end_workos_sessions", return_value=0):
+        with patch.object(sign_out_svc, "end_workos_sessions", return_value=0):
             sign_out_svc.sign_out(SignOutInput(user_id=USER_ID))
         assert self._exchange(code, verifier)["status"] == 400
         with self.Session() as session:
@@ -71,18 +72,21 @@ class TestSignOut(OAuthServerCase):
         page = self.http.get(self._authorize(challenge))
         workos = self.http.post("/oauth/consent", data=consent_form(page.text, "allow"))
         state = parse_qs(urlsplit(workos.headers["location"]).query)["state"][0]
-        with patch.object(sign_out_svc, "_end_workos_sessions", return_value=0):
+        with patch.object(sign_out_svc, "end_workos_sessions", return_value=0):
             sign_out_svc.sign_out(SignOutInput(user_id=USER_ID))
-        back = self.http.get(
-            "/oauth/workos/callback", params={"code": "wc", "state": state}
-        )
+        with patch.object(flow, "end_workos_sessions", return_value=1) as ended:
+            back = self.http.get(
+                "/oauth/workos/callback", params={"code": "wc", "state": state}
+            )
         assert back.status_code == 303
         query = parse_qs(urlsplit(back.headers["location"]).query)
         assert query["error"] == ["access_denied"]
         assert "code" not in query
+        # The refused sign-in's own WorkOS session is ended too.
+        ended.assert_called_once_with([WORKOS_SESSION])
 
     def test_signing_in_again_after_sign_out_works(self):
-        with patch.object(sign_out_svc, "_end_workos_sessions", return_value=0):
+        with patch.object(sign_out_svc, "end_workos_sessions", return_value=0):
             sign_out_svc.sign_out(SignOutInput(user_id=USER_ID))
         # Straight away, within the same second: the sign-in's start is kept
         # to the microsecond, so it is not mistaken for one begun earlier.
@@ -102,6 +106,17 @@ class TestSignOut(OAuthServerCase):
         fake.__enter__.return_value.post.assert_called_once_with(
             sign_out_svc.WORKOS_REVOKE_SESSION_URL, json={"session_id": WORKOS_SESSION}
         )
+
+    def test_refresh_token_reuse_revokes_under_the_user_lock(self):
+        code, verifier = self._sign_in()
+        first = self._exchange(code, verifier)
+        self._token(grant_type="refresh_token", refresh_token=first["refresh_token"])
+        with patch("api_server.oauth.provider.lock_user") as locked:
+            reuse = self._token(
+                grant_type="refresh_token", refresh_token=first["refresh_token"]
+            )
+        assert reuse["status"] == 400
+        locked.assert_any_call(ANY, USER_ID)
 
 
 class TestUserLock(TestTemplate):

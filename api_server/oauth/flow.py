@@ -39,8 +39,9 @@ from loguru import logger as log
 from mcp.server.auth.provider import construct_redirect_uri
 
 from api_server.oauth import cimd, signing
-from api_server.oauth.provider import store_authorization_code
+from api_server.oauth.storage import store_authorization_code
 from common import global_config
+from services.account.sign_out_svc import end_workos_sessions
 
 WORKOS_AUTHORIZE_URL = "https://api.workos.com/user_management/authorize"
 WORKOS_AUTHENTICATE_URL = "https://api.workos.com/user_management/authenticate"
@@ -298,6 +299,9 @@ def workos_callback(
         started_at=allowed_at,
     )
     if our_code is None:
-        # The user signed out while this sign-in was under way.
+        # The user signed out while this sign-in was under way. Its WorkOS
+        # session is recorded nowhere sign-out could find it, so end it here.
+        if workos_session_id:
+            end_workos_sessions([workos_session_id])
         return _redirect_to_client(pending, flow_id, error="access_denied")
     return _redirect_to_client(pending, flow_id, code=our_code)
