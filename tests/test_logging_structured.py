@@ -96,6 +96,9 @@ class TestStructuredLogging(TestTemplate):
             with (
                 patch("logging.basicConfig") as basic_config,
                 patch("logging.captureWarnings"),
+                patch("logging.getLogger") as get_logger,
             ):
                 _route_stdlib_logging(debug=debug)
             assert basic_config.call_args.kwargs["level"] == level
+            # uvicorn's own INFO pin is lifted so the root level decides.
+            get_logger.return_value.setLevel.assert_called_with(logging.NOTSET)

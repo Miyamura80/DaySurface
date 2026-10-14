@@ -308,6 +308,8 @@ def _route_stdlib_logging(*, debug: bool) -> None:
         uv_logger = logging.getLogger(name)
         uv_logger.handlers.clear()
         uv_logger.propagate = True
+        # uvicorn pins these to INFO; defer to the root so debug reaches them.
+        uv_logger.setLevel(logging.NOTSET)
     logging.captureWarnings(True)
 
 
