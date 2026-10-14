@@ -11,3 +11,8 @@ server:
   allowed_origins:
     - "https://daysurface.com"
     - "https://www.daysurface.com"
+
+# One JSON line per log record on stdout, so Railway files each line under its
+# real level instead of marking all of stderr as "error".
+logging:
+  structured: true
