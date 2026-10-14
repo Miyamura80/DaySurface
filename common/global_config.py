@@ -3,7 +3,7 @@ import re
 import warnings
 from copy import deepcopy
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from cryptography.fernet import Fernet
@@ -234,6 +234,11 @@ class Config(BaseSettings):
     # Canonical public URL of the /mcp endpoint (RFC 8707 resource identifier);
     # must match the resource indicator configured in the WorkOS dashboard
     MCP_PUBLIC_URL: str | None = None
+    # Who issues the tokens MCP clients use. "authkit": WorkOS AuthKit issues
+    # them and /mcp verifies them. "self": DaySurface's own OAuth server
+    # (api_server/oauth/) issues, stores and revokes them, with WorkOS AuthKit
+    # doing only the sign-in. Switching back to "authkit" is the rollback.
+    MCP_AUTH_MODE: Literal["authkit", "self"] = "authkit"
     # Canonical public base URL of the HTTP API (no trailing slash, e.g.
     # https://api.example.com). When set, it is advertised as the `servers`
     # entry in the published OpenAPI spec so codegen / Swagger "Try it out" and

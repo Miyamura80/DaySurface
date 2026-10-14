@@ -88,14 +88,35 @@ def _resolve(host: str, port: int) -> list[_IPAddress]:
     return addresses
 
 
+# IPv6 ranges that carry or translate to an IPv4 address and that ``is_global``
+# reports as global on some Python versions: NAT64 (RFC 6052 / RFC 8215) and the
+# deprecated IPv4-compatible block. On a NAT64 network, 64:ff9b::7f00:1 reaches
+# 127.0.0.1, so these are refused outright.
+_TRANSLATED_IPV6 = (
+    ipaddress.IPv6Network("64:ff9b::/96"),
+    ipaddress.IPv6Network("64:ff9b:1::/48"),
+    ipaddress.IPv6Network("::/96"),
+)
+
+
 def is_public_address(addr: _IPAddress, *, allow_loopback: bool = False) -> bool:
     """True if ``addr`` may be connected to under the allowlist.
 
     Public means ``is_global``. ``allow_loopback`` additionally permits loopback
-    (127.0.0.0/8, ::1) for local development, and nothing else.
+    (127.0.0.0/8, ::1) for local development, and nothing else. An IPv6 address
+    that embeds an IPv4 address (IPv4-mapped, 6to4, Teredo) must also pass on
+    that IPv4 address, and NAT64 / IPv4-compatible addresses are refused.
     """
     if allow_loopback and addr.is_loopback:
         return True
+    if isinstance(addr, ipaddress.IPv6Address):
+        if any(addr in net for net in _TRANSLATED_IPV6):
+            return False
+        embedded = [addr.ipv4_mapped, addr.sixtofour]
+        if addr.teredo:
+            embedded.extend(addr.teredo)
+        if any(v4 is not None and not v4.is_global for v4 in embedded):
+            return False
     return addr.is_global
 
 
