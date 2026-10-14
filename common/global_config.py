@@ -123,8 +123,10 @@ class YamlSettingsSource(PydanticBaseSettingsSource):
                         prod_config_data = yaml.safe_load(file)
                     if prod_config_data:
                         config_data = recursive_update(config_data, prod_config_data)
-                        logger.warning(
-                            "\033[33m❗️ Overwriting common/global_config.yaml with common/production_config.yaml\033[0m"
+                        # Expected on every prod boot, so debug: it runs before
+                        # setup_logging and would otherwise land on stderr.
+                        logger.debug(
+                            "Overwriting common/global_config.yaml with common/production_config.yaml"
                         )
                 except FileNotFoundError:
                     logger.warning(
@@ -555,7 +557,10 @@ if os.getenv("DEV_ENV") == "prod":
     load_dotenv(dotenv_path=root_dir / ".prod.env", override=True)
 
 # Check if .env file has been properly loaded
-is_local = os.getenv("GITHUB_ACTIONS") != "true"
+# Railway injects secrets as real env vars, so no .prod.env there is expected.
+is_local = os.getenv("GITHUB_ACTIONS") != "true" and not os.getenv(
+    "RAILWAY_ENVIRONMENT_ID"
+)
 if is_local:
     env_file_to_check = ".prod.env" if os.getenv("DEV_ENV") == "prod" else ".env"
     env_values = dotenv_values(root_dir / env_file_to_check)
