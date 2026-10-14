@@ -92,6 +92,8 @@ class LoggingConfig(BaseModel):
     """Complete logging configuration."""
 
     verbose: bool
+    # One JSON line per record on stdout (Railway reads its level); prod only.
+    structured: bool = False
     format: LoggingFormatConfig
     levels: LoggingLevelsConfig
     redaction: RedactionConfig = Field(default_factory=lambda: RedactionConfig())

@@ -41,6 +41,7 @@ features:
 
 logging:
   verbose: true
+  structured: false  # JSON lines on stdout; production_config.yaml turns it on
   format:
     show_time: false
     show_session_id: true
