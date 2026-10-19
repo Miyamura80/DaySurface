@@ -1,12 +1,14 @@
 """Client ID Metadata Documents for DaySurface's own OAuth server."""
 
+import hashlib
 from unittest.mock import MagicMock, patch
 
 import pytest
 from mcp.shared.auth import InvalidRedirectUriError
 from pydantic import AnyUrl
 
-from api_server.oauth import cimd
+from api_server.oauth import cimd, signing
+from api_server.server import Sha256SessionMiddleware
 from tests.oauth_server_fixture import (
     CLIENT_ID,
     client_document,
@@ -126,3 +128,13 @@ class TestClientMetadataDocuments(TestTemplate):
             pytest.raises(cimd.ClientMetadataError, match="compressed"),
         ):
             cimd._fetch_document(CLIENT_ID)
+
+
+class TestSignedValues(TestTemplate):
+    def test_signatures_use_sha256(self):
+        signer = signing._serializer("test").make_signer()
+        assert signer.digest_method is hashlib.sha256
+
+    def test_session_cookie_uses_sha256(self):
+        middleware = Sha256SessionMiddleware(MagicMock(), secret_key="k" * 32)
+        assert middleware.signer.digest_method is hashlib.sha256

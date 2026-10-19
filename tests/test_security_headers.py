@@ -310,7 +310,11 @@ class TestSessionCookieFlags(TestTemplate):
                 assert session_cookie_policy()["https_only"] is False, value
 
     def test_the_app_registers_session_middleware_with_the_policy(self):
-        entries = [m for m in app.user_middleware if m.cls is SessionMiddleware]
+        entries = [
+            m
+            for m in app.user_middleware
+            if isinstance(m.cls, type) and issubclass(m.cls, SessionMiddleware)
+        ]
         assert len(entries) == 1, "expected exactly one SessionMiddleware"
         kwargs = entries[0].kwargs
         assert kwargs["same_site"] == "lax"
