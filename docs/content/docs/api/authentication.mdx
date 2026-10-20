@@ -3,12 +3,37 @@ title: Authentication
 description: API keys, scopes, and access control
 ---
 
+## When to use an API key
+
+DaySurface has two ways to authenticate, and **OAuth is the default**:
+
+- **OAuth sign-in (interactive clients).** Claude, ChatGPT and other MCP
+  clients sign the user in through DaySurface's OAuth 2.1 server and receive
+  short-lived session tokens: a 1-hour access token and a single-use refresh
+  token that rotates on every refresh. Signing out revokes them all. Use this
+  whenever a person is present to sign in.
+- **API keys (non-interactive clients only).** Scripts, CI jobs,
+  server-to-server integrations and MCP clients that can only send a fixed
+  header cannot open a browser to complete an OAuth sign-in. API keys exist
+  for those cases only.
+
+Because an API key is a long-lived secret rather than a session token, it is
+constrained:
+
+- Only a signed-in user can create one, and its scopes cannot exceed the
+  creator's.
+- Give it the narrowest scope template that works, and set `expires_in_days`.
+- DaySurface stores only a SHA-256 hash of the key; the full key is shown once,
+  at creation.
+- An expired or revoked key is refused immediately. Revoke a key the moment it
+  is no longer needed (see [Revoke a key](#revoke-a-key)).
+
 ## API Key Authentication
 
-Include your API key in the `Authorization` header:
+Include your API key in the `X-API-KEY` header:
 
 ```bash
-curl -H "Authorization: Bearer sk_live_..." \
+curl -H "X-API-KEY: sk_..." \
   https://api.daysurface.com/api/v1/auth/me
 ```
 
@@ -28,7 +53,7 @@ Enterprise SSO via WorkOS is also supported.
 
 ```bash
 curl -X POST https://api.daysurface.com/api/v1/auth/api-keys \
-  -H "Authorization: Bearer sk_live_..." \
+  -H "X-API-KEY: sk_..." \
   -H "Content-Type: application/json" \
   -d '{"name": "my-integration", "scope_template": "standard", "expires_in_days": 90}'
 ```
@@ -53,14 +78,14 @@ The endpoint is cursor-paginated. Pass `limit` (1-100, default 20) and follow
 `next_cursor` until `has_more` is `false`:
 
 ```bash
-curl -H "Authorization: Bearer sk_live_..." \
+curl -H "X-API-KEY: sk_..." \
   "https://api.daysurface.com/api/v1/auth/api-keys?limit=20"
 ```
 
 ```json
 {
   "items": [
-    { "id": 42, "key_prefix": "sk_live_ab", "name": "my-integration", "revoked": false }
+    { "id": 42, "key_prefix": "sk_ab12cd34", "name": "my-integration", "revoked": false }
   ],
   "next_cursor": "eyJjIjoiMjAyNS0wMS0xNVQxMDozMDowMCswMDowMCIsImkiOjQyfQ",
   "has_more": true
@@ -70,7 +95,7 @@ curl -H "Authorization: Bearer sk_live_..." \
 Fetch the next page by passing the cursor back verbatim (treat it as opaque):
 
 ```bash
-curl -H "Authorization: Bearer sk_live_..." \
+curl -H "X-API-KEY: sk_..." \
   "https://api.daysurface.com/api/v1/auth/api-keys?cursor=eyJjIjoiMjAyNS0wMS0xNVQxMDozMDowMCswMDowMCIsImkiOjQyfQ"
 ```
 
@@ -83,7 +108,7 @@ page fetch. Pass the same `limit` value on each request until `has_more` is
 ### Revoke a key
 
 ```bash
-curl -X DELETE -H "Authorization: Bearer sk_live_..." \
+curl -X DELETE -H "X-API-KEY: sk_..." \
   https://api.daysurface.com/api/v1/auth/api-keys/{key_id}
 ```
 

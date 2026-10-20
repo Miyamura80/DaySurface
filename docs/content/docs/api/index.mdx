@@ -32,7 +32,7 @@ Rank the ten threads that most need attention:
 
 ```bash
 curl -X POST https://api.daysurface.com/api/v1/services/gmail_curate_inbox \
-  -H "Authorization: Bearer sk_live_..." \
+  -H "X-API-KEY: sk_..." \
   -H "Content-Type: application/json" \
   -d '{"limit": 10}'
 ```

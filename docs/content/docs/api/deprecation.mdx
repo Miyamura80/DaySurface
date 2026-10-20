@@ -52,7 +52,7 @@ but you should log and alert on them.
 | `Link` | [RFC 8288](https://www.rfc-editor.org/rfc/rfc8288) | `<https://daysurface.com/docs/api/deprecation>; rel="deprecation"` | This policy page |
 
 ```bash
-curl -sI -H "Authorization: Bearer sk_live_..." \
+curl -sI -H "X-API-KEY: sk_..." \
   https://api.daysurface.com/api/v1/some-deprecated-endpoint | grep -iE 'deprecation|sunset|link'
 ```
 

@@ -31,7 +31,7 @@ Check whether an account is linked.
 
 ```bash
 curl -X POST https://api.daysurface.com/api/v1/services/gmail_status \
-  -H "Authorization: Bearer sk_live_..." \
+  -H "X-API-KEY: sk_..." \
   -H "Content-Type: application/json" \
   -d '{}'
 ```
@@ -53,7 +53,7 @@ Rank recent inbox threads by a deterministic score.
 
 ```bash
 curl -X POST https://api.daysurface.com/api/v1/services/gmail_curate_inbox \
-  -H "Authorization: Bearer sk_live_..." \
+  -H "X-API-KEY: sk_..." \
   -H "Content-Type: application/json" \
   -d '{"limit": 10}'
 ```
@@ -74,7 +74,7 @@ List recent messages, optionally filtered by a Gmail search query.
 
 ```bash
 curl -X POST https://api.daysurface.com/api/v1/services/gmail_list_inbox \
-  -H "Authorization: Bearer sk_live_..." \
+  -H "X-API-KEY: sk_..." \
   -H "Content-Type: application/json" \
   -d '{"query": "from:sarah@acme.com is:unread", "limit": 25}'
 ```
@@ -93,7 +93,7 @@ Fetch a thread with full message bodies.
 
 ```bash
 curl -X POST https://api.daysurface.com/api/v1/services/gmail_get_thread \
-  -H "Authorization: Bearer sk_live_..." \
+  -H "X-API-KEY: sk_..." \
   -H "Content-Type: application/json" \
   -d '{"thread_id": "18f0c...", "strip_quoted_replies": true}'
 ```
@@ -115,7 +115,7 @@ Create a draft. Mutating - send an `Idempotency-Key`.
 
 ```bash
 curl -X POST https://api.daysurface.com/api/v1/services/gmail_compose \
-  -H "Authorization: Bearer sk_live_..." \
+  -H "X-API-KEY: sk_..." \
   -H "Idempotency-Key: 0f1c2b3a-..." \
   -H "Content-Type: application/json" \
   -d '{
@@ -145,7 +145,7 @@ Send a draft that already exists. Mutating - send an `Idempotency-Key`.
 
 ```bash
 curl -X POST https://api.daysurface.com/api/v1/services/gmail_send \
-  -H "Authorization: Bearer sk_live_..." \
+  -H "X-API-KEY: sk_..." \
   -H "Idempotency-Key: 7d2e9f01-..." \
   -H "Content-Type: application/json" \
   -d '{"draft_id": "r-482..."}'

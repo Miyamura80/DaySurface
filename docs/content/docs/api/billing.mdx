@@ -6,7 +6,7 @@ description: Usage tracking, quotas, and subscription management
 ## Check Your Usage
 
 ```bash
-curl -H "Authorization: Bearer sk_live_..." \
+curl -H "X-API-KEY: sk_..." \
   https://api.daysurface.com/api/v1/billing/usage/current
 ```
 
@@ -15,7 +15,7 @@ Returns usage stats for the current billing period.
 ## Upgrade Your Plan
 
 ```bash
-curl -X POST -H "Authorization: Bearer sk_live_..." \
+curl -X POST -H "X-API-KEY: sk_..." \
   https://api.daysurface.com/api/v1/billing/checkout
 ```
 
@@ -24,7 +24,7 @@ Returns a Stripe checkout URL to complete the upgrade.
 ## Check Subscription Status
 
 ```bash
-curl -H "Authorization: Bearer sk_live_..." \
+curl -H "X-API-KEY: sk_..." \
   https://api.daysurface.com/api/v1/billing/subscriptions/{subscription_id}
 ```
 
@@ -32,7 +32,7 @@ curl -H "Authorization: Bearer sk_live_..." \
 
 ```bash
 curl -X POST https://api.daysurface.com/api/v1/billing/usage/report \
-  -H "Authorization: Bearer sk_live_..." \
+  -H "X-API-KEY: sk_..." \
   -H "Idempotency-Key: unique-request-id"
 ```
 
