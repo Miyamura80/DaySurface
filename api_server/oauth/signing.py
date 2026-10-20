@@ -2,12 +2,13 @@
 
 The pending authorization request travels from ``/authorize`` to the consent
 page, and then to WorkOS and back as ``state``. Both legs are signed with
-``SESSION_SECRET_KEY`` (HMAC, via itsdangerous) under separate salts, so one
+``SESSION_SECRET_KEY`` (HMAC-SHA256, via itsdangerous) under separate salts, so one
 cannot stand in for the other, and both expire after ten minutes. They carry no
 secrets: client id, redirect URI, PKCE challenge, the client's own ``state``,
 scopes and resource.
 """
 
+import hashlib
 from datetime import UTC, datetime
 from typing import Any
 
@@ -25,7 +26,13 @@ class InvalidSignedValueError(ValueError):
 
 
 def _serializer(salt: str) -> URLSafeTimedSerializer:
-    return URLSafeTimedSerializer(global_config.SESSION_SECRET_KEY, salt=salt)
+    # itsdangerous defaults to HMAC-SHA1; use SHA-256 for both the key
+    # derivation and the signature.
+    return URLSafeTimedSerializer(
+        global_config.SESSION_SECRET_KEY,
+        salt=salt,
+        signer_kwargs={"digest_method": hashlib.sha256},
+    )
 
 
 _ALLOWED_AT = "allowed_at"

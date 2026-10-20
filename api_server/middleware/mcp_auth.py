@@ -26,7 +26,7 @@ from api_server.auth.authkit_auth import (
 )
 from api_server.auth.unified_auth import AuthenticatedUser
 from api_server.auth.workos_auth import verify_workos_token
-from api_server.oauth.provider import lookup_access_token
+from api_server.oauth.storage import lookup_access_token
 from common import global_config
 from db.engine import use_db_session
 from src.payments.request_context import reset_payment_header, set_payment_header

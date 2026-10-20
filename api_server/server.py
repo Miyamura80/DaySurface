@@ -1,17 +1,20 @@
 """FastAPI application - CORS, session middleware, route registration."""
 
+import hashlib
 import logging
 import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
-from typing import Literal, TypedDict
+from typing import Any, Literal, TypedDict
 
+import itsdangerous
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.types import ASGIApp
 
 import api_server.oauth as oauth_server
 from api_server.middleware.error_handler import (
@@ -129,6 +132,21 @@ def session_cookie_policy() -> SessionCookiePolicy:
     return {"https_only": not global_config.is_dev, "same_site": "lax"}
 
 
+class Sha256SessionMiddleware(SessionMiddleware):
+    """Starlette's ``SessionMiddleware``, signing the cookie with HMAC-SHA256.
+
+    Starlette builds an itsdangerous ``TimestampSigner`` with its default
+    digest, SHA-1. HMAC-SHA1 is not broken, but nothing here should depend on
+    SHA-1, so the signer is replaced with a SHA-256 one.
+    """
+
+    def __init__(self, app: ASGIApp, secret_key: str, **kwargs: Any) -> None:
+        super().__init__(app, secret_key, **kwargs)
+        self.signer = itsdangerous.TimestampSigner(
+            str(secret_key), digest_method=hashlib.sha256
+        )
+
+
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Compose the FastMCP session manager with the periodic webhook runner."""
@@ -155,7 +173,7 @@ app.add_middleware(RequestIdMiddleware)  # type: ignore[arg-type]
 app.add_middleware(MCPAuthMiddleware)  # type: ignore[arg-type]
 
 app.add_middleware(
-    SessionMiddleware,  # type: ignore[arg-type]
+    Sha256SessionMiddleware,  # type: ignore[arg-type]
     secret_key=global_config.SESSION_SECRET_KEY,
     **session_cookie_policy(),
 )

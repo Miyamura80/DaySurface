@@ -66,7 +66,7 @@ def _revoke_tokens(user_id: str) -> tuple[int, list[str]]:
         return result.rowcount or 0, session_ids  # ty: ignore[unresolved-attribute]
 
 
-def _end_workos_sessions(session_ids: list[str]) -> int:
+def end_workos_sessions(session_ids: list[str]) -> int:
     """End each WorkOS session. Best-effort: the tokens are already revoked."""
     api_key = global_config.WORKOS_API_KEY
     if not session_ids:
@@ -121,7 +121,7 @@ def sign_out(input: SignOutInput) -> SignOutResult:
             "DaySurface in your app instead."
         )
     tokens_revoked, session_ids = _revoke_tokens(input.user_id)
-    sessions_ended = _end_workos_sessions(session_ids)
+    sessions_ended = end_workos_sessions(session_ids)
     log.info(
         "sign_out revoked {} token(s) and ended {} WorkOS session(s)",
         tokens_revoked,
