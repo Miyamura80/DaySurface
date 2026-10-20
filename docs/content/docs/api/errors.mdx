@@ -40,7 +40,7 @@ request to thread your trace ID through the server logs.
 | HTTP | `error.code` | Retryable? | What to do |
 |------|--------------|------------|------------|
 | `400` | `bad_request` | No | Fix the request before retrying |
-| `401` | `unauthorized` | No | Verify the `Authorization: Bearer` header / API key |
+| `401` | `unauthorized` | No | Verify the `X-API-KEY` header (or, with enterprise SSO, the WorkOS `Authorization: Bearer` token) |
 | `402` | `payment_required` / `quota_exceeded` | After daily reset | Daily quota exhausted - the `Retry-After` can be hours away, so handle it separately from the [retry loop](#reference-retry-loop-python): wait for the reset or upgrade the plan |
 | `403` | `forbidden` | No | The key lacks the required [scope](/docs/api/authentication#scopes) |
 | `404` | `not_found` | No | Check the endpoint URL or resource ID |

@@ -31,7 +31,7 @@ answer, send it.
 
 ```bash
 curl -sS -X POST "$DAYSURFACE_API/api/v1/services/gmail_curate_inbox" \
-  -H "Authorization: Bearer $DAYSURFACE_API_KEY" \
+  -H "X-API-KEY: $DAYSURFACE_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"limit": 10}'
 ```
@@ -64,7 +64,7 @@ why a thread scored where it did.
 
 ```bash
 curl -sS -X POST "$DAYSURFACE_API/api/v1/services/gmail_get_thread" \
-  -H "Authorization: Bearer $DAYSURFACE_API_KEY" \
+  -H "X-API-KEY: $DAYSURFACE_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"thread_id": "18f0c1d2e3f4a5b6", "strip_quoted_replies": true}'
 ```
@@ -86,7 +86,7 @@ per logical draft and reuse it across retries of that same draft.
 
 ```bash
 curl -sS -X POST "$DAYSURFACE_API/api/v1/services/gmail_compose" \
-  -H "Authorization: Bearer $DAYSURFACE_API_KEY" \
+  -H "X-API-KEY: $DAYSURFACE_API_KEY" \
   -H "Idempotency-Key: $(uuidgen)" \
   -H "Content-Type: application/json" \
   -d '{
@@ -109,7 +109,7 @@ attachment list.
 
 ```bash
 curl -sS -X POST "$DAYSURFACE_API/api/v1/services/gmail_send" \
-  -H "Authorization: Bearer $DAYSURFACE_API_KEY" \
+  -H "X-API-KEY: $DAYSURFACE_API_KEY" \
   -H "Idempotency-Key: $(uuidgen)" \
   -H "Content-Type: application/json" \
   -d '{"draft_id": "r-4820193847562"}'
@@ -170,7 +170,7 @@ the bytes for exactly one of them.
 
 ```bash
 curl -sS -X POST "$DAYSURFACE_API/api/v1/services/gmail_get_attachment" \
-  -H "Authorization: Bearer $DAYSURFACE_API_KEY" \
+  -H "X-API-KEY: $DAYSURFACE_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"message_id": "18f0c1d2e3f4a5b6", "attachment_id": "ANGjdJ_x..."}' \
   | jq -r '.data_base64' | base64 -d > contract.pdf
@@ -193,7 +193,7 @@ DaySurface an HTTPS endpoint and it will POST to you when mail arrives.
 
 ```bash
 curl -sS -X POST "$DAYSURFACE_API/api/v1/services/webhook_subscribe" \
-  -H "Authorization: Bearer $DAYSURFACE_API_KEY" \
+  -H "X-API-KEY: $DAYSURFACE_API_KEY" \
   -H "Idempotency-Key: $(uuidgen)" \
   -H "Content-Type: application/json" \
   -d '{"url": "https://example.com/hooks/daysurface", "event_types": ["gmail.message.new"]}'
