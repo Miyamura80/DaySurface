@@ -16,7 +16,9 @@ PROJECT_ROOT=.
 # Minimum uv version required by this repo. `[tool.uv]` in pyproject.toml uses a
 # relative `exclude-newer` duration that only uv >= 0.9.17 can parse; an older uv
 # silently discards the whole table (guard included) and rewrites uv.lock. See #196.
-MIN_UV_VERSION=0.9.17
+# Raised to 0.13.4 for its updated bundled root store, which drops the compromised
+# eMudhra CA root (GHSA-hq85-5cpj-mr62).
+MIN_UV_VERSION=0.13.4
 
 .DEFAULT_GOAL := help
 
@@ -57,7 +59,7 @@ check_uv:
 		exit 1; \
 	fi; \
 	if [ "$$(printf '%s\n' "$(MIN_UV_VERSION)" "$$UV_VERSION" | sort -V | head -n1)" != "$(MIN_UV_VERSION)" ]; then \
-		echo "$(RED)uv $$UV_VERSION is too old - this repo needs uv >= $(MIN_UV_VERSION) (relative exclude-newer in [tool.uv]).$(RESET)"; \
+		echo "$(RED)uv $$UV_VERSION is too old - this repo needs uv >= $(MIN_UV_VERSION) (relative exclude-newer in [tool.uv]; eMudhra CA root-store fix, GHSA-hq85-5cpj-mr62).$(RESET)"; \
 		echo "$(RED)Fix: run .claude/hooks/session-start.sh, or 'uv tool install --force uv>=$(MIN_UV_VERSION)'.$(RESET)"; \
 		exit 1; \
 	fi
