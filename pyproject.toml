@@ -268,6 +268,8 @@ show_missing = true
 required-version = ">=0.13.4"
 # 7-day quarantine on freshly-published packages (supply-chain defense).
 exclude-newer = "7 days"
+# Exempt certifi so the eMudhra CA response (2026.10.19, drops emSign ECC Root CA - G3) isn't quarantined.
+exclude-newer-package = { certifi = false }
 
 [dependency-groups]
 dev = [
