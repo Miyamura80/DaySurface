@@ -30,7 +30,8 @@ dependencies = [
     "vulture>=2.14",
     "dspy>=3.1.2",
     "langfuse>=4.14.1",
-    "litellm>=1.96.2,!=1.82.*",
+    # Backdoored litellm releases: 1.82.7/1.82.8 (Mar 2026) and 1.107.0 (Oct 2026). Never resolve them.
+    "litellm>=1.96.2,!=1.82.*,!=1.107.0",
     "tenacity>=9.0.0",
     "pillow>=12.3.0",
     "ty>=0.0.14",
