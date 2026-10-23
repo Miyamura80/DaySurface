@@ -680,7 +680,7 @@ requires-dist = [
     { name = "keyring", specifier = ">=25.0.0" },
     { name = "langfuse", specifier = ">=4.14.1" },
     { name = "limits", specifier = ">=5.8.0" },
-    { name = "litellm", specifier = "!=1.82.*,>=1.96.2" },
+    { name = "litellm", specifier = "!=1.82.*,>=1.96.2,!=1.107.0" },
     { name = "loguru", specifier = ">=0.7.3" },
     { name = "mcp", extras = ["cli"], specifier = ">=1.28.1,<2.0.0" },
     { name = "openfeature-sdk", specifier = ">=0.10.0" },
