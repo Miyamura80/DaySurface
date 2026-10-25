@@ -1,0 +1,19 @@
+name: Pinned refs
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  pinned-refs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check images are pinned by digest and actions by commit sha
+        run: python3 scripts/check_immutable_refs.py
