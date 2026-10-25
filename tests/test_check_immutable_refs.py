@@ -22,6 +22,16 @@ SHA = "@" + "b" * 40
         ["COPY --from=busybox /bin/sh /sh"],
         ["# pin-exempt:", "FROM node:24-slim"],
         ["# pin-exempt: local", "RUN true", "FROM node:24-slim"],
+        # Stage aliases only cover earlier stages, never the base being declared.
+        ["FROM ubuntu AS ubuntu"],
+        # Build args resolve from their default, which must itself be pinned.
+        ["ARG BASE", "FROM $BASE"],
+        ["ARG BASE=ubuntu:latest", "FROM ${BASE}"],
+        ["ARG UV=ghcr.io/astral-sh/uv:0.13.5", "COPY --from=$UV /uv /uv"],
+        # Continuation lines are joined before parsing.
+        ["FROM \\", "    --platform=linux/amd64 \\", "    node:24-slim AS app"],
+        ["copy --from=busybox /bin/sh /sh"],
+        ["RUN --mount=type=bind,from=busybox:1.36,target=/b true"],
     ],
 )
 def test_dockerfile_flags_mutable(lines: list[str]) -> None:
@@ -36,8 +46,16 @@ def test_dockerfile_flags_mutable(lines: list[str]) -> None:
         ["FROM scratch"],
         [f"FROM node:24-alpine{DIGEST} AS base", "FROM base AS runner"],
         [f"COPY --from=ghcr.io/astral-sh/uv:0.13.4{DIGEST} /uv /usr/local/bin/uv"],
-        ["ARG BASE", "FROM $BASE"],
+        [f"ARG BASE=node:24-slim{DIGEST}", "FROM $BASE"],
+        ["FROM \\", f"    node:24-slim{DIGEST} AS app", "COPY --from=app /a /b"],
         [f"FROM node{DIGEST}", "COPY --from=0 /a /b"],
+        # --from= outside a COPY instruction is not an image reference.
+        [f"FROM node{DIGEST}", "# COPY --from=busybox", "RUN echo --from=busybox"],
+        [
+            f"FROM node{DIGEST} AS deps",
+            "RUN --mount=type=bind,from=deps,target=/d true",
+        ],
+        [f"RUN --mount=type=cache,target=/root/.npm --mount=from=busybox{DIGEST} true"],
         [
             "# pin-exempt: built locally from docker/Dockerfile",
             "FROM desktest-desktop:latest",
@@ -58,6 +76,12 @@ def test_dockerfile_allows_pinned(lines: list[str]) -> None:
         "      - uses: docker://alpine:latest",
         "    image: postgres:16",
         "    image: nicolaka/netshoot",
+        "    container: node:latest",
+        '      - "uses": actions/checkout@v6',
+        "      - uses: actions/checkout@main@" + "b" * 40,
+        "          bun-version: latest",
+        "          node-version: 'latest' # newest",
+        "    image: ${{ matrix.image }}",
     ],
 )
 def test_actions_flags_mutable(line: str) -> None:
@@ -73,17 +97,36 @@ def test_actions_flags_mutable(line: str) -> None:
         "      - uses: ./.github/actions/setup",
         f"      - uses: docker://alpine:3.22{DIGEST}",
         f"    image: postgres:16.4{DIGEST}",
-        "    image: ${{ matrix.image }}",
+        f"    container: node:24-slim{DIGEST}",
+        "          bun-version: 1.4.3",
+        "          tag: latest",
+        "    container:",
     ],
 )
 def test_actions_allows_pinned(line: str) -> None:
     assert c.check_actions_file("ci.yaml", [line]) == []
 
 
-def test_actions_exempt_needs_reason() -> None:
+def test_actions_exempt_covers_images_only() -> None:
     uses = "      - uses: actions/checkout@v6"
-    assert c.check_actions_file("ci.yaml", ["      # pin-exempt: reason", uses]) == []
-    assert c.check_actions_file("ci.yaml", ["      # pin-exempt:", uses])
+    assert c.check_actions_file("ci.yaml", ["      # pin-exempt: reason", uses])
+    image = "    image: postgres:16"
+    assert c.check_actions_file("ci.yaml", ["    # pin-exempt: reason", image]) == []
+    assert c.check_actions_file("ci.yaml", ["    # pin-exempt:", image])
+    literal = "    image: postgres:latest # ${{ not an expression }}"
+    assert "latest" in c.check_actions_file("ci.yaml", [literal])[0]
+    expr = "    image: ${{ matrix.image }}"
+    assert (
+        c.check_actions_file(
+            "ci.yaml", ["    # pin-exempt: matrix values pinned", expr]
+        )
+        == []
+    )
+
+
+def test_action_metadata_local_dockerfile() -> None:
+    assert c.check_actions_file("action.yml", ["  image: Dockerfile"]) == []
+    assert c.check_actions_file("action.yml", ["  image: docker://alpine:3.22"])
 
 
 @pytest.mark.parametrize(
@@ -96,6 +139,8 @@ def test_actions_exempt_needs_reason() -> None:
         (".github/actions/setup/action.yml", False, True),
         (".github/dependabot.yml", False, False),
         ("docker-compose.yml", False, False),
+        ("docker/app.dockerfile", True, False),
+        ("tools/my-action/action.yaml", False, True),
     ],
 )
 def test_file_selection(path: str, dockerfile: bool, actions: bool) -> None:
