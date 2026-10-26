@@ -331,6 +331,8 @@ def next_scalar_line(
         ).strip()  # `&v latest`: the anchor is not the value
         if not value:
             continue
+        if value[0] in "[{":
+            return None  # a flow collection: its own line is scanned for keys
         return value.strip("\"'")
     return None
 

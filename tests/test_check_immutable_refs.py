@@ -220,6 +220,8 @@ def test_actions_allows_multiline_exact_version(lines: list[str]) -> None:
         ["      - uses: >-", "          actions/checkout@v6"],
         ["    container:", "      node:latest"],
         ["      db:", "        image:", "          'postgres:16'"],
+        # A flow mapping below the key is scanned on its own line.
+        ["    container: &c", "      { image: node:latest }"],
     ],
 )
 def test_actions_flags_ref_on_next_line(lines: list[str]) -> None:
@@ -241,6 +243,7 @@ def test_actions_flags_ref_on_next_line(lines: list[str]) -> None:
             "    container:",
             "      local:dev",
         ],
+        ["    container: &c", f"      {{ image: node:24-slim{DIGEST} }}"],
     ],
 )
 def test_actions_allows_ref_on_next_line(lines: list[str]) -> None:
