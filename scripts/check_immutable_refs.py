@@ -44,7 +44,9 @@ MOUNT_FROM = re.compile(r"--mount=\S*?\bfrom=(?P<ref>[^\s,]+)", re.IGNORECASE)
 # so a brace or comma inside a `run:` string is not mistaken for a key.
 BLOCK_KEY = r"""^\s*(?:-\s*)?["']?"""
 FLOW_KEY = r"""(?:^\s*(?:-\s*)?|[{,]\s*)["']?"""
-FLOW_LINE = re.compile(r"""^\s*(?:-\s*)?(?:["']?[\w.-]+["']?\s*:\s*)?[\[{]""")
+FLOW_LINE = re.compile(
+    r"""^\s*(?:-\s*)?(?:["']?[\w.-]+["']?\s*:\s*)?(?:[&!][^\s\[\]{},]*\s*)*[\[{]"""
+)  # an anchor (&a) or tag (!!seq) may precede the collection
 YAML_VALUE = r"""["']?\s*:\s*(?P<ref>[^\s#,{}]+)"""
 
 
@@ -232,10 +234,12 @@ def declare_args(rest: str, scope: dict[str, str], inherit: dict[str, str]) -> N
 def check_dockerfile(path: str, lines: list[str]) -> list[str]:
     errors: list[str] = []
     stages: set[str] = set()
-    # Docker scoping: FROM sees only ARGs declared before the first FROM; each stage
-    # starts empty and sees a global value only by redeclaring it without a default.
+    # Docker scoping: FROM sees only ARGs declared before the first FROM; a stage starts
+    # with its base stage's ARGs (empty for an image) and sees a global value only by
+    # redeclaring it without a default.
     global_args: dict[str, str] = {}
     stage_args: dict[str, str] | None = None
+    stage_scopes: dict[str, dict[str, str]] = {}  # ARGs of each named stage, by alias
     for lineno, exempt, text in instructions(lines):
         m = INSTRUCTION.match(text)
         if not m:
@@ -251,7 +255,10 @@ def check_dockerfile(path: str, lines: list[str]) -> list[str]:
             if not exempt and (why := image_problem(ref, scope)):
                 errors.append(f"{path}:{lineno}: {label}{ref}: {why}")
         if cmd == "FROM":
-            stage_args = {}
+            tokens = [t.lower() for t in rest.split() if not t.startswith("--")]
+            stage_args = dict(stage_scopes.get(tokens[0], {})) if tokens else {}
+            if len(tokens) >= 3 and tokens[1] == "as":
+                stage_scopes[tokens[2]] = stage_args
     return errors
 
 
@@ -330,7 +337,9 @@ def next_line_problem(
 
 def check_actions_file(path: str, lines: list[str]) -> list[str]:
     errors: list[str] = []
-    is_action_metadata = PurePosixPath(path).stem == "action"
+    p = PurePosixPath(path)
+    # a workflow may be named action.yml too; only files outside .github/workflows are action metadata
+    is_action_metadata = p.stem == "action" and p.parts[:2] != (".github", "workflows")
     depth = 0  # open flow collections, so continuation lines of a `{ ... }` keep flow parsing
     for lineno, line in enumerate(lines, 1):
         in_flow = depth > 0 or bool(FLOW_LINE.match(line))

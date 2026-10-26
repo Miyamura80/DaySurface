@@ -37,6 +37,13 @@ SHA = "@" + "b" * 40
         ],
         # A stage sees a global ARG only by redeclaring it.
         [f"ARG UV=uv:0.13.5{DIGEST}", f"FROM node{DIGEST}", "COPY --from=$UV /uv /uv"],
+        # ...and an inherited mutable ARG is still checked.
+        [
+            f"FROM node{DIGEST} AS base",
+            "ARG UV=uv:latest",
+            "FROM base",
+            "RUN --mount=type=bind,from=$UV,target=/uv true",
+        ],
         # An empty default replaces the earlier pinned one.
         [f"ARG BASE=node{DIGEST}", "ARG BASE=", "FROM $BASE"],
         # Continuation lines are joined before parsing.
@@ -73,6 +80,13 @@ def test_dockerfile_flags_mutable(lines: list[str]) -> None:
             "COPY --from=$UV /uv /uv",
         ],
         [f"FROM node{DIGEST}", f"ARG UV=uv:0.13.5{DIGEST}", "COPY --from=$UV /uv /uv"],
+        # A stage built on an earlier stage inherits that stage's ARGs.
+        [
+            f"FROM node{DIGEST} AS base",
+            f"ARG UV=uv:0.13.5{DIGEST}",
+            "FROM base AS child",
+            "RUN --mount=type=bind,from=$UV,target=/uv true",
+        ],
         ["FROM \\", f"    node:24-slim{DIGEST} AS app", "COPY --from=app /a /b"],
         [f"FROM node{DIGEST}", "COPY --from=0 /a /b"],
         # --from= outside a COPY instruction is not an image reference.
@@ -116,6 +130,10 @@ def test_dockerfile_allows_pinned(lines: list[str]) -> None:
         f"    services: {{ a: {{ image: pg:16{DIGEST} }}, b: {{ image: redis:7 }} }}",
         "      - { name: co, uses: actions/checkout@v6 }",
         "    container: { image: node:latest }",
+        # An anchor or tag before a flow collection does not hide what is inside it.
+        "    steps: &pinned [{ uses: actions/checkout@v4 }]",
+        "      - !!map { uses: actions/checkout@v4 }",
+        "      - &step{ uses: actions/checkout@v4 }",
     ],
 )
 def test_actions_flags_mutable(line: str) -> None:
@@ -137,11 +155,11 @@ def test_actions_flags_mutable(line: str) -> None:
         "    container:",
         f"      - {{ uses: actions/checkout{SHA} }}",
         f"    container: {{ image: node:24-slim{DIGEST} }}",
-        '      - run: echo "uses: actions/checkout@v6"',
+        "      - run: 'echo \"uses: actions/checkout@v6\"'",
         # Braces and commas inside a run: string are not flow-style YAML keys.
-        '      - run: echo "text, uses: actions/checkout@v4"',
-        '      - run: echo \'{"uses": "not-an-action"}\'',
-        "        run: echo { image: alpine }",
+        "      - run: 'echo \"text, uses: actions/checkout@v4\"'",
+        '      - run: "echo \'{\\"uses\\": \\"not-an-action\\"}\'"',
+        "        run: 'echo { image: alpine }'",
     ],
 )
 def test_actions_allows_pinned(line: str) -> None:
@@ -230,11 +248,19 @@ def test_actions_flags_multiline_flow(lines: list[str]) -> None:
 def test_actions_flow_depth_ends_with_collection() -> None:
     lines = [
         f"      - {{ name: co, uses: actions/checkout{SHA} }}",
-        "      - run: echo 'a, uses: b'",
+        "      - run: \"echo 'a, uses: b'\"",
         '        name: "x { y"',
-        "      - run: echo done, uses: nothing",
+        "      - run: 'echo done, uses: nothing'",
     ]
     assert c.check_actions_file("ci.yml", lines) == []
+
+
+def test_workflow_named_action_is_not_action_metadata() -> None:
+    lines = ["    services:", "      db:", "        image: someorg/dockerfile"]
+    assert c.check_actions_file(".github/workflows/action.yml", lines) != []
+    assert (
+        c.check_actions_file("tools/build/action.yml", ["    image: Dockerfile"]) == []
+    )
 
 
 def test_actions_exempt_covers_images_only() -> None:
