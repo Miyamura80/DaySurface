@@ -142,6 +142,9 @@ def test_dockerfile_allows_pinned(lines: list[str]) -> None:
         "      - &step uses: actions/checkout@v4",
         "      - !!str uses: actions/checkout@v4",
         "      - { &k uses: actions/checkout@v4 }",
+        # ...nor before the value itself.
+        "          bun-version: &v latest",
+        "          node-version: !!str 'latest'",
     ],
 )
 def test_actions_flags_mutable(line: str) -> None:
@@ -168,6 +171,7 @@ def test_actions_flags_mutable(line: str) -> None:
         "      - run: 'echo \"text, uses: actions/checkout@v4\"'",
         '      - run: "echo \'{\\"uses\\": \\"not-an-action\\"}\'"',
         "        run: 'echo { image: alpine }'",
+        f"      - uses: &pin actions/checkout{SHA}",
     ],
 )
 def test_actions_allows_pinned(line: str) -> None:
@@ -188,6 +192,8 @@ def test_actions_allows_pinned(line: str) -> None:
         ],
         ["        with: { node-version:", "          latest }"],
         ["        with: { cache: npm, node-version:", "          'latest', other: x }"],
+        ["          bun-version: &v", "            latest"],
+        ["          bun-version:", "            &v latest"],
     ],
 )
 def test_actions_flags_multiline_latest(lines: list[str]) -> None:
@@ -322,4 +328,5 @@ def test_flow_line_anchor_runs_are_linear() -> None:
     start = time.monotonic()
     c.check_actions_file("ci.yaml", ["key: " + "&" * 5000 + "x"])
     c.check_actions_file("ci.yaml", ["key: " + "!<a> " * 1000 + "x"])
+    c.check_actions_file("ci.yaml", ["- { a: 1" + ",!<" * 20000])
     assert time.monotonic() - start < 1
