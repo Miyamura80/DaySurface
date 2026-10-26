@@ -77,7 +77,7 @@ def key_patterns(key: str) -> tuple[re.Pattern[str], re.Pattern[str], re.Pattern
 
 BLOCK_PATTERNS = key_patterns(BLOCK_KEY)
 FLOW_PATTERNS = key_patterns(FLOW_KEY)
-QUOTED_OR_COMMENT = re.compile(r""""(?:[^"\\]|\\.)*"|'(?:[^']|'')*'|\s#.*$""")
+QUOTED_OR_COMMENT = re.compile(r""""(?:[^"\\]|\\.)*"|'(?:[^']|'')*'|(?:^|\s)#.*$""")
 
 
 def flow_depth(line: str, depth: int) -> int:

@@ -256,6 +256,8 @@ def test_actions_allows_ref_on_next_line(lines: list[str]) -> None:
         # A flow mapping split across lines keeps flow parsing on its continuation lines.
         ["      - { name: co,", "          id: x, uses: actions/checkout@v6 }"],
         ["    services: {", "      db: { image: pg:16 }, cache: { image: redis:7 } }"],
+        # A comment at column 0 does not close the collection.
+        ["        with: { a: 1,", "# }", "          b: 2, uses: actions/checkout@v6 }"],
     ],
 )
 def test_actions_flags_multiline_flow(lines: list[str]) -> None:
