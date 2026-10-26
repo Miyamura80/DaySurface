@@ -28,6 +28,17 @@ SHA = "@" + "b" * 40
         ["ARG BASE", "FROM $BASE"],
         ["ARG BASE=ubuntu:latest", "FROM ${BASE}"],
         ["ARG UV=ghcr.io/astral-sh/uv:0.13.5", "COPY --from=$UV /uv /uv"],
+        # FROM sees only global ARGs: a pinned redeclaration inside a stage does not apply.
+        [
+            "ARG BASE=ubuntu:latest",
+            f"FROM node{DIGEST}",
+            f"ARG BASE=ubuntu{DIGEST}",
+            "FROM $BASE",
+        ],
+        # A stage sees a global ARG only by redeclaring it.
+        [f"ARG UV=uv:0.13.5{DIGEST}", f"FROM node{DIGEST}", "COPY --from=$UV /uv /uv"],
+        # An empty default replaces the earlier pinned one.
+        [f"ARG BASE=node{DIGEST}", "ARG BASE=", "FROM $BASE"],
         # Continuation lines are joined before parsing.
         ["FROM \\", "    --platform=linux/amd64 \\", "    node:24-slim AS app"],
         ["copy --from=busybox /bin/sh /sh"],
@@ -55,6 +66,13 @@ def test_dockerfile_flags_mutable(lines: list[str]) -> None:
         [f"FROM node:24-alpine{DIGEST} AS base", "FROM base AS runner"],
         [f"COPY --from=ghcr.io/astral-sh/uv:0.13.4{DIGEST} /uv /usr/local/bin/uv"],
         [f"ARG BASE=node:24-slim{DIGEST}", "FROM $BASE"],
+        [
+            f"ARG UV=uv:0.13.5{DIGEST}",
+            f"FROM node{DIGEST}",
+            "ARG UV",
+            "COPY --from=$UV /uv /uv",
+        ],
+        [f"FROM node{DIGEST}", f"ARG UV=uv:0.13.5{DIGEST}", "COPY --from=$UV /uv /uv"],
         ["FROM \\", f"    node:24-slim{DIGEST} AS app", "COPY --from=app /a /b"],
         [f"FROM node{DIGEST}", "COPY --from=0 /a /b"],
         # --from= outside a COPY instruction is not an image reference.
@@ -120,10 +138,103 @@ def test_actions_flags_mutable(line: str) -> None:
         f"      - {{ uses: actions/checkout{SHA} }}",
         f"    container: {{ image: node:24-slim{DIGEST} }}",
         '      - run: echo "uses: actions/checkout@v6"',
+        # Braces and commas inside a run: string are not flow-style YAML keys.
+        '      - run: echo "text, uses: actions/checkout@v4"',
+        '      - run: echo \'{"uses": "not-an-action"}\'',
+        "        run: echo { image: alpine }",
     ],
 )
 def test_actions_allows_pinned(line: str) -> None:
     assert c.check_actions_file("ci.yaml", [line]) == []
+
+
+@pytest.mark.parametrize(
+    "lines",
+    [
+        ["          bun-version: >-", "            latest"],
+        ["          bun-version: |", "            latest"],
+        ["          node-version:", "            'latest'"],
+        ["          bun-version:", "            latest  # newest"],
+        [
+            "          bun-version:",
+            "            # newest release",
+            "            latest",
+        ],
+        ["        with: { node-version:", "          latest }"],
+        ["        with: { cache: npm, node-version:", "          'latest', other: x }"],
+    ],
+)
+def test_actions_flags_multiline_latest(lines: list[str]) -> None:
+    assert len(c.check_actions_file("ci.yml", lines)) == 1
+
+
+@pytest.mark.parametrize(
+    "lines",
+    [
+        ["          bun-version: >-", "            1.4.3"],
+        ["          with:", "            bun-version: 1.4.3"],
+        ["          node-version:", "          other: latest"],
+    ],
+)
+def test_actions_allows_multiline_exact_version(lines: list[str]) -> None:
+    assert c.check_actions_file("ci.yml", lines) == []
+
+
+@pytest.mark.parametrize(
+    "lines",
+    [
+        # A ref on the line below its key is still a ref.
+        ["      - uses:", "          actions/checkout@v6"],
+        ["      - uses: >-", "          actions/checkout@v6"],
+        ["    container:", "      node:latest"],
+        ["      db:", "        image:", "          'postgres:16'"],
+    ],
+)
+def test_actions_flags_ref_on_next_line(lines: list[str]) -> None:
+    assert c.check_actions_file("ci.yml", lines) != []
+
+
+@pytest.mark.parametrize(
+    "lines",
+    [
+        ["      - uses:", f"          actions/checkout{SHA}"],
+        ["      - uses: >-", f"          actions/checkout{SHA}"],
+        ["    image: |", f"      postgres:16{DIGEST}"],
+        # `container:` holding a mapping, and `image:` holding a pinned scalar.
+        ["    container:", f"      image: node:24{DIGEST}", "      options: --cpus 1"],
+        ["    container:", "      # nested below", f"      image: node:24{DIGEST}"],
+        ["    image:", f"      postgres:16{DIGEST}"],
+        [
+            "    # pin-exempt: built in the previous job",
+            "    container:",
+            "      local:dev",
+        ],
+    ],
+)
+def test_actions_allows_ref_on_next_line(lines: list[str]) -> None:
+    assert c.check_actions_file("ci.yml", lines) == []
+
+
+@pytest.mark.parametrize(
+    "lines",
+    [
+        # A flow mapping split across lines keeps flow parsing on its continuation lines.
+        ["      - { name: co,", "          id: x, uses: actions/checkout@v6 }"],
+        ["    services: {", "      db: { image: pg:16 }, cache: { image: redis:7 } }"],
+    ],
+)
+def test_actions_flags_multiline_flow(lines: list[str]) -> None:
+    assert c.check_actions_file("ci.yml", lines) != []
+
+
+def test_actions_flow_depth_ends_with_collection() -> None:
+    lines = [
+        f"      - {{ name: co, uses: actions/checkout{SHA} }}",
+        "      - run: echo 'a, uses: b'",
+        '        name: "x { y"',
+        "      - run: echo done, uses: nothing",
+    ]
+    assert c.check_actions_file("ci.yml", lines) == []
 
 
 def test_actions_exempt_covers_images_only() -> None:
@@ -149,6 +260,8 @@ def test_action_metadata_local_dockerfile() -> None:
     assert c.check_actions_file("action.yml", ["  image: ./docker/Dockerfile"]) == []
     assert c.check_actions_file("action.yml", ["  image: alpine:latest"])
     assert c.check_actions_file("action.yml", ["  image: dockerfile:latest"])
+    assert c.check_actions_file("action.yml", ["  image: alpine:latestDockerfile"])
+    assert c.check_actions_file("action.yml", ["  image: build/app.Dockerfile"]) == []
     assert c.check_actions_file("action.yml", [f"  image: alpine:3.22{DIGEST}"]) == []
 
 
