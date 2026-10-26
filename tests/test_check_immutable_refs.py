@@ -32,6 +32,14 @@ SHA = "@" + "b" * 40
         ["FROM \\", "    --platform=linux/amd64 \\", "    node:24-slim AS app"],
         ["copy --from=busybox /bin/sh /sh"],
         ["RUN --mount=type=bind,from=busybox:1.36,target=/b true"],
+        # An exemption covers only the instruction directly after it.
+        ["# pin-exempt: local", "", "FROM node:24-slim"],
+        # Docker skips blank lines inside a continuation, so the guard must too.
+        ["FROM \\", "", "    node:24-slim AS app"],
+        # A `# escape=` directive changes the continuation character.
+        ["# escape=`", "RUN --mount=type=bind,`", "from=busybox:1.36,target=/b true"],
+        # Docker joins continuations without adding a space.
+        ["RUN --mount=type=bind,\\", "from=busybox:1.36,target=/b true"],
     ],
 )
 def test_dockerfile_flags_mutable(lines: list[str]) -> None:
@@ -82,6 +90,14 @@ def test_dockerfile_allows_pinned(lines: list[str]) -> None:
         "          bun-version: latest",
         "          node-version: 'latest' # newest",
         "    image: ${{ matrix.image }}",
+        # Space before the colon and flow-style mappings are valid YAML.
+        "      - uses : actions/checkout@v6",
+        "      - uses: checkout@" + "b" * 40,
+        # Every match on a flow-style line is checked, not only the first.
+        f"    steps: [{{ uses: actions/checkout{SHA} }}, {{ uses: actions/cache@v4 }}]",
+        f"    services: {{ a: {{ image: pg:16{DIGEST} }}, b: {{ image: redis:7 }} }}",
+        "      - { name: co, uses: actions/checkout@v6 }",
+        "    container: { image: node:latest }",
     ],
 )
 def test_actions_flags_mutable(line: str) -> None:
@@ -101,6 +117,9 @@ def test_actions_flags_mutable(line: str) -> None:
         "          bun-version: 1.4.3",
         "          tag: latest",
         "    container:",
+        f"      - {{ uses: actions/checkout{SHA} }}",
+        f"    container: {{ image: node:24-slim{DIGEST} }}",
+        '      - run: echo "uses: actions/checkout@v6"',
     ],
 )
 def test_actions_allows_pinned(line: str) -> None:
@@ -127,6 +146,10 @@ def test_actions_exempt_covers_images_only() -> None:
 def test_action_metadata_local_dockerfile() -> None:
     assert c.check_actions_file("action.yml", ["  image: Dockerfile"]) == []
     assert c.check_actions_file("action.yml", ["  image: docker://alpine:3.22"])
+    assert c.check_actions_file("action.yml", ["  image: ./docker/Dockerfile"]) == []
+    assert c.check_actions_file("action.yml", ["  image: alpine:latest"])
+    assert c.check_actions_file("action.yml", ["  image: dockerfile:latest"])
+    assert c.check_actions_file("action.yml", [f"  image: alpine:3.22{DIGEST}"]) == []
 
 
 @pytest.mark.parametrize(

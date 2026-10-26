@@ -16,7 +16,8 @@ jobs:
         with:
           persist-credentials: false
       # On pull requests, run the base branch's copy of the guard so a PR cannot weaken
-      # the check that polices it. Falls back to the PR's copy until the base has one.
+      # the checker script (falls back to the PR's copy until the base has one). This
+      # workflow file still comes from the PR, so protect it with CODEOWNERS or a ruleset.
       - name: Fetch the base branch's guard
         if: github.event_name == 'pull_request'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
