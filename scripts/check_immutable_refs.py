@@ -42,11 +42,19 @@ MOUNT_FROM = re.compile(r"--mount=\S*?\bfrom=(?P<ref>[^\s,]+)", re.IGNORECASE)
 # A YAML key, optionally quoted, with optional space before the colon. Keys after `{`
 # or `,` count only on a flow-collection line (`- { uses: ... }`, `steps: [{ ... }]`),
 # so a brace or comma inside a `run:` string is not mistaken for a key.
-BLOCK_KEY = r"""^\s*(?:-\s*)?["']?"""
-FLOW_KEY = r"""(?:^\s*(?:-\s*)?|[{,]\s*)["']?"""
+# Node properties: anchors (&a) and tags (!!seq, !<tag:yaml.org,2002:seq>) may precede a
+# key or collection. Each ends at whitespace or a bracket, so a run like `&&&x` has only
+# one way to split (no catastrophic backtracking).
+PROPS = r"""(?:(?:&[^\s\[\]{},]*|!<[^>]*>|!(?!<)[^\s\[\]{},]*)(?:\s+|(?=[\[{])))*"""
+BLOCK_KEY = r"""^\s*(?:-\s*)?""" + PROPS + r"""["']?"""
+FLOW_KEY = r"""(?:^\s*(?:-\s*)?|[{,]\s*)""" + PROPS + r"""["']?"""
 FLOW_LINE = re.compile(
-    r"""^\s*(?:-\s*)?(?:["']?[\w.-]+["']?\s*:\s*)?(?:[&!][^\s\[\]{},]*\s*)*[\[{]"""
-)  # an anchor (&a) or tag (!!seq) may precede the collection
+    r"""^\s*(?:-\s*)?"""
+    + PROPS
+    + r"""(?:["']?[\w.-]+["']?\s*:\s*)?"""
+    + PROPS
+    + r"""[\[{]"""
+)
 YAML_VALUE = r"""["']?\s*:\s*(?P<ref>[^\s#,{}]+)"""
 
 

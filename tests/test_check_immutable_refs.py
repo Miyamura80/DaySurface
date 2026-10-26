@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 import pytest
 
 import scripts.check_immutable_refs as c
@@ -134,6 +136,12 @@ def test_dockerfile_allows_pinned(lines: list[str]) -> None:
         "    steps: &pinned [{ uses: actions/checkout@v4 }]",
         "      - !!map { uses: actions/checkout@v4 }",
         "      - &step{ uses: actions/checkout@v4 }",
+        "      - !<tag:yaml.org,2002:map> { uses: actions/checkout@v4 }",
+        "    steps: !<tag:yaml.org,2002:seq> [{ uses: actions/checkout@v4 }]",
+        # ...nor before a block key.
+        "      - &step uses: actions/checkout@v4",
+        "      - !!str uses: actions/checkout@v4",
+        "      - { &k uses: actions/checkout@v4 }",
     ],
 )
 def test_actions_flags_mutable(line: str) -> None:
@@ -308,3 +316,10 @@ def test_action_metadata_local_dockerfile() -> None:
 def test_file_selection(path: str, dockerfile: bool, actions: bool) -> None:
     assert c.is_dockerfile(path) is dockerfile
     assert c.is_actions_file(path) is actions
+
+
+def test_flow_line_anchor_runs_are_linear() -> None:
+    start = time.monotonic()
+    c.check_actions_file("ci.yaml", ["key: " + "&" * 5000 + "x"])
+    c.check_actions_file("ci.yaml", ["key: " + "!<a> " * 1000 + "x"])
+    assert time.monotonic() - start < 1
