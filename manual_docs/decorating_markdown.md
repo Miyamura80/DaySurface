@@ -3,7 +3,6 @@
 # Useful resources
 
 - https://shields.io/
-- https://banner.godori.dev/
 
 ### Pretty Screenshots
 - https://chalk.ist/ - More control
