@@ -33,7 +33,7 @@ make vulture        # Find dead code
 make ty             # Run type checker
 make lint_links     # Check for broken links in markdown files (README, etc.)
 make docs_test      # Run the docs site's vitest suite (docs/lib/*.test.ts)
-make ci             # Run all CI checks (ruff, vulture, import_lint, ty, docs_lint, docs_test, apps_check, check_deps, file_len_check, blind_except_check, tool_surface_docs_check, docs_links_check)
+make ci             # Run all CI checks (ruff, vulture, import_lint, ty, docs_lint, docs_test, apps_check, check_deps, file_len_check, blind_except_check, tool_surface_docs_check, docs_links_check, lint_immutable_refs)
 
 # Dependencies
 uv sync             # Install dependencies (not pip install)
