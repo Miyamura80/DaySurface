@@ -44,8 +44,12 @@ beforeAll(async () => {
 // Await the close callback: returning before the server has drained leaves it
 // accepting connections until process exit, and hangs frameworks that wait on
 // open handles.
+// closeAllConnections first: close() alone waits for idle keep-alive sockets
+// from fetch() to time out, which overruns the hook timeout on Bun >= 1.4.4.
 afterAll(async () => {
-  if (server) await new Promise<void>((resolve) => server.close(() => resolve()));
+  if (!server) return;
+  server.closeAllConnections();
+  await new Promise<void>((resolve) => server.close(() => resolve()));
 });
 
 const md = { Accept: "text/markdown" };
