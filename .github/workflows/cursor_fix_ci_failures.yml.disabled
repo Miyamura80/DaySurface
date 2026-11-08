@@ -1,3 +1,19 @@
+# DISABLED: GitHub only loads *.yml / *.yaml, so this file never runs.
+#
+# Why: it triggered on `workflow_run` of a workflow named "Test", which does not
+# exist in this repo, so it has never run. It would be dangerous if armed:
+# `workflow_run` runs in the base repo with secrets even for fork PRs, and an
+# auto-approving (`--force`) LLM agent holding CURSOR_API_KEY plus a
+# contents/pull-requests write token would act on attacker-controlled PR text
+# and CI logs. It also pipes an unpinned remote installer into bash.
+#
+# Before re-enabling (rename back to .yml), at minimum:
+#   - point `workflows:` at a real CI workflow name;
+#   - keep the same-repo / non-dependabot / pull_request guard below;
+#   - replace `curl https://cursor.com/install | bash` with a pinned,
+#     checksum-verified package (Cursor publishes no checksums today);
+#   - protect the default branch server-side so the token cannot push to it.
+
 name: Fix CI Failures
 
 on:
@@ -13,7 +29,11 @@ permissions:
 jobs:
   attempt-fix:
     if: >-
-      ${{ github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.name != 'Fix CI Failures' }}
+      ${{ github.event.workflow_run.conclusion == 'failure'
+      && github.event.workflow_run.name != 'Fix CI Failures'
+      && github.event.workflow_run.event == 'pull_request'
+      && github.event.workflow_run.head_repository.full_name == github.repository
+      && github.event.workflow_run.actor.login != 'dependabot[bot]' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
