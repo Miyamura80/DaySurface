@@ -42,6 +42,25 @@ The trailing `=` on `GOOGLE_TOKEN_ENC_KEY` is literal (outside the `${{ }}`): 43
 - The backend service needs a **public domain** enabled, or `${{RAILWAY_PUBLIC_DOMAIN}}` resolves to empty and both URLs break.
 - After deploy, register the `GOOGLE_REDIRECT_URI` value in your Google Cloud OAuth client's authorized redirect URIs, and point your WorkOS redirect/resource at `MCP_PUBLIC_URL`. (Inherent to OAuth; can't be automated.)
 
+### Rotating the token encryption key
+
+`GOOGLE_TOKEN_ENC_KEY` encrypts stored Gmail refresh tokens, webhook signing
+secrets and inbox-curation summaries. To replace it (for example after a
+suspected leak) without disconnecting anyone:
+
+1. Generate a new key:
+   `python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'`
+2. Set `GOOGLE_TOKEN_ENC_OLD_KEYS` to the current key and `GOOGLE_TOKEN_ENC_KEY`
+   to the new one, then deploy. On startup the server re-encrypts every stored
+   row under the new key in the background and logs
+   `Encryption key rotation finished: N rows still on retired keys`.
+3. When that log says `0`, remove `GOOGLE_TOKEN_ENC_OLD_KEYS` and deploy again.
+   The old key now decrypts nothing.
+
+`GOOGLE_TOKEN_ENC_OLD_KEYS` takes several keys, comma-separated. A row that no
+configured key decrypts is counted in the log and left as it is; its user has
+to reconnect Gmail.
+
 ## Optional integrations
 
 See [`.env.example`](../.env.example) for the full list of optional integrations (LLM keys, Stripe, LangFuse, Telegram, etc.). Add any you need from the platform dashboard after the first deploy.

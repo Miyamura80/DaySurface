@@ -3,11 +3,18 @@
 A thin Protocol + Fernet impl. A KMS-backed implementation can be swapped in
 later by satisfying ``TokenEncryption``. ``key_id`` lets us roll keys forward
 without a destructive migration.
+
+Key rotation: ``GOOGLE_TOKEN_ENC_KEY`` is the active key (it encrypts) and
+``GOOGLE_TOKEN_ENC_OLD_KEYS`` lists retired keys that still decrypt. While old
+keys are set, ``db.key_rotation`` re-encrypts every stored row under
+the active key; once it reports none left, the old keys can be removed.
 """
 
+import hashlib
+from collections.abc import Sequence
 from typing import Protocol, runtime_checkable
 
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, MultiFernet
 from loguru import logger as log
 
 from common import global_config
@@ -25,14 +32,30 @@ class TokenEncryption(Protocol):
     def decrypt(self, ciphertext: bytes) -> str: ...
 
 
+def key_fingerprint(key: str) -> str:
+    """Short, non-reversible id for a Fernet key, stamped on rows as ``key_id``.
+
+    Derived from the key itself, so a row's ``key_id`` always names the key
+    that encrypted it and a rotation can never be skipped by forgetting to
+    bump a version label.
+    """
+    return "k" + hashlib.sha256(key.encode()).hexdigest()[:12]
+
+
 class FernetEncryption:
     """Symmetric Fernet encryption.
 
-    Constructor takes a base64-url-encoded 32-byte Fernet key.
+    Constructor takes a base64-url-encoded 32-byte Fernet key. ``old_keys`` are
+    retired keys: they still decrypt, but everything is encrypted with ``key``.
     """
 
-    def __init__(self, key: str, key_id: str = "v1") -> None:
-        self._fernet = Fernet(key.encode() if isinstance(key, str) else key)
+    def __init__(
+        self, key: str, key_id: str = "v1", old_keys: Sequence[str] = ()
+    ) -> None:
+        keys = (key, *old_keys)
+        self._fernet = MultiFernet(
+            [Fernet(k.encode() if isinstance(k, str) else k) for k in keys]
+        )
         self._key_id = key_id
 
     @property
@@ -44,6 +67,13 @@ class FernetEncryption:
 
     def decrypt(self, ciphertext: bytes) -> str:
         return self._fernet.decrypt(ciphertext).decode("utf-8")
+
+    def rotate(self, ciphertext: bytes) -> bytes:
+        """Re-encrypt ``ciphertext`` (from any known key) under the active key.
+
+        Raises ``cryptography.fernet.InvalidToken`` if no known key decrypts it.
+        """
+        return self._fernet.rotate(ciphertext)
 
 
 class PlaintextEncryption:
@@ -65,21 +95,23 @@ class PlaintextEncryption:
         return ciphertext.decode("utf-8")
 
 
-def get_default_encryption() -> TokenEncryption | None:
+def old_keys() -> list[str]:
+    """Retired keys from ``GOOGLE_TOKEN_ENC_OLD_KEYS`` (comma-separated)."""
+    raw = getattr(global_config, "GOOGLE_TOKEN_ENC_OLD_KEYS", None) or ""
+    return [k.strip() for k in raw.split(",") if k.strip()]
+
+
+def get_default_encryption() -> FernetEncryption | None:
     """Return a ``FernetEncryption`` from config, or ``None`` if unset.
 
-    v1 scope: a single active key with ``key_id="v1"``. The ``google_tokens``
-    table stamps ``key_id`` on every row so a multi-key backend can decrypt
-    legacy rows during rotation; that backend is out of scope here and is the
-    KMS upgrade path described in ``mcp_server/MCP_UI_ARCHITECTURE.md``. To
-    rotate this v1 key today, force a re-consent by calling
-    ``gmail_disconnect`` (sets ``revoked_at``) and then ``gmail_connect`` per
-    user. Implementing in-place rotation is intentionally deferred.
+    Rows are stamped with the active key's fingerprint. Rows written before
+    rotation existed carry ``key_id="v1"``; they decrypt the same way and are
+    re-encrypted like any other row on a retired key.
     """
     key = getattr(global_config, "GOOGLE_TOKEN_ENC_KEY", None)
     if not key:
         return None
-    return FernetEncryption(key)
+    return FernetEncryption(key, key_id=key_fingerprint(key), old_keys=old_keys())
 
 
 def require_encryption() -> TokenEncryption:

@@ -41,7 +41,7 @@ from api_server.routes import (
 )
 from api_server.routes.google import webhooks as google_webhooks
 from api_server.routes.payments import checkout, metering, subscription, webhooks
-from api_server.runner import runner_lifespan
+from api_server.runner import rotation_lifespan, runner_lifespan
 from common import global_config
 from mcp_server.server import lifespan as mcp_lifespan
 from mcp_server.server import mount_on as mount_mcp_server
@@ -149,8 +149,8 @@ class Sha256SessionMiddleware(SessionMiddleware):
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Compose the FastMCP session manager with the periodic webhook runner."""
-    async with mcp_lifespan(app), runner_lifespan(app):
+    """Compose the FastMCP session manager, the webhook runner and key rotation."""
+    async with mcp_lifespan(app), runner_lifespan(app), rotation_lifespan(app):
         yield
 
 

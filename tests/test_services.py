@@ -95,6 +95,7 @@ class TestConfigService(TestTemplate):
             "OPENAI_API_KEY",
             "BACKEND_DB_URI",
             "GOOGLE_TOKEN_ENC_KEY",
+            "GOOGLE_TOKEN_ENC_OLD_KEYS",
         ):
             with pytest.raises(KeyError):
                 config_get(ConfigGetInput(key=secret_field))
