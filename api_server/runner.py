@@ -20,6 +20,8 @@ from contextlib import asynccontextmanager
 from loguru import logger as log
 
 from common import global_config
+from common.token_encryption import old_keys
+from db.key_rotation import reencrypt_stale_rows
 from services.gmail_watch_svc import renew_due_watches
 from services.webhook_delivery_svc import cleanup_delivered, drain_due_deliveries
 
@@ -68,3 +70,38 @@ async def runner_lifespan(_app) -> AsyncIterator[None]:
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await task
+
+
+def _run_key_rotation() -> None:
+    try:
+        remaining = reencrypt_stale_rows()
+    except Exception as exc:  # noqa: BLE001
+        # Background-task boundary: a failed pass must not take the server
+        # down. Rows stay readable through the old keys and the next start
+        # retries. Log only the type, never the exception (it may echo SQL).
+        log.error("Encryption key rotation failed: {}", type(exc).__name__)
+        return
+    log.info(
+        "Encryption key rotation finished: {} rows still on retired keys {}",
+        sum(remaining.values()),
+        remaining,
+    )
+
+
+@asynccontextmanager
+async def rotation_lifespan(_app) -> AsyncIterator[None]:
+    """Re-encrypt stored rows in the background while retired keys are set.
+
+    See ``db/key_rotation.py``. Runs once per start, off the event loop, so
+    startup and health checks are not held up.
+    """
+    task = (
+        asyncio.create_task(asyncio.to_thread(_run_key_rotation))
+        if old_keys()
+        else None
+    )
+    try:
+        yield
+    finally:
+        if task is not None and not task.done():
+            task.cancel()

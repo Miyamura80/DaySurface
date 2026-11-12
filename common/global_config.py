@@ -290,6 +290,9 @@ class Config(BaseSettings):
     GOOGLE_REDIRECT_URI: str | None = None
     # Base64-url Fernet key used to encrypt stored refresh tokens
     GOOGLE_TOKEN_ENC_KEY: str | None = None
+    # Comma-separated retired Fernet keys, kept only while stored rows are
+    # re-encrypted under GOOGLE_TOKEN_ENC_KEY (see db/key_rotation.py)
+    GOOGLE_TOKEN_ENC_OLD_KEYS: str | None = None
 
     # Gmail push notifications (Pub/Sub) + outbound webhook fan-out.
     # All optional; if GMAIL_PUBSUB_TOPIC is unset the push pipeline stays
@@ -366,6 +369,23 @@ class Config(BaseSettings):
                         "(url-safe base64-encoded 32-byte key). Generate one with: "
                         "python -c 'from cryptography.fernet import Fernet; "
                         "print(Fernet.generate_key().decode())'"
+                    ) from exc
+        if self.GOOGLE_TOKEN_ENC_OLD_KEYS is not None:
+            old = [k.strip() for k in self.GOOGLE_TOKEN_ENC_OLD_KEYS.split(",")]
+            old = [k for k in old if k]
+            self.GOOGLE_TOKEN_ENC_OLD_KEYS = ",".join(old) or None
+            if old and self.GOOGLE_TOKEN_ENC_KEY is None:
+                raise ValueError(
+                    "GOOGLE_TOKEN_ENC_OLD_KEYS is set but GOOGLE_TOKEN_ENC_KEY is "
+                    "not: set the new key before retiring the old one"
+                )
+            for key in old:
+                try:
+                    Fernet(key.encode())
+                except (ValueError, TypeError) as exc:
+                    raise ValueError(
+                        "GOOGLE_TOKEN_ENC_OLD_KEYS must be comma-separated "
+                        "valid Fernet keys"
                     ) from exc
         return self
 
@@ -524,6 +544,7 @@ _SECRET_FIELD_NAMES: frozenset[str] = frozenset(
         "STRIPE_TEST_WEBHOOK_SECRET",
         "GOOGLE_CLIENT_SECRET",
         "GOOGLE_TOKEN_ENC_KEY",
+        "GOOGLE_TOKEN_ENC_OLD_KEYS",
         "WEBHOOK_RUNNER_TOKEN",
         "RESEND_API_KEY",
         "WAITLIST_SLACK_WEBHOOK_URL",
