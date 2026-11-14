@@ -17,7 +17,7 @@ export const hero: {
   // Optional eyebrow pill (launch/funding/release). Set to "" to hide.
   eyebrow: "",
   // Keep the headline short (< ~44 chars) and benefit/identity-driven.
-  headline: "Triage, draft, sign - without leaving chat.",
+  headline: "Triage and draft email, right in chat.",
   subhead:
     "A real email composer and a ranked inbox, right inside Claude, ChatGPT, or your favorite agent. Your agent triages and writes; you edit and send.",
 };
@@ -46,7 +46,7 @@ export const heroChat: { defaultId: ChatClient["id"]; clients: ChatClient[] } = 
 };
 
 export const features: { heading: string; subhead: string; items: Feature[] } = {
-  // Pays off the hero headline verb by verb: draft, triage, sign. Keep it to
+  // Pays off the hero headline (triage, draft), plus PDF signing. Keep it to
   // end-user outcomes - the transports story lives in the comparison pillars
   // and on /api, and the visuals here must not restage the hero chat mock
   // (which already renders the composer and the ranked inbox).
