@@ -11,9 +11,13 @@ The fetch targets a client-chosen URL, so it is treated as hostile:
 * It goes through the shared SSRF guard: the host is resolved once, every
   address must be public, and the connection is pinned to a validated IP.
   Redirects are not followed.
-* The whole fetch has a 5 second deadline (not just per read, which a server
-  trickling bytes could stretch for hours) and a 10 KB cap on the bytes as sent,
-  with compression refused so the cap cannot be inflated past.
+* The whole fetch, DNS lookup included, has a 5 second deadline. It is enforced
+  on every connect, TLS handshake, read and write (see
+  :func:`services._ssrf_guard.build_client`), so a server that trickles its
+  headers, floods ``100 Continue`` responses or stalls in a chunk trailer is cut
+  off at the deadline, not merely at each per-read timeout. A slow DNS answer
+  cannot be interrupted, but it uses up the same budget. The body is capped at
+  10 KB as sent, with compression refused so the cap cannot be inflated past.
 * At most four fetches run at once; any beyond that fail immediately rather than
   queue. Fetches share the worker threads that serve /mcp, so a flood of slow
   client ids must not be able to occupy them.
@@ -153,6 +157,8 @@ def _validate_redirect_uri(uri: object) -> str:
 
 
 def _fetch_document(client_id: str) -> bytes:
+    # Started before DNS so a slow resolver eats into the budget, not past it.
+    deadline = time.monotonic() + _FETCH_DEADLINE_SECONDS
     try:
         target = validate_and_pin(client_id)
     except SsrfError as exc:
@@ -163,10 +169,9 @@ def _fetch_document(client_id: str) -> bytes:
         "Accept": "application/json",
         "Accept-Encoding": "identity",
     }
-    deadline = time.monotonic() + _FETCH_DEADLINE_SECONDS
     try:
         with (
-            build_client(timeout=_FETCH_DEADLINE_SECONDS) as client,
+            build_client(timeout=_FETCH_DEADLINE_SECONDS, deadline=deadline) as client,
             client.stream(
                 "GET", target.url, headers=headers, extensions=target.extensions
             ) as response,
