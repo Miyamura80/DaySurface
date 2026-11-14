@@ -56,6 +56,36 @@ class TestClientMetadataDocuments(TestTemplate):
                 client_document(token_endpoint_auth_method="private_key_jwt"),
             )
 
+    def test_chatgpt_can_negotiate_public_client_authentication(self):
+        client = cimd.parse_document(
+            CLIENT_ID,
+            client_document(
+                token_endpoint_auth_method="private_key_jwt",
+                token_endpoint_auth_methods_supported=["none", "private_key_jwt"],
+            ),
+        )
+        assert client.token_endpoint_auth_method == "none"
+
+    def test_supported_methods_must_offer_public_authentication(self):
+        with pytest.raises(cimd.ClientMetadataError, match="only public clients"):
+            cimd.parse_document(
+                CLIENT_ID,
+                client_document(
+                    token_endpoint_auth_method="none",
+                    token_endpoint_auth_methods_supported=["private_key_jwt"],
+                ),
+            )
+
+    @pytest.mark.parametrize("methods", [None, "none", [], ["none", 42]])
+    def test_malformed_supported_auth_methods_are_refused(self, methods):
+        with pytest.raises(
+            cimd.ClientMetadataError, match="non-empty array of strings"
+        ):
+            cimd.parse_document(
+                CLIENT_ID,
+                client_document(token_endpoint_auth_methods_supported=methods),
+            )
+
     def test_private_hosts_are_never_fetched(self):
         with (
             patch.object(cimd, "build_client", side_effect=AssertionError("fetched")),
