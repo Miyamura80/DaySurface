@@ -30,12 +30,8 @@ from tests.test_template import TestTemplate
 
 
 def _session_with(capabilities: ClientCapabilities | None) -> ServerSession:
-    """Fake ServerSession; only ``.client_params`` is read by the code under test."""
-    if capabilities is None:
-        fake = SimpleNamespace(client_params=None)
-    else:
-        fake = SimpleNamespace(client_params=SimpleNamespace(capabilities=capabilities))
-    return cast(ServerSession, fake)
+    """Fake ServerSession; only ``.client_capabilities`` is read by the code under test."""
+    return cast(ServerSession, SimpleNamespace(client_capabilities=capabilities))
 
 
 def _google_configured():
@@ -69,7 +65,7 @@ class TestConnectRequiredContract(TestTemplate):
 
 
 class TestClientUrlSupport(TestTemplate):
-    def test_unknown_when_no_client_params(self):
+    def test_unknown_when_no_client_capabilities(self):
         # The production stateless-HTTP case: initialize never reached this
         # transport, so capabilities are unknowable.
         assert _client_url_support(_session_with(None)) is None
@@ -112,7 +108,7 @@ class TestReraiseWithElicitation(TestTemplate):
         assert len(elicitations) == 1
         elic = elicitations[0]
         assert elic.mode == "url"
-        assert elic.elicitationId.startswith("connect-")
+        assert elic.elicitation_id.startswith("connect-")
         assert elic.message == exc.elicitation_message
 
         parsed = urlparse(elic.url)
@@ -158,5 +154,5 @@ class TestReraiseWithElicitation(TestTemplate):
             for _ in range(3):
                 with pytest.raises(UrlElicitationRequiredError) as excinfo:
                     reraise_with_elicitation(_session_with(None), exc)
-                ids.add(excinfo.value.elicitations[0].elicitationId)
+                ids.add(excinfo.value.elicitations[0].elicitation_id)
         assert len(ids) == 3

@@ -4,7 +4,7 @@ The discovery documents that live here:
 
 * **OAuth 2.0 Protected Resource Metadata** (RFC 9728) - tells MCP clients
   where the authorization server is. Required of resource servers by the MCP
-  spec (2025-11-25). Served at the path-form URI
+  spec (2026-07-28; unchanged since 2025-11-25). Served at the path-form URI
   (``/.well-known/oauth-protected-resource/mcp``, tried first because the MCP
   endpoint lives at ``/mcp``) and the root form. Returns 404 when OAuth is not
   configured, so unauthenticated discovery cleanly signals "no authorization
@@ -111,7 +111,7 @@ def _tool_surface() -> list[dict]:
 
     Derived from the live service registry so the card can never drift from the
     tools the server actually exposes. Imported lazily: ``mcp_server.server``
-    builds the FastMCP singleton at import time, so we defer it to request time
+    builds the MCPServer singleton at import time, so we defer it to request time
     to keep this route module cheap to import.
     """
     from mcp_server.server import llm_tool_surface  # noqa: PLC0415

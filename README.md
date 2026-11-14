@@ -107,7 +107,7 @@ One codebase, three interfaces. Write business logic once in `services/` and it 
 ```
 ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
 │ src/cli/app  │  │ mcp_server/  │  │ api_server/  │   transport / interface
-│  (Typer)     │  │ (FastMCP)    │  │ (FastAPI)    │
+│  (Typer)     │  │ (MCPServer)  │  │ (FastAPI)    │
 └──────┬───────┘  └──────┬───────┘  └──────┬───────┘
        │                 │                 │
        └─────────────────┼─────────────────┘

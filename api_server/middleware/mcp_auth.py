@@ -5,7 +5,7 @@ flow - discovery via RFC 9728, registration and PKCE handled by AuthKit),
 WorkOS session JWTs, and API keys - so REST credentials keep working as a
 parallel path. Implemented as pure ASGI middleware (not
 :class:`BaseHTTPMiddleware`) so it doesn't buffer the streaming SSE responses
-FastMCP emits.
+MCPServer emits.
 
 401 responses advertise the Protected Resource Metadata URL via
 ``WWW-Authenticate`` when OAuth is configured, which is how MCP clients

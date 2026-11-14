@@ -1,6 +1,6 @@
 """Shared auth guard for app-only MCP tools.
 
-App-only tools (``visibility=["app"]``) are registered directly on FastMCP and
+App-only tools (``visibility=["app"]``) are registered directly on MCPServer and
 skip the ``_make_headless_tool`` factory in ``mcp_server/_tool_factory.py`` -
 which means they would otherwise bypass scope + quota checks AND trust an
 attacker-supplied ``user_id`` field on the wire.

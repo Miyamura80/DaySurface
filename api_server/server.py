@@ -149,7 +149,7 @@ class Sha256SessionMiddleware(SessionMiddleware):
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Compose the FastMCP session manager with the periodic webhook runner."""
+    """Compose the MCPServer session manager with the periodic webhook runner."""
     async with mcp_lifespan(app), runner_lifespan(app):
         yield
 
@@ -188,7 +188,7 @@ app.add_middleware(
 
 # Outermost, deliberately: it is the only middleware that must stamp *every*
 # byte-producing path, including CORS preflights, the MCPAuthMiddleware 401
-# challenge (which writes to `send` directly), and the FastMCP mount below.
+# challenge (which writes to `send` directly), and the MCPServer mount below.
 #
 # On the mount: `mount_mcp_server(app)` calls `app.mount("/", mcp_app)`, which
 # registers an ordinary route on `app.router`. `add_middleware` wraps the
@@ -248,7 +248,7 @@ if oauth_server.is_self_mode():
     app.router.routes.extend(oauth_server.create_sdk_routes())
 
 # --- MCP server (streamable HTTP) -----------------------------------------
-# Mounts FastMCP at /mcp so CLI/API/MCP share one process, port, and middleware.
+# Mounts MCPServer at /mcp so CLI/API/MCP share one process, port, and middleware.
 _mcp_app = mount_mcp_server(app)
 
 # The mount sits at "/", so it - not FastAPI - answers every path the routers

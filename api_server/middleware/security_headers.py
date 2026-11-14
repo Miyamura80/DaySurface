@@ -2,12 +2,12 @@
 
 Registered as the outermost middleware in ``api_server/server.py`` so it
 stamps *everything* the process emits: router responses, CORS preflights, the
-``MCPAuthMiddleware`` 401 challenge, and the FastMCP mount that answers every
+``MCPAuthMiddleware`` 401 challenge, and the MCPServer mount that answers every
 path the routers don't claim.
 
 Implemented as pure ASGI rather than :class:`~starlette.middleware.base.BaseHTTPMiddleware`
 for the same reason ``MCPAuthMiddleware`` is: headers are rewritten on the
-``http.response.start`` message, so the SSE streams FastMCP emits on ``/mcp``
+``http.response.start`` message, so the SSE streams MCPServer emits on ``/mcp``
 are never buffered.
 
 The default Content-Security-Policy denies everything. This host serves JSON to

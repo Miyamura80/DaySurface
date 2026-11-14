@@ -8,7 +8,7 @@ import os
 from collections.abc import Callable
 
 from mcp.server.elicitation import ElicitationResult
-from mcp.server.fastmcp.server import Context
+from mcp.server.mcpserver import Context
 from mcp.types import (
     Annotations,
     AudioContent,
@@ -19,6 +19,32 @@ from mcp.types import (
     TextContent,
 )
 from pydantic import BaseModel
+
+
+def client_can_elicit(session) -> bool:
+    """True only when an in-band ``elicitation/create`` can actually complete.
+
+    Two conditions, both required:
+
+    - the client DECLARED the elicitation capability (in ``initialize`` on
+      handshake-era revisions, in each request's ``_meta`` on 2026-07-28), and
+    - this request has a back-channel for server-initiated requests
+      (``session.can_send_request``). That is False on every 2026-07-28
+      request (the protocol removed server-initiated requests; input there is
+      gathered via multi-round-trip ``InputRequiredResult``), on stateless
+      legacy HTTP (the client's reply POST is uncorrelatable) and in
+      JSON-response mode. ``ctx.elicit()`` would raise ``NoBackChannelError``
+      (or, in v1, hang) in those cases.
+
+    Deliberately conservative: never attempt-when-unknown.
+    """
+    if session is None:
+        return False
+    if not session.can_send_request:
+        return False
+    return session.check_client_capability(
+        ClientCapabilities(elicitation=ElicitationCapability())
+    )
 
 
 def build_app_meta(resource_uri: str) -> dict:
@@ -72,20 +98,16 @@ class EnhancedTool[TInput: BaseModel, TOutput: BaseModel]:
 
     @property
     def can_elicit(self) -> bool:
-        """True only when the client DECLARED the elicitation capability.
+        """True only when the client declared elicitation AND it can complete.
 
-        Deliberately conservative: under ``stateless_http=True`` (the
-        production default) the per-request session never sees the client's
-        ``initialize`` params, so this returns False even for
-        elicitation-capable hosts - which is correct, because in-band
-        elicitation cannot complete stateless (the client's response POST is
-        uncorrelatable; ``ctx.elicit()`` would hang). Do NOT change this to
+        See :func:`client_can_elicit`. Under 2026-07-28 and under
+        ``stateless_http=True`` (the production default for legacy clients)
+        this is False even for elicitation-capable hosts, so enhancers take
+        their non-elicitation fallbacks. Do NOT change this to
         attempt-when-unknown. See the transport comment in
         ``mcp_server/server.py``.
         """
-        return self._ctx.session.check_client_capability(
-            ClientCapabilities(elicitation=ElicitationCapability())
-        )
+        return client_can_elicit(self._ctx.session)
 
     @property
     def can_show_app(self) -> bool:
@@ -120,7 +142,7 @@ class EnhancedTool[TInput: BaseModel, TOutput: BaseModel]:
         annotations = _annotations(audience)
         self.extra_content.append(
             ImageContent(
-                type="image", data=data, mimeType=mime_type, annotations=annotations
+                type="image", data=data, mime_type=mime_type, annotations=annotations
             )
         )
 
@@ -134,7 +156,7 @@ class EnhancedTool[TInput: BaseModel, TOutput: BaseModel]:
         annotations = _annotations(audience)
         self.extra_content.append(
             AudioContent(
-                type="audio", data=data, mimeType=mime_type, annotations=annotations
+                type="audio", data=data, mime_type=mime_type, annotations=annotations
             )
         )
 
