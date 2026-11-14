@@ -22,13 +22,14 @@ if [ -n "${CLAUDE_ENV_FILE:-}" ] && ! grep -qF "$path_line" "$CLAUDE_ENV_FILE" 2
   echo "$path_line" >> "$CLAUDE_ENV_FILE"
 fi
 
-# pyproject.toml requires uv >= 0.13.4: >= 0.9.17 for the relative `exclude-newer`
+# pyproject.toml requires uv >= 0.13.5: >= 0.9.17 for the relative `exclude-newer`
 # supply-chain quarantine (older uv can't parse it and rewrites uv.lock on
-# every invocation, which makes prek fail every commit), and 0.13.4 for the
-# bundled root store that drops the compromised eMudhra CA (GHSA-hq85-5cpj-mr62).
+# every invocation, which makes prek fail every commit), and 0.13.5 because it
+# rejects chains containing the compromised eMudhra intermediate keys (0.13.4
+# only dropped the eMudhra CA root, GHSA-hq85-5cpj-mr62).
 # Upgrade from PyPI (uv's own self-update path hits GitHub rate limits in
 # sandboxed networks).
-REQUIRED_UV="0.13.4"
+REQUIRED_UV="0.13.5"
 current_uv="$(uv --version 2>/dev/null | awk '{print $2}')"
 if [ -z "$current_uv" ] || [ "$(printf '%s\n%s\n' "$REQUIRED_UV" "$current_uv" | sort -V | head -1)" != "$REQUIRED_UV" ]; then
   uv tool install --force "uv>=${REQUIRED_UV}"
