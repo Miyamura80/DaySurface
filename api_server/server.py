@@ -22,6 +22,7 @@ from api_server.middleware.error_handler import (
     RequestIdMiddleware,
     attachment_too_large_handler,
     client_refusal_handler,
+    invalid_argument_handler,
     retry_later_handler,
 )
 from api_server.middleware.mcp_auth import MCPAuthMiddleware
@@ -45,7 +46,7 @@ from api_server.runner import runner_lifespan
 from common import global_config
 from mcp_server.server import lifespan as mcp_lifespan
 from mcp_server.server import mount_on as mount_mcp_server
-from services import ClientRefusalError, RetryLaterError
+from services import ClientRefusalError, InvalidArgument, RetryLaterError
 from services.gmail_svc import GmailAttachmentTooLargeError
 
 # Logging (scrubber + prod diagnose gating) is configured in api_server/__init__.py,
@@ -222,6 +223,8 @@ app.add_exception_handler(GmailAttachmentTooLargeError, attachment_too_large_han
 app.add_exception_handler(RetryLaterError, retry_later_handler)
 # A deliberate refusal (draft gone, duplicate reply) is the caller's 4xx.
 app.add_exception_handler(ClientRefusalError, client_refusal_handler)
+# A service rejecting one of its arguments is the caller's 400.
+app.add_exception_handler(InvalidArgument, invalid_argument_handler)
 
 # --- Routes ---------------------------------------------------------------
 

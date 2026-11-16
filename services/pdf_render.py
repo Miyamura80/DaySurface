@@ -14,9 +14,10 @@ import pypdfium2 as pdfium
 
 from common import global_config
 from models.pdf_forms import PdfPageImage
+from services import ModelFacingError
 
 
-class PdfRenderRequestError(Exception):
+class PdfRenderRequestError(ModelFacingError):
     """Raised for out-of-range pages or too many pages in one render request."""
 
 

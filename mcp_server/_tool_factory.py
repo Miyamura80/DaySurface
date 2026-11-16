@@ -18,9 +18,10 @@ from typing import Any
 
 from loguru import logger as log
 from mcp.server.mcpserver import Context, MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.session import ServerSession
 from mcp.types import CallToolResult, TextContent
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from mcp_server.enhancers import EnhancerEntry, get_enhancer
 from mcp_server.enhancers.base import EnhancedTool, build_app_meta
@@ -43,9 +44,9 @@ def _check_scopes() -> None:
     from api_server.auth.scopes import SERVICES_EXECUTE, check_scopes  # noqa: PLC0415
 
     if not check_scopes([SERVICES_EXECUTE], user.scopes):
-        raise PermissionError(
-            "Insufficient permissions: 'services:execute' scope required."
-        )
+        # A ToolError keeps its text through the SDK's sanitization: the
+        # refusal is ours, written for the caller.
+        raise ToolError("Insufficient permissions: 'services:execute' scope required.")
 
 
 def _check_quota() -> None:
@@ -161,6 +162,21 @@ def _current_session(ctx: Context | None) -> ServerSession | None:
         return None
 
 
+def _build_input(input_model: type, kwargs: dict[str, Any]) -> Any:
+    """Construct the service's input model, reporting rejection as a ToolError.
+
+    The SDK already validated the arguments against the tool's JSON schema;
+    what can still fail here are the model's own validators (cross-field
+    rules, normalisation). That is the caller's mistake to read and correct,
+    so it crosses the SDK's sanitization as a ``ToolError``. The text is
+    pydantic's rendering of the caller's own arguments.
+    """
+    try:
+        return input_model(**kwargs)
+    except ValidationError as exc:
+        raise ToolError(str(exc)) from exc
+
+
 def make_tool(mcp: MCPServer, entry: ServiceEntry) -> None:
     """Register a service as an MCP tool - enhanced if an enhancer exists, else headless."""
     enhancer_entry = get_enhancer(entry.name)
@@ -184,7 +200,7 @@ def _make_headless_tool(mcp: MCPServer, entry: ServiceEntry) -> None:
                 kwargs["user_id"] = user.user_id
             elif not kwargs.get("user_id"):
                 kwargs.setdefault("user_id", "")
-        input_obj = input_model(**kwargs)
+        input_obj = _build_input(input_model, kwargs)
         _meter(entry)
         try:
             return func(input_obj)
@@ -219,7 +235,7 @@ def _make_enhanced_tool(
                 kwargs["user_id"] = user.user_id
             elif not kwargs.get("user_id"):
                 kwargs.setdefault("user_id", "")
-        input_obj = input_model(**kwargs)
+        input_obj = _build_input(input_model, kwargs)
         await _meter_async(entry)
         tool = EnhancedTool(ctx=ctx, input=input_obj, service_fn=func)
         try:

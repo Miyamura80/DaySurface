@@ -15,7 +15,11 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from googleapiclient.errors import HttpError
 
-from api_server.middleware.error_handler import client_refusal_handler
+from api_server.middleware.error_handler import (
+    client_refusal_handler,
+    invalid_argument_handler,
+)
+from api_server.server import app as real_app
 from models.gmail import (
     AttachmentInput,
     GmailAddAttachmentInput,
@@ -26,7 +30,7 @@ from models.gmail import (
     GmailSendInput,
     GmailUpdateDraftInput,
 )
-from services import ClientRefusalError
+from services import ClientRefusalError, InvalidArgument
 from services._gmail_fake_backend import _FakeGmailResource
 from services.gmail_attachments_svc import gmail_add_attachment
 from services.gmail_draft_helpers import DraftGoneError
@@ -168,6 +172,19 @@ class TestRefusalsOverHTTP(TestTemplate):
         resp = TestClient(app).post("/x")
         assert resp.status_code == status
         assert str(error) in resp.text
+
+    def test_invalid_argument_is_a_400(self):
+        assert real_app.exception_handlers[InvalidArgument] is invalid_argument_handler
+        app = FastAPI()
+        app.add_exception_handler(InvalidArgument, invalid_argument_handler)
+
+        def _route():
+            raise InvalidArgument("Pass 'to' explicitly.")
+
+        app.add_api_route("/x", _route, methods=["POST"])
+        resp = TestClient(app).post("/x")
+        assert resp.status_code == 400
+        assert "Pass 'to' explicitly." in resp.text
 
 
 def _msg(mid: str, labels: list[str], sender: str, to: str, ago: timedelta) -> dict:

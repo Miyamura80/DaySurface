@@ -240,3 +240,13 @@ async def client_refusal_handler(request: Request, exc: Exception) -> Response:
     request_id = getattr(request.state, "request_id", uuid.uuid4().hex)
     status = getattr(exc, "http_status", 400)
     return _build_error_response(status, str(exc), request_id)
+
+
+async def invalid_argument_handler(request: Request, exc: Exception) -> Response:
+    """Map ``InvalidArgument`` (a service rejecting an argument) to 400.
+
+    The message is written for the caller (``services.ModelFacingError``), so
+    it is returned verbatim instead of the generic 500.
+    """
+    request_id = getattr(request.state, "request_id", uuid.uuid4().hex)
+    return _build_error_response(400, str(exc), request_id)

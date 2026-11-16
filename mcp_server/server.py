@@ -141,13 +141,13 @@ def _transport_security() -> TransportSecuritySettings:
 # resources and ``_meta.ui`` tool metadata are still registered by hand below
 # so the same wire shapes reach handshake-era hosts that predate extensions.
 class _DaySurfaceMCPServer(MCPServer):
-    """MCPServer that lets first-party failure text reach the model.
+    """MCPServer that lets model-facing failure text reach the model.
 
     SDK 2.x reports any non-``ToolError`` tool exception as a bare
     ``Error executing tool <name>``. Our services fail with model-facing
-    messages (recovery scripts, quota/scope refusals), so a crash whose cause
-    is first-party is re-labelled as a ``ToolError`` keeping its text - the v1
-    wire behavior. Third-party crashes stay sanitized. See
+    messages (recovery scripts, quota refusals), so a crash whose cause is a
+    ``services.ModelFacingError`` (or a billing refusal) is re-labelled as a
+    ``ToolError`` keeping its text. Everything else stays sanitized. See
     ``mcp_server/_tool_errors.py``. Tool functions themselves are untouched,
     so in-process callers still see the original exception types.
     """
@@ -159,6 +159,11 @@ class _DaySurfaceMCPServer(MCPServer):
             message = model_facing_message(exc.__cause__)
             if message is None:
                 raise
+            # Once relabelled, the SDK treats it as a deliberate ToolError and
+            # logs only its text at INFO; keep the original traceback on record.
+            log.opt(exception=exc.__cause__).error(
+                "tool {!r} failed with a model-facing error", name
+            )
             raise ToolError(f"Error executing tool {name}: {message}") from exc
 
 
