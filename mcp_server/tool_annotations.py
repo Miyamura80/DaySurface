@@ -16,7 +16,7 @@ Rules used for the three flags:
   database, or anywhere else.
 - ``destructive``: deletes something or does something that can't be taken
   back (deleting a draft, an attachment, a webhook, a signing secret or the
-  Gmail link; sending an email). Additive or reversible changes (archive,
+  Gmail link; sending an email; signing a PDF). Additive or reversible changes (archive,
   mark read, create or edit a draft) are not.
 - ``open_world``: can reach or affect people or systems outside the user's
   own account - sending email, posting webhooks, fetching arbitrary URLs.
@@ -71,7 +71,9 @@ TOOL_HINTS: dict[str, _Hints] = {
     # PDF forms
     "pdf_open": _WRITE,
     "pdf_edit": _WRITE,
-    "pdf_request_signature": _WRITE,
+    # Signing is terminal (no re-sign or revocation), and request_signature can
+    # complete it in the same call via the elicitation fallback.
+    "pdf_request_signature": _DELETE,
     "pdf_export": _WRITE,
     # Account and settings
     "sign_out": _WRITE,  # revokes sessions; signing in again restores access
@@ -98,7 +100,7 @@ TOOL_HINTS: dict[str, _Hints] = {
     "gmail_composer.discard": _DELETE,
     "gmail_composer.send": _SEND,
     "pdf_signer.get_document": _READ,
-    "pdf_signer.sign": _WRITE,
+    "pdf_signer.sign": _DELETE,  # sealing a document is irreversible
     "pdf_signer.cancel": _WRITE,
     "settings.get": _READ,
     "settings.subscribe": _Hints(read_only=False, open_world=True),

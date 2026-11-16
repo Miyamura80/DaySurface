@@ -51,6 +51,13 @@ class TestToolAnnotations(TestTemplate):
             assert a.destructiveHint is True
             assert a.openWorldHint is True
 
+    def test_irreversible_signing_is_destructive(self):
+        tools = _tools_by_name()
+        for name in ("pdf_signer.sign", "pdf_request_signature"):
+            a = tools[name].annotations
+            assert a is not None
+            assert a.destructiveHint is True, name
+
     def test_reads_are_read_only(self):
         tools = _tools_by_name()
         for name in ("gmail_list_inbox", "gmail_get_thread", "inbox_search"):
