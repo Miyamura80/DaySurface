@@ -24,6 +24,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 from starlette.applications import Starlette
 
 from common import global_config
+from mcp_server._fastmcp import DaySurfaceMCP
 from mcp_server._tool_factory import make_tool
 from services import ServiceEntry, discover_services, get_registry
 
@@ -125,7 +126,7 @@ def _transport_security() -> TransportSecuritySettings:
 # keeps that until it implements those SEPs) but stops persisting/validating
 # per-session state, which is what actually fixes the error - and it's
 # forward-compatible with the RC.
-mcp: FastMCP = FastMCP(
+mcp: FastMCP = DaySurfaceMCP(
     "daysurface",
     instructions=_MCP_INSTRUCTIONS,
     transport_security=_transport_security(),
