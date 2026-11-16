@@ -50,6 +50,9 @@ from services.webhooks_svc import (
 _BACKOFF_BASE_S = 30
 _BACKOFF_CAP_S = 3600
 _HTTP_TIMEOUT_S = 10.0
+# Wall-clock ceiling on one delivery POST: the per-operation timeout alone lets a
+# subscriber that trickles its response hold the runner indefinitely.
+_DELIVERY_DEADLINE_S = 30.0
 _DEFAULT_BATCH = 20
 # A claimed ("sending") row left behind by a crashed runner is reclaimable
 # after this many seconds so deliveries never get stranded.
@@ -139,7 +142,8 @@ def _post(
     # Loopback subscribers exist only in dev (subscribe-time guard enforces this),
     # so mirror that allowance here rather than resolving them to a hard reject.
     target = validate_and_pin(url, allow_loopback=global_config.is_dev)
-    with build_client(timeout=_HTTP_TIMEOUT_S) as client:
+    deadline = time.monotonic() + _DELIVERY_DEADLINE_S
+    with build_client(timeout=_HTTP_TIMEOUT_S, deadline=deadline) as client:
         resp = client.post(
             target.url,
             content=body,
