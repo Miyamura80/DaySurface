@@ -38,9 +38,13 @@ from __future__ import annotations
 
 import ipaddress
 import socket
+import time
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
+from typing import cast
 from urllib.parse import urlparse
 
+import httpcore
 import httpx
 
 _IPAddress = ipaddress.IPv4Address | ipaddress.IPv6Address
@@ -167,12 +171,163 @@ def validate_and_pin(url: str, *, allow_loopback: bool = False) -> PinnedTarget:
     )
 
 
-def build_client(*, timeout: float) -> httpx.Client:
+def build_client(*, timeout: float, deadline: float | None = None) -> httpx.Client:
     """An ``httpx.Client`` hardened for SSRF-guarded requests.
 
     ``trust_env=False`` so an environment proxy cannot route past the local DNS
     validation; ``follow_redirects=False`` so a 3xx to an internal address is
     never followed automatically (the caller re-validates + re-pins each hop, or
     treats the redirect as a failure).
+
+    ``timeout`` bounds each socket operation, not the request: a server that
+    sends one byte just inside it, or an endless run of ``100 Continue``
+    responses, keeps a request alive indefinitely. Pass ``deadline`` (a
+    :func:`time.monotonic` value) to bound the whole exchange as well: every
+    connect, TLS handshake, read and write is then capped at the time left, and
+    fails with a timeout once it has run out, wherever in the response the
+    server stalls (status line, headers, body, chunk trailers).
     """
-    return httpx.Client(timeout=timeout, trust_env=False, follow_redirects=False)
+    if deadline is None:
+        return httpx.Client(timeout=timeout, trust_env=False, follow_redirects=False)
+    pool = httpcore.ConnectionPool(
+        ssl_context=httpx.create_ssl_context(trust_env=False),
+        network_backend=_DeadlineBackend(httpcore.SyncBackend(), deadline),
+    )
+    return httpx.Client(
+        timeout=timeout,
+        trust_env=False,
+        follow_redirects=False,
+        transport=_PoolTransport(pool),
+    )
+
+
+def _time_left(deadline: float, timeout: float | None, exc: type[Exception]) -> float:
+    """The timeout for one operation: ``timeout`` capped at the time left."""
+    left = deadline - time.monotonic()
+    if left <= 0:
+        raise exc("request deadline exceeded")
+    return left if timeout is None else min(timeout, left)
+
+
+class _DeadlineStream(httpcore.NetworkStream):
+    """A network stream whose every operation is capped at a shared deadline."""
+
+    def __init__(self, stream: httpcore.NetworkStream, deadline: float) -> None:
+        self._stream = stream
+        self._deadline = deadline
+
+    def read(self, max_bytes: int, timeout: float | None = None) -> bytes:
+        timeout = _time_left(self._deadline, timeout, httpcore.ReadTimeout)
+        return self._stream.read(max_bytes, timeout)
+
+    def write(self, buffer: bytes, timeout: float | None = None) -> None:
+        timeout = _time_left(self._deadline, timeout, httpcore.WriteTimeout)
+        self._stream.write(buffer, timeout)
+
+    def close(self) -> None:
+        self._stream.close()
+
+    def start_tls(self, ssl_context, server_hostname=None, timeout=None):
+        timeout = _time_left(self._deadline, timeout, httpcore.ConnectTimeout)
+        stream = self._stream.start_tls(ssl_context, server_hostname, timeout)
+        return _DeadlineStream(stream, self._deadline)
+
+    def get_extra_info(self, info: str):
+        return self._stream.get_extra_info(info)
+
+
+class _DeadlineBackend(httpcore.NetworkBackend):
+    """Wraps an httpcore backend so every connection it opens obeys ``deadline``."""
+
+    def __init__(self, backend: httpcore.NetworkBackend, deadline: float) -> None:
+        self._backend = backend
+        self._deadline = deadline
+
+    def connect_tcp(
+        self, host, port, timeout=None, local_address=None, socket_options=None
+    ):
+        timeout = _time_left(self._deadline, timeout, httpcore.ConnectTimeout)
+        stream = self._backend.connect_tcp(
+            host, port, timeout, local_address, socket_options
+        )
+        return _DeadlineStream(stream, self._deadline)
+
+    def connect_unix_socket(self, path, timeout=None, socket_options=None):
+        raise httpcore.ConnectError("unix sockets are not allowed")
+
+    def sleep(self, seconds: float) -> None:
+        self._backend.sleep(seconds)
+
+
+def _to_httpx_error(exc: Exception, request: httpx.Request) -> httpx.TransportError:
+    """The httpx exception matching an httpcore one (they share class names)."""
+    cls = getattr(httpx, type(exc).__name__, None)
+    if not (isinstance(cls, type) and issubclass(cls, httpx.TransportError)):
+        cls = httpx.TransportError
+    return cls(str(exc), request=request)
+
+
+_HTTPCORE_ERRORS = (
+    httpcore.TimeoutException,
+    httpcore.NetworkError,
+    httpcore.ProtocolError,
+    httpcore.UnsupportedProtocol,
+    httpcore.ProxyError,
+)
+
+
+class _ResponseStream(httpx.SyncByteStream):
+    def __init__(self, stream: Iterable[bytes], request: httpx.Request) -> None:
+        self._stream = stream
+        self._request = request
+
+    def __iter__(self) -> Iterator[bytes]:
+        try:
+            yield from self._stream
+        except _HTTPCORE_ERRORS as exc:
+            raise _to_httpx_error(exc, self._request) from exc
+
+    def close(self) -> None:
+        close = getattr(self._stream, "close", None)
+        if close is not None:
+            close()
+
+
+class _PoolTransport(httpx.BaseTransport):
+    """An httpx transport over a caller-built ``httpcore.ConnectionPool``.
+
+    httpx's own ``HTTPTransport`` has no way to pass a network backend, so this
+    does the same request/response translation on public APIs only.
+    """
+
+    def __init__(self, pool: httpcore.ConnectionPool) -> None:
+        self._pool = pool
+
+    def handle_request(self, request: httpx.Request) -> httpx.Response:
+        core_request = httpcore.Request(
+            method=request.method,
+            url=httpcore.URL(
+                scheme=request.url.raw_scheme,
+                host=request.url.raw_host,
+                port=request.url.port,
+                target=request.url.raw_path,
+            ),
+            headers=request.headers.raw,
+            content=request.stream,
+            extensions=request.extensions,
+        )
+        try:
+            response = self._pool.handle_request(core_request)
+        except _HTTPCORE_ERRORS as exc:
+            raise _to_httpx_error(exc, request) from exc
+        # A sync pool always returns a sync stream; this narrows the type.
+        stream = cast("Iterable[bytes]", response.stream)
+        return httpx.Response(
+            status_code=response.status,
+            headers=response.headers,
+            stream=_ResponseStream(stream, request),
+            extensions=response.extensions,
+        )
+
+    def close(self) -> None:
+        self._pool.close()
