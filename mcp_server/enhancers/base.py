@@ -111,10 +111,15 @@ class EnhancedTool[TInput: BaseModel, TOutput: BaseModel]:
 
     @property
     def can_show_app(self) -> bool:
-        """Best-effort check; spec lacks a standard capability for app rendering.
+        """Whether to attach the app; True unless MCP_DISABLE_APPS is set.
 
-        Defaults to True. Set MCP_DISABLE_APPS=1 to force-skip on misbehaving clients.
-        See mcp_server/MCP_UI_EDGE_CASES.md C2.
+        The SDK's ``mcp.server.apps.client_supports_apps`` reads the client's
+        ``io.modelcontextprotocol/ui`` extension capability, but it is
+        deliberately not consulted here: handshake-era hosts that render MCP
+        Apps often do not declare that extension, and attaching ``_meta.ui``
+        is harmless to a host that ignores it (the structured result and text
+        content still carry the data). Set MCP_DISABLE_APPS=1 to force-skip on
+        misbehaving clients. See mcp_server/MCP_UI_EDGE_CASES.md C2.
         """
         return os.environ.get("MCP_DISABLE_APPS", "") == ""
 

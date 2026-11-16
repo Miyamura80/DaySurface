@@ -158,7 +158,8 @@ def _current_session(ctx: Context | None) -> ServerSession | None:
         return None
     try:
         return ctx.session
-    except (LookupError, ValueError, AttributeError):
+    except ValueError:
+        # Context.request_context raises ValueError when no request is bound.
         return None
 
 

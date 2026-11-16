@@ -29,9 +29,16 @@ from services.gmail_svc import GmailNotConnectedError
 from tests.test_template import TestTemplate
 
 
-def _session_with(capabilities: ClientCapabilities | None) -> ServerSession:
-    """Fake ServerSession; only ``.client_capabilities`` is read by the code under test."""
-    return cast(ServerSession, SimpleNamespace(client_capabilities=capabilities))
+def _session_with(
+    capabilities: ClientCapabilities | None, protocol_version: str = "2025-11-25"
+) -> ServerSession:
+    """Fake ServerSession; only capabilities and protocol version are read."""
+    return cast(
+        ServerSession,
+        SimpleNamespace(
+            client_capabilities=capabilities, protocol_version=protocol_version
+        ),
+    )
 
 
 def _google_configured():
@@ -145,6 +152,15 @@ class TestReraiseWithElicitation(TestTemplate):
         ):
             reraise_with_elicitation(_session_with(None), exc)
         assert excinfo.value is exc
+
+    def test_modern_protocol_omits_elicitation_id(self):
+        # 2026-07-28 removed elicitationId; the client retries the call.
+        cap = ElicitationCapability(url=UrlElicitationCapability())
+        session = _session_with(ClientCapabilities(elicitation=cap), "2026-07-28")
+        p1, p2 = _google_configured()
+        with p1, p2, pytest.raises(UrlElicitationRequiredError) as excinfo:
+            reraise_with_elicitation(session, GmailNotConnectedError("user-7"))
+        assert excinfo.value.elicitations[0].elicitation_id is None
 
     def test_elicitation_ids_are_unique(self):
         exc = GmailNotConnectedError("user-11")

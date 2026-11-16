@@ -21,7 +21,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from loguru import logger as log
-from mcp.server.apps import Apps
+from mcp.server.apps import APP_MIME_TYPE, Apps
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError, UnexpectedToolError
 from mcp.server.transport_security import TransportSecuritySettings
@@ -33,7 +33,6 @@ from mcp_server._tool_factory import make_tool
 from services import ServiceEntry, discover_services, get_registry
 
 _APPS_DIR = Path(__file__).parent / "apps"
-_APP_MIME_TYPE = "text/html;profile=mcp-app"
 
 # Module-level singleton: app_tools / enhancers may import this at module-load
 # time (e.g. ``@mcp.tool``), so it must exist before discovery runs.
@@ -137,9 +136,14 @@ def _transport_security() -> TransportSecuritySettings:
 #
 # MCP Apps is an extension in 2026-07-28 (SEP-2133 framework, identifier
 # ``io.modelcontextprotocol/ui``). An empty ``Apps()`` only advertises it under
-# ``capabilities.extensions`` (server/discover + initialize); our ui://
-# resources and ``_meta.ui`` tool metadata are still registered by hand below
-# so the same wire shapes reach handshake-era hosts that predate extensions.
+# ``capabilities.extensions`` (server/discover + initialize). Our ui://
+# resources and ``_meta.ui`` tool metadata are registered by hand below instead
+# of through ``Apps.tool``/``Apps.add_resource``: an extension's contributions
+# are applied once, when the MCPServer is constructed, but our tools come from
+# the service registry later (``build_mcp_server``) and our app HTML is read
+# lazily per request so a missing build degrades to a placeholder. The wire
+# shapes are the same either way (extension contributions go through the
+# ordinary tool/resource surface and reach every protocol era).
 class _DaySurfaceMCPServer(MCPServer):
     """MCPServer that lets model-facing failure text reach the model.
 
@@ -277,7 +281,7 @@ def _register_app_resources(mcp: MCPServer) -> None:
 def _register_app_resource(
     mcp: MCPServer, uri: str, html_path: Path, app_name: str
 ) -> None:
-    @mcp.resource(uri, mime_type=_APP_MIME_TYPE, name=f"{app_name} app")
+    @mcp.resource(uri, mime_type=APP_MIME_TYPE, name=f"{app_name} app")
     def _read_app() -> str:
         if not html_path.exists():
             log.warning("MCP App {!r} missing build at {}", app_name, html_path)

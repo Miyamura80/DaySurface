@@ -95,7 +95,9 @@ def reraise_with_elicitation(
     # 2026-07-28 removed it (the client learns the outcome by retrying the
     # call, MRTR-style). The actual user binding travels inside the auth URL
     # (e.g. Gmail's signed ``state`` parameter) in both eras.
-    modern = getattr(session, "protocol_version", None) in MODERN_PROTOCOL_VERSIONS
+    modern = (
+        session is not None and session.protocol_version in MODERN_PROTOCOL_VERSIONS
+    )
     elicitation_id = None if modern else f"connect-{secrets.token_urlsafe(8)}"
     raise UrlElicitationRequiredError(
         [
