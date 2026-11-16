@@ -16,9 +16,9 @@ PROJECT_ROOT=.
 # Minimum uv version required by this repo. `[tool.uv]` in pyproject.toml uses a
 # relative `exclude-newer` duration that only uv >= 0.9.17 can parse; an older uv
 # silently discards the whole table (guard included) and rewrites uv.lock. See #196.
-# Raised to 0.13.4 for its updated bundled root store, which drops the compromised
-# eMudhra CA root (GHSA-hq85-5cpj-mr62).
-MIN_UV_VERSION=0.13.4
+# Raised to 0.13.5, which rejects chains containing the compromised eMudhra
+# intermediate keys (0.13.4 only dropped the root, GHSA-hq85-5cpj-mr62).
+MIN_UV_VERSION=0.13.5
 
 .DEFAULT_GOAL := help
 

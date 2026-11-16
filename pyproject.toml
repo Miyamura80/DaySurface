@@ -71,6 +71,7 @@ dependencies = [
     "pypdf>=6.19.0",
     "pyhanko>=0.35.2",
     "pypdfium2>=5.12.1",
+    "httpcore>=1.0.9",
 ]
 readme = "README.md"
 requires-python = ">= 3.12"
@@ -188,6 +189,8 @@ exclude = [
     "tests/test_paywall.py",
     "tests/test_enhancer_fallback.py",
     "tests/test_image_proxy.py",
+    # autouse fixture, reached by pytest only.
+    "tests/test_oauth_cimd_deadline.py",
     "tests/test_scopes.py",
     "utils/llm/",
     "common/",
@@ -256,9 +259,9 @@ show_missing = true
 
 [tool.uv]
 # Relative `exclude-newer` durations (below) are only understood by uv >= 0.9.17;
-# the floor is 0.13.4 because that release ships the updated bundled Mozilla root
-# store (webpki-root-certs 1.0.10) that drops the compromised eMudhra CA root
-# (GHSA-hq85-5cpj-mr62).
+# the floor is 0.13.5 because it rejects certificate chains containing the
+# compromised eMudhra intermediate keys (rustls-webpki 0.103.16); 0.13.4 only
+# dropped the eMudhra CA root (GHSA-hq85-5cpj-mr62).
 # WARNING: this `required-version` guard does NOT protect older uv here. An old
 # uv can't parse `exclude-newer = "7 days"`, so it warns and discards the WHOLE
 # `[tool.uv]` table - required-version included - then resolves without the
@@ -266,7 +269,7 @@ show_missing = true
 # table parses, i.e. on uv that's already new enough. The real guarantee that a
 # new-enough uv is present comes from the SessionStart hook
 # (.claude/hooks/session-start.sh), which upgrades uv before any sync.
-required-version = ">=0.13.4"
+required-version = ">=0.13.5"
 # 7-day quarantine on freshly-published packages (supply-chain defense).
 exclude-newer = "7 days"
 # Exempt certifi so the eMudhra CA response (2026.10.19, drops emSign ECC Root CA - G3) isn't quarantined.
