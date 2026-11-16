@@ -71,6 +71,7 @@ dependencies = [
     "pypdf>=6.19.0",
     "pyhanko>=0.35.2",
     "pypdfium2>=5.12.1",
+    "httpcore>=1.0.9",
 ]
 readme = "README.md"
 requires-python = ">= 3.12"
@@ -188,6 +189,8 @@ exclude = [
     "tests/test_paywall.py",
     "tests/test_enhancer_fallback.py",
     "tests/test_image_proxy.py",
+    # autouse fixture, reached by pytest only.
+    "tests/test_oauth_cimd_deadline.py",
     "tests/test_scopes.py",
     "utils/llm/",
     "common/",
