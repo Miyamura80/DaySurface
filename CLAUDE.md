@@ -84,7 +84,7 @@ Layering (top calls down, never the reverse):
 1. Pydantic models in `models/<feature>.py`.
 2. Pure `@service` function in `services/<feature>_svc.py`. Pass `mutating=True` if it has side effects (create/charge/send).
 3. (CLI) Typer command in `src/cli/commands/<feature>.py` calling the service.
-4. (MCP) Nothing - `mcp_server/server.py` auto-registers on import.
+4. (MCP) Add the tool to `TOOL_HINTS` in `mcp_server/tool_annotations.py` (read-only / destructive / open-world). Registration itself is automatic; `tests/test_tool_annotations.py` fails if the hints are missing.
 5. (HTTP, optional) Route in `api_server/routes/`.
 6. Tests inheriting `TestTemplate`.
 
