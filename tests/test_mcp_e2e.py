@@ -1,10 +1,17 @@
 """Wire-level E2E tests for the streamable-HTTP /mcp endpoint.
 
-Runs a full MCP session through the FastAPI mount - initialize,
+Covers both protocol eras the one mount serves (python-sdk 2.x):
+
+- **Handshake era** (2025-11-25 and earlier): runs a full MCP session through
+  the FastAPI mount - initialize,
 notifications/initialized, tools/list, tools/call, resources/list,
 resources/read - and asserts what actually crosses the wire: serialized
 outputSchema, ``_meta.ui`` shapes, CallToolResult assembly, and
-structuredContent. This is the fast in-CI tier of the two-tier strategy
+structuredContent.
+- **2026-07-28** (stateless core): self-contained POSTs with no initialize and
+  no ``Mcp-Session-Id``; see ``tests/test_mcp_protocol_eras.py``.
+
+This is the fast in-CI tier of the two-tier strategy
 from issue #42; MCPJam conformance (``make mcp_conformance``) is the
 spec-conformance tier.
 
@@ -79,22 +86,32 @@ def _read_sse_first_message(response) -> dict:
 class _McpSession:
     """Minimal JSON-RPC client speaking streamable HTTP against a TestClient."""
 
-    def __init__(self, client: TestClient, api_key: str):
+    def __init__(
+        self,
+        client: TestClient,
+        api_key: str,
+        protocol_version: str = _PROTOCOL_VERSION,
+    ):
         self._client = client
         self._api_key = api_key
         self._session_id: str | None = None
         self._next_id = 0
-        self._protocol_version = _PROTOCOL_VERSION
+        self._requested_version = protocol_version
+        self._protocol_version = protocol_version
+        self._negotiated = False
 
     def _headers(self) -> dict:
         headers = {
             "Accept": "application/json, text/event-stream",
             "Host": "127.0.0.1:8080",
             "X-API-KEY": self._api_key,
-            # Post-initialize requests must carry the *negotiated* version,
-            # not the one the client originally requested.
-            "MCP-Protocol-Version": self._protocol_version,
         }
+        # Post-initialize requests must carry the *negotiated* version, not the
+        # one the client originally requested. ``initialize`` itself carries
+        # none: a version header outside the handshake set would route the
+        # POST to the 2026-07-28 stateless entry instead.
+        if self._negotiated:
+            headers["MCP-Protocol-Version"] = self._protocol_version
         if self._session_id:
             headers["mcp-session-id"] = self._session_id
         return headers
@@ -149,19 +166,20 @@ class _McpSession:
         result = self.request(
             "initialize",
             {
-                "protocolVersion": _PROTOCOL_VERSION,
+                "protocolVersion": self._requested_version,
                 "capabilities": {},
                 "clientInfo": {"name": "e2e-test", "version": "0"},
             },
         )
         self._protocol_version = result["protocolVersion"]
+        self._negotiated = True
         self.notify("notifications/initialized")
         return result
 
 
 @contextmanager
-def _wire_session(user_id: str):
-    """Yield a handshaken MCP session backed by a fresh DB and API key."""
+def _wire_client(user_id: str):
+    """Yield ``(TestClient, api_key)`` backed by a fresh DB and API key."""
     with patch("api_server.middleware.mcp_auth.global_config") as mock_config:
         mock_config.WORKOS_CLIENT_ID = None
         mock_config.WORKOS_AUTHKIT_DOMAIN = None
@@ -170,9 +188,16 @@ def _wire_session(user_id: str):
                 raw_key, _ = create_api_key(s, user_id=user_id, scopes=["*"])
 
             with TestClient(app) as client:
-                session = _McpSession(client, raw_key)
-                session.handshake()
-                yield session
+                yield client, raw_key
+
+
+@contextmanager
+def _wire_session(user_id: str, protocol_version: str = _PROTOCOL_VERSION):
+    """Yield a handshaken (handshake-era) MCP session."""
+    with _wire_client(user_id) as (client, raw_key):
+        session = _McpSession(client, raw_key, protocol_version)
+        session.handshake()
+        yield session
 
 
 class TestMCPWireE2E(TestTemplate):

@@ -21,9 +21,9 @@ class TestToolAnnotations(TestTemplate):
             a = tool.annotations
             if (
                 a is None
-                or a.readOnlyHint is None
-                or a.destructiveHint is None
-                or a.openWorldHint is None
+                or a.read_only_hint is None
+                or a.destructive_hint is None
+                or a.open_world_hint is None
             ):
                 missing.append(name)
         assert not missing, (
@@ -40,30 +40,30 @@ class TestToolAnnotations(TestTemplate):
             tool = tools.get(entry.name)
             if entry.mutating and tool is not None:
                 assert tool.annotations is not None
-                assert tool.annotations.readOnlyHint is False, entry.name
+                assert tool.annotations.read_only_hint is False, entry.name
 
     def test_send_tools_are_destructive_and_open_world(self):
         tools = _tools_by_name()
         for name in ("gmail_send", "gmail_composer.send"):
             a = tools[name].annotations
             assert a is not None
-            assert a.readOnlyHint is False
-            assert a.destructiveHint is True
-            assert a.openWorldHint is True
+            assert a.read_only_hint is False
+            assert a.destructive_hint is True
+            assert a.open_world_hint is True
 
     def test_irreversible_signing_is_destructive(self):
         tools = _tools_by_name()
         for name in ("pdf_signer.sign", "pdf_request_signature"):
             a = tools[name].annotations
             assert a is not None
-            assert a.destructiveHint is True, name
+            assert a.destructive_hint is True, name
 
     def test_reads_are_read_only(self):
         tools = _tools_by_name()
         for name in ("gmail_list_inbox", "gmail_get_thread", "inbox_search"):
             a = tools[name].annotations
             assert a is not None
-            assert a.readOnlyHint is True, name
+            assert a.read_only_hint is True, name
 
 
 class TestToolCallLogging(TestTemplate):

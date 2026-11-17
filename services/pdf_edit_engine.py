@@ -20,6 +20,7 @@ import io
 from pypdf import PdfReader, PdfWriter
 
 from models.pdf_forms import AddTextOp, PdfEditOp, PdfFormField, SetFieldOp
+from services import ModelFacingError
 from services.pdf_inspect import _qualified_name, inspect_pdf
 from services.pdf_overlay import (
     build_text_overlay_page,
@@ -28,7 +29,7 @@ from services.pdf_overlay import (
 )
 
 
-class PdfEditBatchError(Exception):
+class PdfEditBatchError(ModelFacingError):
     """The batch was rejected; ``errors`` lists every invalid op."""
 
     def __init__(self, errors: list[dict]) -> None:

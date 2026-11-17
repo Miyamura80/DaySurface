@@ -115,7 +115,7 @@ def annotations_for(tool_name: str) -> ToolAnnotations | None:
     if hints is None:
         return None
     return ToolAnnotations(
-        readOnlyHint=hints.read_only,
-        destructiveHint=hints.destructive,
-        openWorldHint=hints.open_world,
+        read_only_hint=hints.read_only,
+        destructive_hint=hints.destructive,
+        open_world_hint=hints.open_world,
     )

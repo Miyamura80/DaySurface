@@ -22,6 +22,7 @@ from api_server.middleware.error_handler import (
     RequestIdMiddleware,
     attachment_too_large_handler,
     client_refusal_handler,
+    invalid_argument_handler,
     retry_later_handler,
 )
 from api_server.middleware.mcp_auth import MCPAuthMiddleware
@@ -45,7 +46,7 @@ from api_server.runner import runner_lifespan
 from common import global_config
 from mcp_server.server import lifespan as mcp_lifespan
 from mcp_server.server import mount_on as mount_mcp_server
-from services import ClientRefusalError, RetryLaterError
+from services import ClientRefusalError, InvalidArgument, RetryLaterError
 from services.gmail_svc import GmailAttachmentTooLargeError
 
 # Logging (scrubber + prod diagnose gating) is configured in api_server/__init__.py,
@@ -149,7 +150,7 @@ class Sha256SessionMiddleware(SessionMiddleware):
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Compose the FastMCP session manager with the periodic webhook runner."""
+    """Compose the MCPServer session manager with the periodic webhook runner."""
     async with mcp_lifespan(app), runner_lifespan(app):
         yield
 
@@ -188,7 +189,7 @@ app.add_middleware(
 
 # Outermost, deliberately: it is the only middleware that must stamp *every*
 # byte-producing path, including CORS preflights, the MCPAuthMiddleware 401
-# challenge (which writes to `send` directly), and the FastMCP mount below.
+# challenge (which writes to `send` directly), and the MCPServer mount below.
 #
 # On the mount: `mount_mcp_server(app)` calls `app.mount("/", mcp_app)`, which
 # registers an ordinary route on `app.router`. `add_middleware` wraps the
@@ -222,6 +223,8 @@ app.add_exception_handler(GmailAttachmentTooLargeError, attachment_too_large_han
 app.add_exception_handler(RetryLaterError, retry_later_handler)
 # A deliberate refusal (draft gone, duplicate reply) is the caller's 4xx.
 app.add_exception_handler(ClientRefusalError, client_refusal_handler)
+# A service rejecting one of its arguments is the caller's 400.
+app.add_exception_handler(InvalidArgument, invalid_argument_handler)
 
 # --- Routes ---------------------------------------------------------------
 
@@ -248,7 +251,7 @@ if oauth_server.is_self_mode():
     app.router.routes.extend(oauth_server.create_sdk_routes())
 
 # --- MCP server (streamable HTTP) -----------------------------------------
-# Mounts FastMCP at /mcp so CLI/API/MCP share one process, port, and middleware.
+# Mounts MCPServer at /mcp so CLI/API/MCP share one process, port, and middleware.
 _mcp_app = mount_mcp_server(app)
 
 # The mount sits at "/", so it - not FastAPI - answers every path the routers

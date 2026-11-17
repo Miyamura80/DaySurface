@@ -51,7 +51,7 @@ uv run pytest path/to/test.py  # Run specific test
 
 Layering (top calls down, never the reverse):
 
-- **Transports:** `src/cli/app.py` (Typer) · `mcp_server/` (FastMCP) · `api_server/` (FastAPI)
+- **Transports:** `src/cli/app.py` (Typer) · `mcp_server/` (MCPServer, python-sdk 2.x) · `api_server/` (FastAPI)
 - **Services:** `services/` - pure `@service`-decorated functions, transport-agnostic
 - **Contracts:** `models/` - Pydantic input/output schemas shared by all transports
 - **Infra:** `common/` (config) · `db/` (SQLAlchemy + Alembic) · `utils/llm/` (DSPY) · `src/utils/` (logging, theme, errors)
@@ -59,7 +59,7 @@ Layering (top calls down, never the reverse):
 ### Top-level layout
 
 - **`src/cli/app.py`** + **`src/cli/commands/`** - Typer CLI (`daysurface`); `src/cli/commands/__init__.py` auto-discovers `src/cli/commands/*.py` and registers them.
-- **`mcp_server/`** - FastMCP server. Primary transport is **streamable HTTP**, mounted on the FastAPI app at `/mcp` from `api_server/server.py` (one process, one port, shared auth/CORS). Stdio is legacy/dev-only via `daysurface-mcp`. `mcp_server/server.py:build_mcp_server` populates a single FastMCP singleton from the service registry; `mount_on` + `lifespan` handle the streamable-HTTP wiring. See [`mcp_server/COMMON_TERMS.md`](./mcp_server/COMMON_TERMS.md).
+- **`mcp_server/`** - MCPServer (python-sdk 2.x, spec 2026-07-28) server. Primary transport is **streamable HTTP**, mounted on the FastAPI app at `/mcp` from `api_server/server.py` (one process, one port, shared auth/CORS). Stdio is legacy/dev-only via `daysurface-mcp`. `mcp_server/server.py:build_mcp_server` populates a single MCPServer singleton from the service registry; `mount_on` + `lifespan` handle the streamable-HTTP wiring; the one mount serves both 2026-07-28 stateless requests and handshake-era (2025-11-25 and earlier) sessions. See [`mcp_server/COMMON_TERMS.md`](./mcp_server/COMMON_TERMS.md).
 - **`api_server/`** - FastAPI HTTP server (`auth/`, `billing/`, `middleware/`, `routes/`). Hosts the `/mcp` mount; the primary entrypoint is `daysurface-serve`.
 - **`services/`** - `@service(name=, description=, input_model=, output_model=)`-decorated pure functions (`services/__init__.py:20`).
 - **`common/`** - pydantic-settings config.
@@ -175,8 +175,9 @@ Structure as: `init()` → `continue(id)` → `cleanup(id)`
 
 There are two MCP tool styles:
 
-- **Headless tools** (default) - sync wrapper, no `Context`, returns the
-  Pydantic output model so FastMCP derives `outputSchema`. The CLI/API/MCP
+- **Headless tools** (default) - sync wrapper, returns the Pydantic output
+  model so the SDK derives `outputSchema` (a hidden `ctx` is used only to read
+  client capabilities for the URL-elicitation upgrade). The CLI/API/MCP
   transports share identical behavior. Use this for any tool the LLM should
   call autonomously without UI affordances.
 - **Enhanced tools** (opt-in via `@enhance` in `mcp_server/enhancers/`) - async
@@ -229,7 +230,9 @@ See `mcp_server/MCP_UI_ARCHITECTURE.md` for design rationale and
 - **Fast tier (default CI, pytest):** unit tests for the enhancer machinery
   plus `tests/test_mcp_e2e.py`, which runs a full MCP session over the
   streamable-HTTP mount and asserts the wire format (outputSchema,
-  `_meta.ui`, CallToolResult assembly). No Node needed.
+  `_meta.ui`, CallToolResult assembly), and `tests/test_mcp_protocol_eras.py`
+  (2026-07-28 stateless requests + `server/discover` alongside legacy
+  `initialize` sessions). No Node needed.
 - **Conformance tier:** `make mcp_conformance` (MCPJam protocol + apps
   suites, CI-gated, needs Node). OAuth conformance is manual - see
   `docs/content/docs/mcp/oauth.mdx`.

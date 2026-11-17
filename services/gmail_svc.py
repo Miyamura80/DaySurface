@@ -42,7 +42,7 @@ from models.gmail import (
     GmailStatusResult,
     InlineImageUpload,
 )
-from services import ConnectRequiredError, service
+from services import ConnectRequiredError, ModelFacingError, service
 from services._gmail_fake_backend import build_fake_gmail_client
 
 # ---------------------------------------------------------------------------
@@ -91,7 +91,7 @@ class GmailNotConnectedError(ConnectRequiredError):
             return None
 
 
-class GmailAttachmentTooLargeError(Exception):
+class GmailAttachmentTooLargeError(ModelFacingError):
     """Raised when a fetched attachment exceeds the configured size ceiling.
 
     Carries the sizes so a transport can build a precise client-facing message

@@ -6,7 +6,7 @@ input model and return a Pydantic output model. UI/enhancer affordances
 touch this module.
 
 ``GmailNotConnectedError`` propagates from ``_get_gmail_client`` when the
-user has no active token row; the FastMCP factory surfaces it as
+user has no active token row; the MCP tool factory surfaces it as
 ``isError: true`` automatically.
 """
 

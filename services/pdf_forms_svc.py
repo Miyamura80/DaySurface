@@ -28,7 +28,7 @@ from models.pdf_forms import (
     PdfRequestSignatureResult,
     SignaturePlacement,
 )
-from services import service
+from services import ModelFacingError, service
 from services.pdf_documents_repo import (
     PdfInvalidTransitionError,
     create_document,
@@ -42,7 +42,7 @@ from services.pdf_ports import deliver_to_destination, resolve_source
 from services.pdf_render import render_pages
 
 
-class PdfEditSignedSourceError(Exception):
+class PdfEditSignedSourceError(ModelFacingError):
     """Editing a document that carries third-party signatures needs an ack."""
 
     def __init__(self, signatures: list[str]) -> None:
@@ -55,7 +55,7 @@ class PdfEditSignedSourceError(Exception):
         )
 
 
-class PdfDocumentLockedError(Exception):
+class PdfDocumentLockedError(ModelFacingError):
     """Raised when an edit targets a document that is no longer editable."""
 
     def __init__(self, *, doc_id: str, status: str) -> None:
@@ -189,7 +189,7 @@ def pdf_edit(input: PdfEditInput) -> PdfEditResult:
     )
 
 
-class PdfSignatureRequestError(Exception):
+class PdfSignatureRequestError(ModelFacingError):
     """Raised when a signature request is invalid for the document."""
 
 
@@ -311,7 +311,7 @@ def pdf_request_signature(
     )
 
 
-class PdfExportStateError(Exception):
+class PdfExportStateError(ModelFacingError):
     """Raised when exporting a document that is mid-signing."""
 
     def __init__(self, doc_id: str) -> None:

@@ -1745,12 +1745,12 @@ class TestGmailReplyToThread(TestTemplate):
 
 
 # ---------------------------------------------------------------------------
-# MCP-transport regression: omit vs null must survive FastMCP default-filling
+# MCP-transport regression: omit vs null must survive MCPServer default-filling
 # ---------------------------------------------------------------------------
 
 
 def _mcp_kwargs(model_cls, provided: dict) -> dict:
-    """Reproduce how FastMCP hands arguments to a tool.
+    """Reproduce how MCPServer hands arguments to a tool.
 
     ``func_metadata.model_dump_one_level`` does ``getattr`` over *every*
     declared field, so an omitted parameter reaches the service filled with its

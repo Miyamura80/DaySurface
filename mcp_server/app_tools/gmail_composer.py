@@ -32,6 +32,7 @@ from models.gmail import (
     _UnsetType,
 )
 from models.gmail_composer import GmailComposerSendStatus
+from services import InvalidArgument
 from services.gmail_attachments_svc import (
     gmail_add_attachment as _gmail_add_attachment,
 )
@@ -73,7 +74,7 @@ def _gone_for_user() -> Iterator[None]:
         yield
     except DraftGoneError as exc:
         # DraftGoneError's text is written for the model; the user sees this.
-        raise ValueError(
+        raise InvalidArgument(
             "This draft no longer exists in Gmail. It was probably already sent "
             "or discarded."
         ) from exc
@@ -97,7 +98,7 @@ def _coerce_attachments(
         elif a.get("attachment_id"):
             out.append(AttachmentReference(attachment_id=a["attachment_id"]))
         else:
-            raise ValueError(
+            raise InvalidArgument(
                 "attachment must have either 'data_base64' (new upload) or "
                 "'attachment_id' (existing file reference)"
             )

@@ -17,7 +17,7 @@ from pydantic import PlainSerializer
 class _UnsetType:
     """Sentinel that survives the MCP transport to mean "field was omitted".
 
-    ``model_fields_set`` cannot supply this over MCP: FastMCP materializes every
+    ``model_fields_set`` cannot supply this over MCP: the MCP SDK materializes every
     declared parameter to its default before invoking the tool
     (``func_metadata.model_dump_one_level`` calls ``getattr`` for every field),
     so an omitted field arrives as its default and lands in ``model_fields_set``

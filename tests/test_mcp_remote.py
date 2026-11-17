@@ -12,6 +12,7 @@ from unittest.mock import patch
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
+from mcp.server.mcpserver.exceptions import ToolError
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -147,7 +148,7 @@ class TestMCPAuthGuards(TestTemplate):
         )
         token = set_current_user(user)
         try:
-            with pytest.raises(PermissionError, match="services:execute"):
+            with pytest.raises(ToolError, match="services:execute"):
                 _check_scopes()
         finally:
             reset_current_user(token)

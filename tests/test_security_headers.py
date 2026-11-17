@@ -3,7 +3,7 @@
 Both findings here are what an unauthenticated DAST scan reports first: a
 response with no ``Content-Security-Policy``/``X-Frame-Options``/HSTS, and a
 session cookie set without ``Secure``. The tests assert the fix on the surfaces
-that actually differ - a plain FastAPI route, the FastMCP mount at ``/mcp``,
+that actually differ - a plain FastAPI route, the MCPServer mount at ``/mcp``,
 and the paths the mount answers on FastAPI's behalf - because those travel
 through three different response paths.
 """
@@ -88,7 +88,7 @@ class TestSecurityHeaders(TestTemplate):
         _assert_secure(resp.headers)
 
     def test_headers_on_the_mcp_mount(self):
-        """The FastMCP mount answers /mcp - it must not bypass the middleware.
+        """The MCPServer mount answers /mcp - it must not bypass the middleware.
 
         `mount_mcp_server` registers the sub-app with `app.mount("/", ...)`, a
         route on `app.router`; `add_middleware` wraps the router, so responses

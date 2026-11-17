@@ -1,24 +1,27 @@
-"""``DaySurfaceMCP``: FastMCP with tool annotations and one log line per tool call.
+"""``DaySurfaceMCP``: MCPServer with tool annotations and one log line per tool call.
 
 Both hooks live on the server class so they cover every tool - registry-backed
 ones from ``_tool_factory`` and app-only ones registered with ``@mcp.tool`` -
 without touching each registration site.
 """
 
-from collections.abc import Callable, Sequence
-from typing import Any
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 from loguru import logger as log
-from mcp.server.fastmcp import FastMCP
-from mcp.types import AnyFunction, ContentBlock, Icon, ToolAnnotations
+from mcp.server.mcpserver import Context, MCPServer
+from mcp.types import CallToolResult, Icon, InputRequiredResult, ToolAnnotations
 
 from mcp_server.tool_annotations import annotations_for
 from src.utils.current_user import current_user
 
 _MAX_CLIENT_LABEL = 80
+_CLIENT_INFO_META = "io.modelcontextprotocol/clientInfo"
+
+_CallableT = TypeVar("_CallableT", bound=Callable[..., Any])
 
 
-class DaySurfaceMCP(FastMCP):
+class DaySurfaceMCP(MCPServer):
     def tool(
         self,
         name: str | None = None,
@@ -28,7 +31,7 @@ class DaySurfaceMCP(FastMCP):
         icons: list[Icon] | None = None,
         meta: dict[str, Any] | None = None,
         structured_output: bool | None = None,
-    ) -> Callable[[AnyFunction], AnyFunction]:
+    ) -> Callable[[_CallableT], _CallableT]:
         """Register a tool, filling ``annotations`` from ``TOOL_HINTS`` when omitted."""
         if annotations is None and isinstance(name, str):
             annotations = annotations_for(name)
@@ -43,12 +46,15 @@ class DaySurfaceMCP(FastMCP):
         )
 
     async def call_tool(
-        self, name: str, arguments: dict[str, Any]
-    ) -> Sequence[ContentBlock] | dict[str, Any]:
+        self,
+        name: str,
+        arguments: dict[str, Any],
+        context: Context | None = None,
+    ) -> CallToolResult | InputRequiredResult:
         """Run the tool, then log its name, caller and outcome (never arguments)."""
         succeeded = False
         try:
-            result = await super().call_tool(name, arguments)
+            result = await super().call_tool(name, arguments, context)
             succeeded = True
             return result
         finally:
@@ -57,27 +63,40 @@ class DaySurfaceMCP(FastMCP):
                 "MCP tool call {} {} client={} user={}",
                 name,
                 "ok" if succeeded else "error",
-                self._client_label(),
+                _client_label(context),
                 user.user_id if user is not None else "-",
             )
 
-    def _client_label(self) -> str:
-        """Best-effort caller name: MCP clientInfo, else the HTTP User-Agent.
 
-        In stateless HTTP mode the initialize handshake is not kept between
-        requests, so ``clientInfo`` is usually missing and the User-Agent
-        (e.g. ``Claude-User``, ``openai-mcp/1.0.0 (ChatGPT)``) is what's left.
-        """
-        try:
-            ctx = self.get_context()
-            params = ctx.session.client_params
-            request = ctx.request_context.request
-        except (LookupError, ValueError):
-            return "-"
-        if params is not None:
-            label = f"{params.clientInfo.name}/{params.clientInfo.version}"
-        else:
-            headers = getattr(request, "headers", None)
-            label = headers.get("user-agent", "-") if headers is not None else "-"
-        # Header values are attacker-controlled: keep log lines single-line.
-        return "".join(ch for ch in label if ch.isprintable())[:_MAX_CLIENT_LABEL]
+def _client_label(context: Context | None) -> str:
+    """Best-effort caller name: MCP clientInfo, else the HTTP User-Agent.
+
+    Handshake-era clients send ``clientInfo`` once in ``initialize``; on the
+    2026-07-28 stateless wire it rides in every request's ``_meta``. Stateless
+    legacy requests carry neither, so the User-Agent (e.g. ``Claude-User``,
+    ``openai-mcp/1.0.0 (ChatGPT)``) is what's left. In-process calls have no
+    request bound and log ``-``.
+    """
+    if context is None:
+        return "-"
+    try:
+        request_context = context.request_context
+    except ValueError:
+        return "-"
+    label = "-"
+    info: Any = None
+    params = getattr(request_context.session, "client_params", None)
+    if params is not None:
+        info = params.client_info
+    elif request_context.meta:
+        info = request_context.meta.get(_CLIENT_INFO_META)
+    if isinstance(info, dict):
+        label = f"{info.get('name', '?')}/{info.get('version', '?')}"
+    elif info is not None:
+        label = f"{getattr(info, 'name', '?')}/{getattr(info, 'version', '?')}"
+    else:
+        headers = getattr(request_context.request, "headers", None)
+        if headers is not None:
+            label = headers.get("user-agent", "-")
+    # Header values are attacker-controlled: keep log lines single-line.
+    return "".join(ch for ch in label if ch.isprintable())[:_MAX_CLIENT_LABEL]

@@ -15,7 +15,7 @@ from loguru import logger as log
 
 from models.curation import CurationState
 from models.gmail import GmailDraft, GmailReplyInput
-from services import ClientRefusalError, service
+from services import ClientRefusalError, InvalidArgument, service
 from services.curation_ledger import mark_state_best_effort
 from services.gmail_draft_helpers import _fetch_draft_model, _inputs_to_uploads
 from services.gmail_message_roles import is_draft, may_be_incoming
@@ -166,7 +166,7 @@ def gmail_reply_to_thread(input: GmailReplyInput) -> GmailDraft:
         thread.get("messages") or [], key=lambda m: int(m.get("internalDate") or 0)
     )
     if not messages:
-        raise ValueError(f"Thread {input.thread_id!r} has no messages to reply to")
+        raise InvalidArgument(f"Thread {input.thread_id!r} has no messages to reply to")
     if not input.follow_up:
         _refuse_duplicate_reply(input.thread_id, messages, datetime.now(UTC))
     headers = _headers(messages[-1])
@@ -180,7 +180,7 @@ def gmail_reply_to_thread(input: GmailReplyInput) -> GmailDraft:
             # Every message is from the owner and the thread names no other
             # participant, so there is nobody to reply to. Fail clearly instead
             # of creating a draft with a blank (malformed) To header.
-            raise ValueError(
+            raise InvalidArgument(
                 f"Cannot determine a reply recipient for thread "
                 f"{input.thread_id!r}: every message is from you and the thread "
                 "has no other participants. Pass 'to' explicitly."
