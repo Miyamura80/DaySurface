@@ -28,6 +28,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 from starlette.applications import Starlette
 
 from common import global_config
+from mcp_server._fastmcp import DaySurfaceMCP
 from mcp_server._tool_errors import model_facing_message
 from mcp_server._tool_factory import make_tool
 from services import ServiceEntry, discover_services, get_registry
@@ -144,7 +145,7 @@ def _transport_security() -> TransportSecuritySettings:
 # lazily per request so a missing build degrades to a placeholder. The wire
 # shapes are the same either way (extension contributions go through the
 # ordinary tool/resource surface and reach every protocol era).
-class _DaySurfaceMCPServer(MCPServer):
+class _DaySurfaceMCPServer(DaySurfaceMCP):
     """MCPServer that lets model-facing failure text reach the model.
 
     SDK 2.x reports any non-``ToolError`` tool exception as a bare
