@@ -264,6 +264,23 @@ describe("InlineComposer send/autosave race", () => {
 
     expect(screen.queryByText("Message sent")).toBeNull();
     expect(screen.getByText(/timed out/)).toBeTruthy();
+    expect(screen.getByText(/Check your Sent folder/)).toBeTruthy();
+  });
+
+  it("says a gateway error left the draft unsent, without the raw JSON", async () => {
+    const { app, settle, fail } = makeMcpApp();
+    renderComposer(app);
+
+    fireEvent.click(screen.getByText("Send"));
+    await fail(
+      "gmail_composer.send",
+      'MCP error -32603: Error POSTing to endpoint: {"title":"Error 502: Bad gateway","status":502}',
+    );
+    await settle("gmail_composer.send_status", draftStillThere);
+
+    expect(screen.getByLabelText("Body")).toBeTruthy();
+    expect(screen.getByText(/Not sent: .*Error 502: Bad gateway.*try again/)).toBeTruthy();
+    expect(screen.queryByText(/POSTing/)).toBeNull();
   });
 
   it("calls onSent 1.5s after a confirmed send", async () => {

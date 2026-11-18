@@ -174,6 +174,31 @@ function toolErrorText(raw: unknown): string | null {
 const GONE_UNRECORDED =
   "This draft is no longer in Gmail, and the server has no record of sending it. Check your Sent folder.";
 
+// A one-line reason for a lost reply. Hosts reject with raw transport text,
+// e.g. `MCP error -32603: Error POSTing to endpoint: {<Cloudflare 502 JSON>}`,
+// which is unreadable in the composer; keep the JSON's title, else a prefix.
+export function lostReason(err: unknown): string {
+  const text = errMsg(err).replace(/^MCP error -?\d+:\s*/, "").trim();
+  const brace = text.indexOf("{");
+  if (brace >= 0) {
+    try {
+      const body = JSON.parse(text.slice(brace)) as { title?: unknown; status?: unknown };
+      if (typeof body.title === "string" && body.title) return body.title;
+      if (typeof body.status === "number") return `HTTP ${body.status}`;
+    } catch { /* not a JSON body */ }
+  }
+  return text.length > 120 ? `${text.slice(0, 117)}...` : text || "no reply";
+}
+
+function lostError(err: unknown, state: "unsent" | "unknown"): Error {
+  const reason = lostReason(err);
+  return new Error(
+    state === "unsent"
+      ? `Not sent: the server could not be reached (${reason}). Your draft is saved, so try again.`
+      : `The server could not be reached (${reason}) and the send could not be confirmed. Check your Sent folder before retrying.`,
+  );
+}
+
 // What became of the draft per the server, or null if the check failed too.
 async function sendStatus(app: McpAppLike, draftId: string): Promise<SendStatus | null> {
   try {
@@ -214,7 +239,7 @@ export async function confirmSend(
   const status = await sendStatus(app, args.draft_id);
   if (status?.state === "sent" && status.result?.message_id) return status.result;
   if (status?.state === "gone") throw new Error(GONE_UNRECORDED);
-  throw lost;
+  throw lostError(lost, status?.state === "unsent" ? "unsent" : "unknown");
 }
 
 // Call a write tool and return its result, throwing the server's own text when
