@@ -193,7 +193,13 @@ class TestGmailRateLimitRetry(TestTemplate):
             load_row.return_value.refresh_token_enc = b"enc"
             gmail_svc._get_gmail_client("alice")
 
-        assert fake_build.call_args.kwargs["requestBuilder"] is RateLimitRetryingRequest
+        # The builder wraps the class to give each request its own connection
+        # (thread safety); what it builds must still be the retrying request.
+        builder = fake_build.call_args.kwargs["requestBuilder"]
+        request = builder(
+            None, lambda _resp, content: content, "http://x", method="GET"
+        )
+        assert isinstance(request, RateLimitRetryingRequest)
 
     def test_rate_limit_reports_whether_a_write_already_landed(self, sleeps):
         # A draft created, then its re-read refused: the write may stand, so

@@ -72,6 +72,7 @@ dependencies = [
     "pyhanko>=0.35.2",
     "pypdfium2>=5.12.1",
     "httpcore>=1.0.9",
+    "google-auth-httplib2>=0.4.0",
 ]
 readme = "README.md"
 requires-python = ">= 3.12"
@@ -169,6 +170,7 @@ exclude = [
     "tests/test_webhook_ssrf.py",
     # http.server dispatches do_GET / log_message by name.
     "tests/test_gmail_retry_wire.py",
+    "tests/test_gmail_client_threading.py",
     "tests/test_service_route_scopes.py",
     "tests/test_logging_security.py",
     "tests/test_logging_thread_safety.py",

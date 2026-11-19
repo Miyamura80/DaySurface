@@ -17,7 +17,7 @@ import os
 import secrets
 import threading
 import time
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from email.message import EmailMessage, MIMEPart
@@ -576,12 +576,39 @@ def _get_gmail_client(user_id: str):  # noqa: ANN202 - googleapiclient Resource 
     client = build(
         "gmail",
         "v1",
-        credentials=creds,
+        http=_authorized_http(creds),
         cache_discovery=False,
-        requestBuilder=RateLimitRetryingRequest,
+        requestBuilder=_per_request_builder(creds, RateLimitRetryingRequest),
     )
     _store_client(user_id, client)
     return client
+
+
+def _authorized_http(creds: Any) -> Any:
+    """A new authorized connection, with googleapiclient's default timeout."""
+    from google_auth_httplib2 import AuthorizedHttp  # noqa: PLC0415
+    from googleapiclient.http import build_http  # noqa: PLC0415
+
+    return AuthorizedHttp(creds, http=build_http())
+
+
+def _per_request_builder(creds: Any, request_cls: Any) -> Callable[..., Any]:
+    """``requestBuilder`` giving every request its own connection.
+
+    The cached client is shared by every thread serving this user (the MCP
+    composer fires several tool calls at once), but httplib2 connections are
+    not thread-safe: two threads on one connection interleave TLS records
+    (``ssl.SSLError: record layer failure``) and can take the whole process
+    down. This is Google's documented pattern for multi-threaded use
+    (googleapis.github.io/google-api-python-client/docs/thread_safety.html):
+    share the client and credentials, build a fresh ``Http`` per request.
+    Batches inherit the first request's connection, so they are covered too.
+    """
+
+    def build_request(_http: Any, *args: Any, **kwargs: Any) -> Any:
+        return request_cls(_authorized_http(creds), *args, **kwargs)
+
+    return build_request
 
 
 def _invalidate_gmail_client(user_id: str) -> None:
