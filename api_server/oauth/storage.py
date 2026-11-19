@@ -12,7 +12,7 @@ from datetime import UTC, datetime, timedelta
 
 from mcp.server.auth.provider import AccessToken
 from mcp.shared.auth import OAuthToken as TokenResponse
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 
 from api_server.auth.authkit_auth import _resolve_scopes, mcp_resource_url
 from db.engine import use_db_session
@@ -23,6 +23,11 @@ ACCESS_TOKEN_LIFETIME = timedelta(hours=1)
 REFRESH_TOKEN_LIFETIME = timedelta(days=30)
 # Absolute cap on one grant: rotation never extends a family past this.
 FAMILY_LIFETIME = timedelta(days=90)
+# How long a code row outlives its expiry. A replayed code revokes what its
+# first exchange issued (provider.load_authorization_code); that only works
+# while the spent row still exists, so it is kept a while after it could no
+# longer be exchanged.
+CODE_PURGE_GRACE = timedelta(days=1)
 _CODE_PREFIX = "dsc_"
 _ACCESS_PREFIX = "dsa_"
 _REFRESH_PREFIX = "dsr_"
@@ -181,6 +186,28 @@ def _revoke_family(session, family_id: str) -> None:
         .where(OAuthToken.family_id == family_id, OAuthToken.revoked_at.is_(None))
         .values(revoked_at=_now())
     )
+
+
+def purge_expired() -> int:
+    """Delete rows that can no longer be used; return how many were removed.
+
+    * codes more than :data:`CODE_PURGE_GRACE` past their expiry;
+    * tokens past their family's absolute cap (``family_expires_at``): no
+      access or refresh token outlives it, revoked or not, so the row can no
+      longer authenticate anything or take part in reuse detection.
+
+    Run periodically by ``api_server.runner`` when ``MCP_AUTH_MODE=self``.
+    """
+    now = _now()
+    with use_db_session() as session:
+        codes = session.execute(
+            delete(OAuthCode).where(OAuthCode.expires_at < now - CODE_PURGE_GRACE)
+        )
+        tokens = session.execute(
+            delete(OAuthToken).where(OAuthToken.family_expires_at < now)
+        )
+        session.commit()
+        return (codes.rowcount or 0) + (tokens.rowcount or 0)  # ty: ignore[unresolved-attribute]
 
 
 def lookup_access_token(token: str) -> AccessToken | None:
