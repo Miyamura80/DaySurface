@@ -129,6 +129,7 @@ class TestCimdFetchDeadline(TestTemplate):
 
     def test_stalled_fetches_free_their_slots_at_the_deadline(self):
         errors: list[Exception] = []
+        per_host = cimd._MAX_FETCHES_PER_HOST
 
         def hold(n: int) -> None:
             try:
@@ -136,19 +137,29 @@ class TestCimdFetchDeadline(TestTemplate):
             except cimd.ClientMetadataError as exc:
                 errors.append(exc)
 
-        holders = [threading.Thread(target=hold, args=(n,)) for n in range(4)]
+        holders = [threading.Thread(target=hold, args=(n,)) for n in range(per_host)]
         for thread in holders:
             thread.start()
-        time.sleep(0.2)  # let all four take a slot
+        end = time.monotonic() + _LIMIT
+        while cimd._fetch_slots.snapshot().get("client.test.example") != (
+            per_host,
+            0,
+        ):
+            assert time.monotonic() < end, "the stalled fetches never took a slot"
+            threading.Event().wait(0.001)
         start = time.monotonic()
-        with pytest.raises(cimd.ClientMetadataError, match="too many"):
+        with (
+            patch.object(cimd, "_SLOT_WAIT_SECONDS", 0.05),
+            pytest.raises(cimd.ClientMetadataError, match="too many"),
+        ):
             cimd.resolve_client("https://client.test.example/ok.json")
-        assert time.monotonic() - start < 0.1  # refused, not queued
+        assert time.monotonic() - start < _DEADLINE  # refused after a short wait
 
         for thread in holders:
             thread.join(timeout=_LIMIT)
         assert not any(thread.is_alive() for thread in holders)
-        assert len(errors) == 4
+        assert len(errors) == per_host
+        assert cimd._fetch_slots.snapshot() == {}
 
         client_id = "https://client.test.example/ok.json"
         self.stall_server.documents["/ok.json"] = client_document(client_id=client_id)

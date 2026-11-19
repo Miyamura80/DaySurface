@@ -18,9 +18,14 @@ The fetch targets a client-chosen URL, so it is treated as hostile:
   off at the deadline, not merely at each per-read timeout. A slow DNS answer
   cannot be interrupted, but it uses up the same budget. The body is capped at
   10 KB as sent, with compression refused so the cap cannot be inflated past.
-* At most four fetches run at once; any beyond that fail immediately rather than
-  queue. Fetches share the worker threads that serve /mcp, so a flood of slow
-  client ids must not be able to occupy them.
+* Fetches are limited per host and in total (see
+  :mod:`api_server.oauth.fetch_slots`): a host gets two running fetches and two
+  queued, and at most eight run and eight queue overall. Fetches share the
+  worker threads that serve /mcp, so a flood of slow client ids must not be
+  able to occupy them, and the per-host cap stops one slow host from taking
+  every slot and locking other clients out. A fetch waits up to 1.5 seconds for
+  a slot; that wait counts against the 5 second deadline. A full queue is not
+  cached as a failure, so it cannot poison a legitimate client id.
 * Results are cached: a valid document for five minutes, a failure for one.
   Each cache holds at most 1,000 entries.
 """
@@ -35,6 +40,7 @@ from mcp.shared.auth import OAuthClientInformationFull
 from pydantic import AnyUrl, ValidationError
 
 from api_server.auth.scopes import ALL_SCOPES
+from api_server.oauth.fetch_slots import FetchSlots, FetchSlotsBusyError
 from services._ssrf_guard import SsrfError, build_client, validate_and_pin
 
 _FETCH_DEADLINE_SECONDS = 5.0
@@ -42,7 +48,12 @@ _MAX_DOCUMENT_BYTES = 10_000
 _MAX_CLIENT_ID_LENGTH = 2000  # oauth_codes.client_id is String(2048)
 _CACHE_SECONDS = 300
 _FAILURE_CACHE_SECONDS = 60
-_MAX_CONCURRENT_FETCHES = 4
+# Fetch limits (see api_server.oauth.fetch_slots). Running plus queued stays
+# well below the default 40 worker threads the fetches share with /mcp.
+_MAX_CONCURRENT_FETCHES = 8
+_MAX_FETCHES_PER_HOST = 2
+_MAX_QUEUED_FETCHES = 8
+_SLOT_WAIT_SECONDS = 1.5
 # Entries kept per cache. Expired entries are dropped first, then the oldest,
 # so a flood of distinct client ids cannot grow memory without bound.
 _MAX_CACHE_ENTRIES = 1000
@@ -59,7 +70,11 @@ _LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1"}
 _cache: dict[str, tuple[float, "OAuthClientInformationFull"]] = {}
 _failures: dict[str, tuple[float, str]] = {}
 _cache_lock = threading.Lock()
-_fetch_slots = threading.BoundedSemaphore(_MAX_CONCURRENT_FETCHES)
+_fetch_slots = FetchSlots(
+    total=_MAX_CONCURRENT_FETCHES,
+    per_host=_MAX_FETCHES_PER_HOST,
+    max_waiting=_MAX_QUEUED_FETCHES,
+)
 
 
 def _remember(cache: dict, client_id: str, value: tuple) -> None:
@@ -156,9 +171,10 @@ def _validate_redirect_uri(uri: object) -> str:
     raise ClientMetadataError("redirect_uris must use https or a loopback address")
 
 
-def _fetch_document(client_id: str) -> bytes:
+def _fetch_document(client_id: str, deadline: float | None = None) -> bytes:
     # Started before DNS so a slow resolver eats into the budget, not past it.
-    deadline = time.monotonic() + _FETCH_DEADLINE_SECONDS
+    if deadline is None:
+        deadline = time.monotonic() + _FETCH_DEADLINE_SECONDS
     try:
         target = validate_and_pin(client_id)
     except SsrfError as exc:
@@ -190,10 +206,10 @@ def _fetch_document(client_id: str) -> bytes:
             body = bytearray()
             for chunk in response.iter_raw():
                 body.extend(chunk)
-                if len(body) > _MAX_DOCUMENT_BYTES:
-                    raise ClientMetadataError("client metadata document is too large")
                 if time.monotonic() > deadline:
                     raise ClientMetadataError("client metadata document took too long")
+                if len(body) > _MAX_DOCUMENT_BYTES:
+                    raise ClientMetadataError("client metadata document is too large")
             return bytes(body)
     except httpx.HTTPError as exc:
         raise ClientMetadataError(
@@ -245,15 +261,8 @@ def parse_document(client_id: str, raw: bytes) -> OAuthClientInformationFull:
         raise ClientMetadataError("client metadata document is invalid") from exc
 
 
-def resolve_client(client_id: str) -> OAuthClientInformationFull:
-    """Return the validated client for ``client_id``, fetching it if not cached.
-
-    Raises :class:`ClientMetadataError` when the URL or its document is not
-    acceptable, when it failed within the last minute, or when the fetch limit
-    is reached.
-    """
-    if not is_metadata_document_client_id(client_id):
-        raise ClientMetadataError("client_id is not a Client ID Metadata Document URL")
+def _cached(client_id: str) -> OAuthClientInformationFull | None:
+    """The cached client, or None. Raises the cached failure if one is live."""
     now = time.monotonic()
     with _cache_lock:
         cached = _cache.get(client_id)
@@ -262,10 +271,40 @@ def resolve_client(client_id: str) -> OAuthClientInformationFull:
         failed = _failures.get(client_id)
         if failed and failed[0] > now:
             raise ClientMetadataError(failed[1])
-    if not _fetch_slots.acquire(blocking=False):
-        raise ClientMetadataError("too many client metadata fetches in progress")
+    return None
+
+
+def resolve_client(client_id: str) -> OAuthClientInformationFull:
+    """Return the validated client for ``client_id``, fetching it if not cached.
+
+    Raises :class:`ClientMetadataError` when the URL or its document is not
+    acceptable, when it failed within the last minute, or when no fetch slot
+    frees up in time.
+    """
+    if not is_metadata_document_client_id(client_id):
+        raise ClientMetadataError("client_id is not a Client ID Metadata Document URL")
+    if (client := _cached(client_id)) is not None:
+        return client
+    # The slot wait and the fetch share one deadline.
+    deadline = time.monotonic() + _FETCH_DEADLINE_SECONDS
+    host = urlsplit(client_id).hostname or ""
     try:
-        client = parse_document(client_id, _fetch_document(client_id))
+        with _fetch_slots.hold(host, timeout=_SLOT_WAIT_SECONDS):
+            # A fetch we queued behind may have just cached this client.
+            if (client := _cached(client_id)) is not None:
+                return client
+            client = _fetch_and_remember(client_id, deadline)
+    except FetchSlotsBusyError:
+        # Not cached as a failure: a busy queue says nothing about this client.
+        raise ClientMetadataError(
+            "too many client metadata fetches in progress"
+        ) from None
+    return client
+
+
+def _fetch_and_remember(client_id: str, deadline: float) -> OAuthClientInformationFull:
+    try:
+        client = parse_document(client_id, _fetch_document(client_id, deadline))
     except ClientMetadataError as exc:
         with _cache_lock:
             _remember(
@@ -274,8 +313,6 @@ def resolve_client(client_id: str) -> OAuthClientInformationFull:
                 (time.monotonic() + _FAILURE_CACHE_SECONDS, str(exc)),
             )
         raise
-    finally:
-        _fetch_slots.release()
     with _cache_lock:
         _remember(_cache, client_id, (time.monotonic() + _CACHE_SECONDS, client))
         _failures.pop(client_id, None)
