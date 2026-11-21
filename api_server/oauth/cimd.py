@@ -220,13 +220,7 @@ def parse_document(client_id: str, raw: bytes) -> OAuthClientInformationFull:
     if not isinstance(redirect_uris, list) or not redirect_uris:
         raise ClientMetadataError("client metadata document has no redirect_uris")
     validated = [_validate_redirect_uri(uri) for uri in redirect_uris]
-    auth_method = doc.get("token_endpoint_auth_method", "none")
-    if auth_method != "none":
-        # Only public clients are supported; a client that expects to
-        # authenticate with a key we never verify must not be treated as public.
-        raise ClientMetadataError(
-            "only public clients (token_endpoint_auth_method=none) are supported"
-        )
+    _validate_client_auth_methods(doc)
     name = doc.get("client_name")
     client_name = (
         name if isinstance(name, str) and name.strip() else urlsplit(client_id).hostname
@@ -243,6 +237,27 @@ def parse_document(client_id: str, raw: bytes) -> OAuthClientInformationFull:
         )
     except ValidationError as exc:
         raise ClientMetadataError("client metadata document is invalid") from exc
+
+
+def _validate_client_auth_methods(doc: dict[str, object]) -> None:
+    # SEP-3149 uses an array of supported methods and keeps the singular field
+    # as a legacy preference. This server supports only public clients.
+    if "token_endpoint_auth_methods_supported" in doc:
+        methods = doc["token_endpoint_auth_methods_supported"]
+        if (
+            not isinstance(methods, list)
+            or not methods
+            or any(not isinstance(method, str) for method in methods)
+        ):
+            raise ClientMetadataError(
+                "token_endpoint_auth_methods_supported must be a non-empty array of strings"
+            )
+    else:
+        methods = [doc.get("token_endpoint_auth_method", "none")]
+    if "none" not in methods:
+        raise ClientMetadataError(
+            "only public clients (token_endpoint_auth_method=none) are supported"
+        )
 
 
 def resolve_client(client_id: str) -> OAuthClientInformationFull:
