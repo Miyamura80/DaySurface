@@ -19,7 +19,7 @@ from googleapiclient.discovery import build_from_document
 from googleapiclient.discovery_cache import get_static_doc
 
 from services._gmail_retry import RateLimitRetryingRequest
-from services.gmail_svc import _authorized_http, _per_request_builder
+from services.gmail_svc import _gmail_build_kwargs
 from tests.test_template import TestTemplate
 
 _LABELS = json.dumps({"labels": [{"id": "INBOX", "name": "INBOX"}]}).encode()
@@ -56,12 +56,8 @@ class TestGmailClientThreading(TestTemplate):
         doc = json.loads(get_static_doc("gmail", "v1"))
         doc["rootUrl"] = f"http://127.0.0.1:{server.server_port}/"
         creds = Credentials(token="at-shared")  # noqa: S106 - test token
-        # Built exactly as _get_gmail_client builds the cached client.
-        self.client = build_from_document(
-            doc,
-            http=_authorized_http(creds),
-            requestBuilder=_per_request_builder(creds, RateLimitRetryingRequest),
-        )
+        # The same build arguments _get_gmail_client uses for the cached client.
+        self.client = build_from_document(doc, **_gmail_build_kwargs(creds))
         yield
         server.shutdown()
         server.server_close()

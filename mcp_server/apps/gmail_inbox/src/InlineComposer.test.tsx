@@ -267,6 +267,20 @@ describe("InlineComposer send/autosave race", () => {
     expect(screen.getByText(/Check your Sent folder/)).toBeTruthy();
   });
 
+  it("says an unconfirmed send left the draft unsent, without blaming the network", async () => {
+    const { app, settle } = makeMcpApp();
+    renderComposer(app);
+
+    fireEvent.click(screen.getByText("Send"));
+    // The reply came back but carried no message_id.
+    await settle("gmail_composer.send", { content: [] });
+    await settle("gmail_composer.send_status", draftStillThere);
+
+    expect(screen.getByLabelText("Body")).toBeTruthy();
+    expect(screen.getByText(/Not sent yet: .*did not confirm the send/)).toBeTruthy();
+    expect(screen.queryByText(/could not be reached/)).toBeNull();
+  });
+
   it("says a gateway error left the draft unsent, without the raw JSON", async () => {
     const { app, settle, fail } = makeMcpApp();
     renderComposer(app);
@@ -279,7 +293,7 @@ describe("InlineComposer send/autosave race", () => {
     await settle("gmail_composer.send_status", draftStillThere);
 
     expect(screen.getByLabelText("Body")).toBeTruthy();
-    expect(screen.getByText(/Not sent: .*Error 502: Bad gateway.*try again/)).toBeTruthy();
+    expect(screen.getByText(/Not sent yet: .*\(Error 502: Bad gateway\)\. Try again/)).toBeTruthy();
     expect(screen.queryByText(/POSTing/)).toBeNull();
   });
 

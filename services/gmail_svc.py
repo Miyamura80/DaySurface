@@ -17,12 +17,12 @@ import os
 import secrets
 import threading
 import time
-from collections.abc import Callable, Generator
+from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from email.message import EmailMessage, MIMEPart
 from email.utils import getaddresses
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlencode
 
 import httpx
@@ -44,6 +44,10 @@ from models.gmail import (
 )
 from services import ConnectRequiredError, ModelFacingError, service
 from services._gmail_fake_backend import build_fake_gmail_client
+
+if TYPE_CHECKING:
+    from google.oauth2.credentials import Credentials
+    from googleapiclient.http import HttpRequest
 
 # ---------------------------------------------------------------------------
 # Domain errors
@@ -568,47 +572,39 @@ def _get_gmail_client(user_id: str):  # noqa: ANN202 - googleapiclient Resource 
 
     # Call-time import: tests patch common.token_encryption.require_encryption.
     from common.token_encryption import require_encryption  # noqa: PLC0415
-    from services._gmail_retry import RateLimitRetryingRequest  # noqa: PLC0415
 
     refresh_token = require_encryption().decrypt(encrypted)
     access_token = _mint_access_token(refresh_token)
     creds = Credentials(token=access_token)
-    client = build(
-        "gmail",
-        "v1",
-        http=_authorized_http(creds),
-        cache_discovery=False,
-        requestBuilder=_per_request_builder(creds, RateLimitRetryingRequest),
-    )
+    client = build("gmail", "v1", cache_discovery=False, **_gmail_build_kwargs(creds))
     _store_client(user_id, client)
     return client
 
 
-def _authorized_http(creds: Any) -> Any:
-    """A new authorized connection, with googleapiclient's default timeout."""
-    from google_auth_httplib2 import AuthorizedHttp  # noqa: PLC0415
-    from googleapiclient.http import build_http  # noqa: PLC0415
+def _gmail_build_kwargs(creds: Credentials) -> dict[str, Any]:
+    """Keyword arguments for building the cached Gmail client.
 
-    return AuthorizedHttp(creds, http=build_http())
-
-
-def _per_request_builder(creds: Any, request_cls: Any) -> Callable[..., Any]:
-    """``requestBuilder`` giving every request its own connection.
-
-    The cached client is shared by every thread serving this user (the MCP
-    composer fires several tool calls at once), but httplib2 connections are
-    not thread-safe: two threads on one connection interleave TLS records
-    (``ssl.SSLError: record layer failure``) and can take the whole process
-    down. This is Google's documented pattern for multi-threaded use
+    Every Gmail request goes through ``RateLimitRetryingRequest`` (rate-limit
+    backoff) on its own connection. The cached client is shared by every
+    thread serving this user (the MCP composer fires several tool calls at
+    once), but httplib2 connections are not thread-safe: two threads on one
+    connection interleave TLS records (``ssl.SSLError: record layer
+    failure``) and can take the whole process down. This is Google's
+    documented pattern for multi-threaded use
     (googleapis.github.io/google-api-python-client/docs/thread_safety.html):
     share the client and credentials, build a fresh ``Http`` per request.
     Batches inherit the first request's connection, so they are covered too.
     """
+    from google_auth_httplib2 import AuthorizedHttp  # noqa: PLC0415
+    from googleapiclient.http import build_http  # noqa: PLC0415
 
-    def build_request(_http: Any, *args: Any, **kwargs: Any) -> Any:
-        return request_cls(_authorized_http(creds), *args, **kwargs)
+    from services._gmail_retry import RateLimitRetryingRequest  # noqa: PLC0415
 
-    return build_request
+    def build_request(_shared_http: Any, *args: Any, **kwargs: Any) -> HttpRequest:
+        http = AuthorizedHttp(creds, http=build_http())
+        return RateLimitRetryingRequest(http, *args, **kwargs)
+
+    return {"credentials": creds, "requestBuilder": build_request}
 
 
 def _invalidate_gmail_client(user_id: str) -> None:
