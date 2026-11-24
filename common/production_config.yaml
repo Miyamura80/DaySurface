@@ -16,3 +16,10 @@ server:
 # real level instead of marking all of stderr as "error".
 logging:
   structured: true
+
+# Railway's edge terminates every connection, so the socket peer is the edge's
+# IP and every anonymous caller would share one rate-limit bucket. The edge
+# sets X-Real-IP to the caller's address (docs.railway.com/networking/
+# public-networking/specs-and-limits), so key anonymous limits on that.
+rate_limit:
+  trust_proxy_headers: true

@@ -131,6 +131,39 @@ class TestCacheTiers(CimdCase):
         assert KNOWN not in cimd.snapshot().protected
 
 
+class TestPinnedClients(CimdCase):
+    """M2: the known set is empty after a restart, so configured clients are
+    known from the start and a flood then cannot delay their sign-ins."""
+
+    @pytest.mark.anyio
+    async def test_pinned_ids_are_known_before_any_sign_in(self):
+        resolver = cimd_cache.Resolver(fetches=1, resolver_threads=1, pinned=[KNOWN])
+        with patch.object(cimd, "_resolver", resolver):
+            assert cimd.snapshot().known == (KNOWN,)
+            resolver.budget.running = 1  # the ordinary budget is flooded
+            assert (await cimd.resolve_client(KNOWN)).client_id == KNOWN
+
+    @pytest.mark.anyio
+    async def test_pinned_ids_are_never_evicted_or_vouched(self):
+        resolver = cimd_cache.Resolver(known_clients=2, pinned=[KNOWN])
+        with patch.object(cimd, "_resolver", resolver):
+            cimd.mark_known(KNOWN, USER)
+            assert resolver.known[KNOWN] == set()  # no voucher to lose
+            for n in range(5):
+                cimd.mark_known(cid(n), f"user_{n}")
+            assert cimd.snapshot().known == (KNOWN, cid(3), cid(4))
+
+    @pytest.mark.anyio
+    async def test_configured_ids_are_pinned_in_canonical_form(self):
+        with patch.object(
+            cimd.global_config.oauth,
+            "cimd_known_clients",
+            ["HTTPS://Claude.AI/oauth/mcp-oauth-client-metadata"],
+        ):
+            resolver = cimd._new_resolver()
+        assert resolver.pinned == {"https://claude.ai/oauth/mcp-oauth-client-metadata"}
+
+
 class TestKnownByIssuance(OAuthServerCase):
     def test_a_completed_sign_in_protects_the_client(self):
         assert CLIENT_ID not in cimd.snapshot().known

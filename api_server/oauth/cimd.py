@@ -40,7 +40,9 @@ the commit, with the user it was for). A user vouches for at most
 re-vouches), so signing in with one's own client ids buys a bounded share of
 the reserved budget. An id keeps at most ``MAX_VOUCHERS_PER_ID`` vouchers,
 known ids are capped overall (``Resolver(known_clients=)``), and an id that
-loses its last voucher becomes an ordinary cached entry again.
+loses its last voucher becomes an ordinary cached entry again. Ids listed in
+``oauth.cimd_known_clients`` are known from startup and never evicted, so a
+flood right after a restart cannot delay the clients most users sign in with.
 
 Records honour the document's ``Cache-Control``: ``max-age`` sets freshness,
 clamped to ``[MIN_FRESH_SECONDS, MAX_FRESH_SECONDS]`` with
@@ -102,6 +104,7 @@ from api_server.oauth.cimd_document import (
     is_metadata_document_client_id,
     parse_document,
 )
+from common import global_config
 from services._ssrf_guard import (
     HostLookupRunningError,
     ResolverBusyError,
@@ -144,7 +147,12 @@ class CimdSnapshot:
     resolver_threads: int
 
 
-_resolver = Resolver()
+def _new_resolver() -> Resolver:
+    pinned = global_config.oauth.cimd_known_clients
+    return Resolver(pinned=(canonical_client_id(c) for c in pinned))
+
+
+_resolver = _new_resolver()
 # The app lifespan's task group, which owns every fetch task (see lifespan).
 _task_group: TaskGroup | None = None
 
@@ -347,4 +355,4 @@ def snapshot() -> CimdSnapshot:
 def clear_cache() -> None:
     """Start over with a fresh resolver: records, flights, budgets (tests)."""
     global _resolver  # noqa: PLW0603
-    _resolver = Resolver()
+    _resolver = _new_resolver()
