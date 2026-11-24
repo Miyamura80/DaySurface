@@ -3,8 +3,10 @@
 The server reads API keys only from the `X-API-KEY` header; the Bearer slot is
 for WorkOS JWTs and OAuth tokens. An example that puts the key in the Bearer
 slot 401s for anyone who copies it. The pattern targets the shapes that have
-shipped after the Bearer scheme: literal `sk_` placeholders, shell variables
-(`$TOKEN`, `$MYMCP_API_KEY`, `${X_API_KEY}`) and Python f-string fields (`{KEY}`).
+shipped after the Bearer scheme: literal `sk_` placeholders, shell and JS
+variables (`$TOKEN`, `$MYMCP_API_KEY`, `${process.env.API_KEY}`), f-string fields
+(`{KEY}`, `{self.api_key}`) and named placeholders (`YOUR_API_KEY`, `<api-key>`).
+`<token>` and `<jwt>` stay legal: they name OAuth and WorkOS credentials.
 
 Scans tracked docs and example source via `git ls-files`. Directories that
 legitimately send third-party bearer tokens (`servers/`, `services/`) or
@@ -24,7 +26,14 @@ GLOBS = ("*.md", "*.mdx", "*.ts", "*.tsx", "*.astro", "*.json", "*.py")
 EXCLUDED_DIRS = ("tests/", "services/", "api_server/", "servers/")
 
 BEARER_API_KEY = re.compile(
-    r"Bearer\s+(?:sk[_-]|\$\{?\w*API_KEY\b|\$\{?TOKEN\b|\{\w*KEY\})",
+    r"Bearer\s+(?:"
+    r"sk[_-]"  # literal placeholder: sk_live_...
+    r"|\$\{?[\w.]*API_KEY\b"  # $MYMCP_API_KEY, ${process.env.API_KEY}
+    r"|\$\{?TOKEN\b"  # $TOKEN, ${TOKEN}
+    r"|\{[\w.]*KEY\}"  # f-string fields: {KEY}, {self.api_key}
+    r"|\w*API_KEY\b"  # bare placeholder: YOUR_API_KEY
+    r"|<[^>]*API[-_ ]?KEY[^>]*>"  # <api-key>, <your API key>
+    r")",
     re.IGNORECASE,
 )
 
