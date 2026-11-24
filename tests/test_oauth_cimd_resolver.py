@@ -292,33 +292,52 @@ class TestHungDns(CimdCase):
             await self._threads_drain()
 
     @pytest.mark.anyio
-    async def test_attacker_known_ids_cannot_drain_known_dns(self):
-        """N1: one account's self-signed-in ids with hanging DNS, hammered,
-        hold at most one thread each and leave a real known client working."""
+    async def test_rotating_known_ids_cannot_take_a_known_client_offline(self):
+        """H1 / L1: one account with many of its own client ids, every one
+        re-vouched on each token use, all with hanging DNS, against a real
+        known client whose record has gone past its stale bound."""
         release = threading.Event()
-        evil = [f"https://a{n}.evil.example/m.json" for n in range(5)]
-        for client_id in evil:
-            cimd.mark_known(client_id, "user_attacker")
-        hosts = {f"a{n}.evil.example" for n in range(5)}
-        with patch.object(cimd._resolver.known_budget, "resolver", ResolverThreads(4)):
-            cimd.mark_known(KNOWN, USER)
-            pin, dns = self._real_dns(hosts, release)
-            fetch = patch.object(
-                cimd,
-                "fetch_document",
-                return_value=FetchedDocument(client_document(client_id=KNOWN), None),
+        evil = [f"https://a{n}.evil.example/m.json" for n in range(20)]
+        hosts = {f"a{n}.evil.example" for n in range(20)}
+        # As few known resolver threads as the attacker can hold, so the
+        # legitimate refresh really does find them all taken.
+        threads = ResolverThreads(cimd_cache.NEW_VOUCHES_PER_DAY)
+        cimd.mark_known(KNOWN, USER)
+        fetch = patch.object(
+            cimd,
+            "fetch_document",
+            return_value=FetchedDocument(client_document(client_id=KNOWN), None),
+        )
+        pin, dns = self._real_dns(hosts, release)
+        with (
+            patch.object(cimd._resolver.known_budget, "resolver", threads),
+            pin,
+            dns,
+            fetch,
+        ):
+            await cimd.resolve_client(KNOWN)
+            for _ in range(3):
+                for client_id in evil:
+                    for vouched in evil:  # token use re-vouches them all
+                        cimd.mark_known(vouched, "user_attacker")
+                    with pytest.raises(ClientMetadataError):
+                        await cimd.resolve_client(client_id)
+                self.clock.now += cimd_cache.BACKOFF_SECONDS + 1
+            state = cimd.snapshot()
+            assert len(state.known) == 1 + cimd_cache.NEW_VOUCHES_PER_DAY
+            assert threads.running == cimd_cache.NEW_VOUCHES_PER_DAY  # all
+            self.clock.now += (
+                cimd_cache.DEFAULT_FRESH_SECONDS + cimd_cache.MAX_STALE_SECONDS
             )
-            with pin, dns, fetch:
-                for _ in range(5):
-                    for client_id in evil:
-                        with pytest.raises(ClientMetadataError):
-                            await cimd.resolve_client(client_id)
-                    self.clock.now += cimd_cache.BACKOFF_SECONDS + 1
-                # Only three ids are known; they hold one thread each.
-                assert cimd._resolver.known_budget.resolver.running == 3
+            for _ in range(3):  # past stale_until, refreshes refused
                 assert (await cimd.resolve_client(KNOWN)).client_id == KNOWN
-                release.set()
-                await self._threads_drain()
+                await settled(KNOWN)
+            release.set()
+            await self._threads_drain()
+            self.clock.now += cimd_cache.BACKOFF_SECONDS + 1
+            assert (await cimd.resolve_client(KNOWN)).client_id == KNOWN
+            await settled(KNOWN)  # the refresh now succeeds
+        assert KNOWN in cimd.snapshot().protected
 
     @pytest.mark.anyio
     async def test_resolver_threads_refuse_when_full(self):

@@ -37,11 +37,9 @@ re-pinned, never followed blindly) and a wall-clock deadline on every socket
 operation.
 
 Async callers (the CIMD resolver) use :func:`validate_and_pin_async` and
-:func:`build_async_client` instead, which apply the same validation and pinning
-without holding a worker thread for the exchange. DNS is the one step that
-still needs a thread, because ``getaddrinfo`` has no async form and no timeout;
-:class:`ResolverThreads` caps those threads and counts each one until its
-lookup really returns, so lookups an async caller gave up on cannot pile up.
+:func:`build_async_client`: the same checks, no worker thread held. DNS has no
+async form and no timeout, so it runs on :class:`ResolverThreads`, which also
+gives sync callers (webhook delivery) a timed lookup.
 """
 
 from __future__ import annotations
@@ -51,7 +49,7 @@ import socket
 import ssl
 import threading
 import time
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from contextlib import suppress
 from dataclasses import dataclass, field
 from typing import Any
@@ -205,7 +203,13 @@ def _pin(
     )
 
 
-def validate_and_pin(url: str, *, allow_loopback: bool = False) -> PinnedTarget:
+def validate_and_pin(
+    url: str,
+    *,
+    allow_loopback: bool = False,
+    resolver: ResolverThreads | None = None,
+    timeout: float | None = None,
+) -> PinnedTarget:
     """Validate ``url`` and pin it to one resolved, allowlisted IP.
 
     Resolves the host once, requires every answer to satisfy
@@ -213,10 +217,20 @@ def validate_and_pin(url: str, *, allow_loopback: bool = False) -> PinnedTarget:
     IP (the first IPv4 answer, else the first) while preserving the hostname in ``Host`` + SNI. IP-literal
     hosts are validated and passed through unchanged.
 
-    Raises :class:`SsrfError` on any rejection.
+    With ``resolver`` and ``timeout``, DNS runs on one of ``resolver``'s threads
+    and gives up after ``timeout`` seconds (raising
+    :class:`UnresolvableHostError`), so a host whose DNS never answers cannot
+    hold the caller; ``getaddrinfo`` itself has no timeout.
+
+    Raises :class:`SsrfError` on any rejection, and :class:`ResolverBusyError`
+    when ``resolver`` refuses the lookup.
     """
     target = _parse_url(url)
-    addresses = _resolve(target.host, target.connect_port)
+    if resolver is not None and timeout is not None:
+        infos = resolver.getaddrinfo_blocking(target.host, target.connect_port, timeout)
+        addresses = _addresses(target.host, infos)
+    else:
+        addresses = _resolve(target.host, target.connect_port)
     return _pin(url, target, addresses, allow_loopback=allow_loopback)
 
 
@@ -346,25 +360,37 @@ class _DeadlineBackend(httpcore.NetworkBackend):
         self._backend.sleep(seconds)
 
 
-# -- Async path ---------------------------------------------------------------
+# -- Resolver threads and the async path -------------------------------------
 
 
 class ResolverBusyError(RuntimeError):
     """Every resolver thread is still inside a lookup."""
 
 
+class HostLookupRunningError(ResolverBusyError):
+    """A lookup of this same host is still running: one hung host, one thread."""
+
+
+@dataclass(slots=True)
+class _Lookup:
+    """The result of one ``getaddrinfo`` run on its own thread."""
+
+    answer: list = field(default_factory=list)
+    failure: OSError | None = None
+
+
 class ResolverThreads:
-    """Runs ``getaddrinfo`` for async callers on at most ``limit`` threads.
+    """Runs ``getaddrinfo`` on at most ``limit`` threads of its own.
 
     A thread cannot be interrupted, so a caller whose deadline passes stops
     waiting but leaves the lookup running until the system resolver gives up.
     Each thread is therefore counted from start until ``getaddrinfo`` really
-    returns, not until its caller stops waiting, and a lookup is refused at
-    once with :class:`ResolverBusyError` when every thread is taken or when a
-    lookup of the same host is still running (so one slow host holds at most
-    one thread, however often it is asked for). These are
-    this class's own threads, so a hung lookup never holds one of anyio's
-    worker threads (the pool that serves /mcp and sync routes).
+    returns, not until its caller stops waiting. A lookup is refused at once
+    when every thread is taken (:class:`ResolverBusyError`) or when a lookup
+    of the same host is still running (:class:`HostLookupRunningError`), so
+    one slow host holds at most one thread however often it is asked for.
+    They are this class's own threads, so a hung lookup never holds one of
+    anyio's worker threads (the pool that serves /mcp and sync routes).
     """
 
     def __init__(self, limit: int) -> None:
@@ -378,42 +404,66 @@ class ResolverThreads:
         with self._lock:
             return self._running
 
-    async def getaddrinfo(self, host: str, port: int) -> list:
+    def _start(self, host: str, port: int, on_done: Callable[[], None]) -> _Lookup:
         key = host.lower()
         with self._lock:
-            if self._running >= self._limit or key in self._hosts:
+            if key in self._hosts:
+                raise HostLookupRunningError
+            if self._running >= self._limit:
                 raise ResolverBusyError
             self._running += 1
             self._hosts.add(key)
-        done = anyio.Event()
-        token = anyio.lowlevel.current_token()
-        answer: list = []
-        failure: list[OSError] = []
+        lookup = _Lookup()
 
-        def lookup() -> None:
+        def run() -> None:
             try:
-                answer.extend(socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP))
+                lookup.answer.extend(
+                    socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
+                )
             except OSError as exc:  # socket.gaierror is an OSError
-                failure.append(exc)
+                lookup.failure = exc
             finally:
                 with self._lock:
                     self._running -= 1
                     self._hosts.discard(key)
-                # RuntimeError: the event loop is gone, so nobody waits.
-                with suppress(RuntimeError):
-                    anyio.from_thread.run_sync(done.set, token=token)
+                on_done()
 
         try:
-            threading.Thread(target=lookup, name="ssrf-dns", daemon=True).start()
+            threading.Thread(target=run, name="ssrf-dns", daemon=True).start()
         except RuntimeError:  # no thread could be started
             with self._lock:
                 self._running -= 1
                 self._hosts.discard(key)
             raise
+        return lookup
+
+    @staticmethod
+    def _answer(host: str, lookup: _Lookup) -> list:
+        if lookup.failure is None:
+            return lookup.answer
+        raise UnresolvableHostError(f"cannot resolve host {host!r}") from lookup.failure
+
+    async def getaddrinfo(self, host: str, port: int) -> list:
+        """Resolve for an async caller; cancel the caller to stop waiting."""
+        done = anyio.Event()
+        token = anyio.lowlevel.current_token()
+
+        def wake() -> None:
+            # RuntimeError: the event loop is gone, so nobody waits.
+            with suppress(RuntimeError):
+                anyio.from_thread.run_sync(done.set, token=token)
+
+        lookup = self._start(host, port, wake)
         await done.wait()
-        if failure:
-            raise UnresolvableHostError(f"cannot resolve host {host!r}") from failure[0]
-        return answer
+        return self._answer(host, lookup)
+
+    def getaddrinfo_blocking(self, host: str, port: int, timeout: float) -> list:
+        """Resolve for a sync caller, giving up after ``timeout`` seconds."""
+        done = threading.Event()
+        lookup = self._start(host, port, done.set)
+        if not done.wait(max(timeout, 0.0)):
+            raise UnresolvableHostError(f"timed out resolving host {host!r}")
+        return self._answer(host, lookup)
 
 
 async def validate_and_pin_async(
@@ -423,8 +473,9 @@ async def validate_and_pin_async(
 
     Cancel the caller (for example with :func:`anyio.fail_after`) to bound the
     lookup: the wait ends at once and the thread is released when the system
-    resolver returns. Raises :class:`ResolverBusyError` when ``resolver`` has
-    no free thread, and :class:`SsrfError` on any rejection.
+    resolver returns. Raises :class:`ResolverBusyError` (or its subclass
+    :class:`HostLookupRunningError`) when ``resolver`` refuses the lookup, and
+    :class:`SsrfError` on any rejection.
     """
     target = _parse_url(url)
     try:

@@ -23,7 +23,13 @@ MAX_FRESH_SECONDS = 3600
 MAX_STALE_SECONDS = 3600
 FAILURE_CACHE_SECONDS = 60
 BACKOFF_SECONDS = 30
-MAX_KNOWN_PER_SUBJECT = 3
+# A known client's record that was fetched successfully is kept (and served
+# while refetches are busy or fail without an answer) for this long at most.
+KNOWN_MAX_AGE_SECONDS = 7 * 24 * 3600
+MAX_KNOWN_PER_SUBJECT = 3  # client ids one user vouches for at once
+NEW_VOUCHES_PER_DAY = 3  # distinct new ids one user may vouch for per 24h
+VOUCH_WINDOW_SECONDS = 24 * 3600
+MAX_VOUCHERS_PER_ID = 32  # enough to keep a popular client known
 # Record lifetimes are measured on this clock; tests replace it.
 _clock = time.monotonic
 
@@ -31,7 +37,8 @@ _clock = time.monotonic
 class Kind(Enum):
     DEFINITE = "definite"  # an answer about the document: cached, drops the record
     TRANSIENT = "transient"  # no answer: stale may be served, then back off
-    BUSY = "busy"  # no capacity: stale may be served, then back off
+    HOST_BUSY = "host_busy"  # this host's last lookup still runs: as TRANSIENT
+    BUSY = "busy"  # the budget is full: stale may be served, no state kept
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +60,7 @@ class Record:
     client: OAuthClientInformationFull
     fresh_until: float
     stale_until: float  # equals fresh_until when the record may not go stale
+    kept_until: float  # how long the known tier keeps it (KNOWN_MAX_AGE_SECONDS)
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,14 +148,20 @@ class Resolver:
         self.known_backoff: dict[str, Until] = {}
         self.in_flight: dict[str, Flight] = {}
         self.known_limit = known_clients
+        self.new_vouches: dict[str, list[float]] = {}  # subject -> recent times
 
     # -- known clients -------------------------------------------------------
 
     def mark_known(self, client_id: str, subject: str) -> None:
         with self.lock:
-            ids = self.subjects.setdefault(subject, OrderedDict())
-            ids[client_id] = None
-            ids.move_to_end(client_id)
+            ids = self.subjects.get(subject)
+            if ids is not None and client_id in ids:
+                ids.move_to_end(client_id)  # a re-vouch is free
+            elif not self._may_vouch(client_id, subject):
+                return
+            else:
+                ids = self.subjects.setdefault(subject, OrderedDict())
+                ids[client_id] = None
             while len(ids) > MAX_KNOWN_PER_SUBJECT:
                 dropped = next(iter(ids))
                 self._drop_subject_id(subject, dropped)
@@ -167,6 +181,28 @@ class Resolver:
                 for who in gone:
                     self._drop_subject_id(who, evicted)
                 self._demote(evicted)
+
+    def _may_vouch(self, client_id: str, subject: str) -> bool:
+        """Spend one of ``subject``'s new vouches, if any is left. Hold lock.
+
+        A rate, not just a cap at once: token use re-vouches on every request,
+        so a cap alone would let one account rotate any number of its own ids
+        back into the known tier.
+        """
+        vouchers = self.known.get(client_id)
+        if vouchers is not None and len(vouchers) >= MAX_VOUCHERS_PER_ID:
+            return False  # known already; one more voucher would only cost memory
+        at = now()
+        recent = [
+            t
+            for t in self.new_vouches.get(subject, [])
+            if t > at - VOUCH_WINDOW_SECONDS
+        ]
+        if len(recent) >= NEW_VOUCHES_PER_DAY:
+            self.new_vouches[subject] = recent
+            return False
+        self.new_vouches[subject] = [*recent, at]
+        return True
 
     def _drop_subject_id(self, subject: str, client_id: str) -> None:
         ids = self.subjects.get(subject)
@@ -194,14 +230,19 @@ class Resolver:
     # -- lookups ---------------------------------------------------------------
 
     def record(self, client_id: str, now: float) -> Record | None:
-        """The cached record, if still servable at all. Marks it used."""
-        tier: dict[str, Record] = (
-            self.protected if client_id in self.protected else self.cache
-        )
+        """The cached record, if still servable at all. Marks it used.
+
+        A known client's record stays servable until ``kept_until``: only a
+        definite answer about its document (a refetch, a 4xx, an invalid
+        document) replaces or drops it, so a refetch that keeps coming back
+        busy or failed cannot take a working client offline.
+        """
+        protected = client_id in self.protected
+        tier: dict[str, Record] = self.protected if protected else self.cache
         record = tier.get(client_id)
         if record is None:
             return None
-        if record.stale_until <= now:
+        if (record.kept_until if protected else record.stale_until) <= now:
             del tier[client_id]  # past every use: free the memory now
             return None
         if tier is self.cache:
@@ -231,7 +272,8 @@ class Resolver:
         stale: float,
     ) -> None:
         at = now()
-        record = Record(client, at + fresh, at + fresh + stale)
+        kept = max(fresh + stale, KNOWN_MAX_AGE_SECONDS) if stale else fresh
+        record = Record(client, at + fresh, at + fresh + stale, at + kept)
         with self.lock:
             self.failures.pop(client_id, None)
             self.backoff.pop(client_id, None)
@@ -250,6 +292,8 @@ class Resolver:
             failure = Until(outcome.message, until + FAILURE_CACHE_SECONDS)
             self.failures.put(client_id, failure)
             return
+        if outcome.kind is Kind.BUSY:
+            return  # a full budget says nothing about this id: no state
         wait = Until(outcome.message, until + BACKOFF_SECONDS)
         if client_id in self.known:
             self.known_backoff[client_id] = wait
@@ -272,10 +316,6 @@ def lifetimes(cache_control: str | None) -> tuple[float, float]:
     if max_age.isdecimal():
         fresh = int(max_age[:6])  # six digits already exceed the clamp
     return min(max(fresh, MIN_FRESH_SECONDS), MAX_FRESH_SECONDS), MAX_STALE_SECONDS
-
-
-# Record lifetimes are measured on this clock; tests replace it.
-_clock = time.monotonic
 
 
 def now() -> float:

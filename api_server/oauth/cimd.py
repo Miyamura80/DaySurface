@@ -34,23 +34,34 @@ flood of slow client ids can fill the shared budget and make new clients wait
 
 A client is known once this server issued it a code or tokens, or accepted
 its access token (``mark_known``, called by storage and the provider, after
-the commit, with the user it was for).
-Each user can vouch for at most ``MAX_KNOWN_PER_SUBJECT`` client ids, so
-signing in with one's own client ids buys a bounded share of the reserved
-budget, and known ids are capped overall (``Resolver(known_clients=)``); an id that
+the commit, with the user it was for). A user vouches for at most
+``MAX_KNOWN_PER_SUBJECT`` client ids at once and at most
+``NEW_VOUCHES_PER_DAY`` new ones per day (re-vouching is free: every token use
+re-vouches), so signing in with one's own client ids buys a bounded share of
+the reserved budget. An id keeps at most ``MAX_VOUCHERS_PER_ID`` vouchers,
+known ids are capped overall (``Resolver(known_clients=)``), and an id that
 loses its last voucher becomes an ordinary cached entry again.
 
 Records honour the document's ``Cache-Control``: ``max-age`` sets freshness,
 clamped to ``[MIN_FRESH_SECONDS, MAX_FRESH_SECONDS]`` with
 ``DEFAULT_FRESH_SECONDS`` when absent. After freshness a record may be served
-stale for at most ``MAX_STALE_SECONDS``: to a known client always, while one
-background refetch runs (stale-while-revalidate); to anyone while a refetch is
-busy, backing off, or fails without an answer (5xx, network error, timeout:
-RFC 5861 stale-if-error). ``no-store`` / ``no-cache`` records are never served
-stale. A definite failure (4xx, an invalid or mismatched document, a refused
-host) drops the record and is cached for ``FAILURE_CACHE_SECONDS``. Any other
-failed fetch starts a per-id backoff of ``BACKOFF_SECONDS``, during which the
-id is not fetched again, so one id costs at most one fetch per backoff.
+stale while one refetch runs or after one fails without an answer:
+
+* a known client's record, always, until a refetch gives a definite answer
+  (a new document, a 4xx, an invalid document) or it is
+  ``KNOWN_MAX_AGE_SECONDS`` old (stale-while-revalidate, and
+  stale-if-error). Flooding the known budget can therefore delay a known
+  client's refresh but not take it offline;
+* anyone else's, for at most ``MAX_STALE_SECONDS``, while a refetch is busy,
+  backing off, or fails with a 5xx, network error or timeout (RFC 5861
+  stale-if-error).
+
+``no-store`` / ``no-cache`` records are never served stale. A definite failure
+drops the record and is cached for ``FAILURE_CACHE_SECONDS``. A fetch that
+fails without an answer, or finds this host's previous lookup still running,
+starts a per-id backoff of ``BACKOFF_SECONDS``, during which the id is not
+fetched again. A refusal because a whole budget is full leaves no state at
+all, so a flood cannot extend its effect on ids it pokes.
 
 Deliberate deviation from RFC 9111: a ``no-store`` / ``no-cache`` document is
 still kept for ``MIN_FRESH_SECONDS``, without revalidation. Taken literally,
@@ -85,12 +96,14 @@ from api_server.oauth.cimd_document import (
     ClientMetadataError,
     FetchedDocument,
     TransientFetchError,
+    canonical_client_id,
     fetch_document,
     is_loopback_redirect,
     is_metadata_document_client_id,
     parse_document,
 )
 from services._ssrf_guard import (
+    HostLookupRunningError,
     ResolverBusyError,
     SsrfError,
     UnresolvableHostError,
@@ -141,10 +154,10 @@ def mark_known(client_id: str, subject: str) -> None:
 
     Called by :mod:`api_server.oauth.storage` and the provider once a code or
     tokens are committed, and whenever an access token is accepted, so the set
-    refills after a restart as clients come back. A known client's record moves to the protected tier
-    and its fetches use the reserved budget.
+    refills after a restart as clients come back. A known client's record
+    moves to the protected tier and its fetches use the reserved budget.
     """
-    _resolver.mark_known(client_id, subject)
+    _resolver.mark_known(canonical_client_id(client_id), subject)
 
 
 @asynccontextmanager
@@ -169,6 +182,7 @@ async def resolve_client(client_id: str) -> OAuthClientInformationFull:
     """
     if not is_metadata_document_client_id(client_id):
         raise ClientMetadataError("client_id is not a Client ID Metadata Document URL")
+    client_id = canonical_client_id(client_id)
     resolver = _resolver
     deadline = now() + _FETCH_DEADLINE_SECONDS
     with resolver.lock:
@@ -248,7 +262,9 @@ async def _wait(
     if stale is not None:
         return stale
     raise ClientMetadataError(
-        _BUSY_MESSAGE if outcome.kind is Kind.BUSY else outcome.message
+        _BUSY_MESSAGE
+        if outcome.kind in (Kind.BUSY, Kind.HOST_BUSY)
+        else outcome.message
     )
 
 
@@ -283,6 +299,8 @@ async def _fetch(resolver: Resolver, client_id: str, budget: Budget) -> Outcome:
             target = await validate_and_pin_async(client_id, resolver=budget.resolver)
             fetched = await fetch_document(target, timeout=_FETCH_DEADLINE_SECONDS)
         client = parse_document(client_id, fetched.body)
+    except HostLookupRunningError:
+        return Failed(Kind.HOST_BUSY, _BUSY_MESSAGE)
     except ResolverBusyError:
         return Failed(Kind.BUSY, _BUSY_MESSAGE)
     except TimeoutError:

@@ -14,6 +14,7 @@ import pytest
 
 from api_server.oauth import cimd, cimd_cache
 from api_server.oauth.cimd_document import ClientMetadataError, TransientFetchError
+from services._ssrf_guard import validate_and_pin_async
 from tests.cimd_fakes import KNOWN, USER, CimdCase, cid, settled, small_resolver
 from tests.oauth_server_fixture import (
     CLIENT_ID,
@@ -41,8 +42,9 @@ class TestCacheTiers(CimdCase):
 
     @pytest.mark.anyio
     async def test_one_user_vouches_for_a_bounded_number_of_ids(self):
-        """N1(c): sign-ins with one's own client ids buy at most three."""
-        for n in range(5):
+        """N1(c): sign-ins with one's own client ids buy at most three at once."""
+        for day, n in enumerate(range(5)):
+            self.clock.now += day * cimd_cache.VOUCH_WINDOW_SECONDS
             await cimd.resolve_client(cid(n))
             cimd.mark_known(cid(n), "user_attacker")
         state = cimd.snapshot()
@@ -51,6 +53,39 @@ class TestCacheTiers(CimdCase):
         assert {cid(0), cid(1)} <= set(state.cached)
         cimd.mark_known(cid(0), USER)  # another user still vouches for it
         assert cid(0) in cimd.snapshot().known
+
+    @pytest.mark.anyio
+    async def test_new_vouches_are_a_rate_and_revouching_is_free(self):
+        """H1(2): token use re-vouches on every request, so the cap is a rate:
+        rotating ids back in costs a new vouch each, three per day."""
+        for n in range(20):
+            cimd.mark_known(cid(n), "user_attacker")
+            for m in range(n + 1):  # every token use re-vouches
+                cimd.mark_known(cid(m), "user_attacker")
+        assert cimd.snapshot().known == (cid(0), cid(1), cid(2))
+        self.clock.now += cimd_cache.VOUCH_WINDOW_SECONDS + 1
+        cimd.mark_known(cid(3), "user_attacker")
+        assert cid(3) in cimd.snapshot().known
+
+    @pytest.mark.anyio
+    async def test_vouchers_per_id_are_capped(self):
+        """L3: a popular id keeps a bounded voucher set, and stays known."""
+        for n in range(cimd_cache.MAX_VOUCHERS_PER_ID + 10):
+            cimd.mark_known(KNOWN, f"user_{n}")
+        resolver = cimd._resolver
+        assert len(resolver.known[KNOWN]) == cimd_cache.MAX_VOUCHERS_PER_ID
+        assert len(resolver.subjects) == cimd_cache.MAX_VOUCHERS_PER_ID
+
+    @pytest.mark.anyio
+    async def test_scheme_and_host_case_share_one_entry(self):
+        await cimd.resolve_client(KNOWN)
+        shouty = KNOWN.replace(
+            "https://known.test.example", "HTTPS://Known.Test.Example"
+        )
+        assert (await cimd.resolve_client(shouty)).client_id == KNOWN
+        cimd.mark_known(shouty, USER)
+        assert cimd.snapshot().known == (KNOWN,)
+        assert self.net.calls[KNOWN] == 1
 
     @pytest.mark.anyio
     async def test_an_id_stays_known_while_any_voucher_remains(self):
@@ -76,13 +111,21 @@ class TestCacheTiers(CimdCase):
 
     @pytest.mark.anyio
     async def test_records_past_every_use_are_dropped_on_read(self):
-        """N3: a protected record does not outlive its staleness bound."""
+        """N3: no record outlives its bound: the stale bound for unknown ids,
+        KNOWN_MAX_AGE_SECONDS for known ones."""
         cimd.mark_known(KNOWN, USER)
         await cimd.resolve_client(KNOWN)
+        await cimd.resolve_client(cid(1))
         self.clock.now += (
             cimd_cache.DEFAULT_FRESH_SECONDS + cimd_cache.MAX_STALE_SECONDS + 1
         )
-        self.net.answer[KNOWN] = ClientMetadataError("HTTP 404")
+        self.net.answer[cid(1)] = TransientFetchError("HTTP 503")
+        with pytest.raises(ClientMetadataError):
+            await cimd.resolve_client(cid(1))
+        assert cid(1) not in cimd.snapshot().cached
+        assert KNOWN in cimd.snapshot().protected
+        self.clock.now += cimd_cache.KNOWN_MAX_AGE_SECONDS
+        self.net.answer[KNOWN] = TransientFetchError("HTTP 503")
         with pytest.raises(ClientMetadataError):
             await cimd.resolve_client(KNOWN)
         assert KNOWN not in cimd.snapshot().protected
@@ -191,6 +234,29 @@ class TestBackoff(CimdCase):
         assert cid(1) in cimd.snapshot().backing_off
 
 
+class TestFullBudget(CimdCase):
+    @pytest.mark.anyio
+    async def test_a_full_budget_leaves_no_state(self):
+        """M1: poking an id while a flood fills the budget must not make it
+        fail after the flood ends."""
+        cimd._resolver.budget.running = cimd._resolver.budget.limit
+        with pytest.raises(ClientMetadataError, match="too many"):
+            await cimd.resolve_client(cid(1))
+        cimd._resolver.budget.running = 0
+        # Resolver threads all taken: the fetch runs, but DNS is refused.
+        threads = cimd._resolver.budget.resolver
+        with (
+            patch.object(threads, "_limit", 0),
+            patch.object(cimd, "validate_and_pin_async", validate_and_pin_async),
+            pytest.raises(ClientMetadataError, match="too many"),
+        ):
+            await cimd.resolve_client(cid(2))
+        state = cimd.snapshot()
+        assert state.backing_off == () and state.failed == ()
+        assert (await cimd.resolve_client(cid(1))).client_id == cid(1)
+        assert (await cimd.resolve_client(cid(2))).client_id == cid(2)
+
+
 class TestKnownClientErrors(CimdCase):
     async def _stale_known(self) -> None:
         cimd.mark_known(KNOWN, USER)
@@ -215,6 +281,35 @@ class TestKnownClientErrors(CimdCase):
         assert (await cimd.resolve_client(KNOWN)).client_id == KNOWN
         await settled(KNOWN)
         assert self.net.calls[KNOWN] == 3
+
+    @pytest.mark.anyio
+    async def test_known_record_outlives_the_stale_bound_until_an_answer(self):
+        """H1(1): refreshes that keep failing without an answer, or finding
+        the budget full, never take a known client offline before an answer."""
+        await self._stale_known()
+        self.net.answer[KNOWN] = TransientFetchError("HTTP 503")
+        for _ in range(3):
+            self.clock.now += cimd_cache.MAX_STALE_SECONDS  # well past the bound
+            assert (await cimd.resolve_client(KNOWN)).client_id == KNOWN
+            await settled(KNOWN)
+        cimd._resolver.known_budget.running = cimd._resolver.known_budget.limit
+        self.clock.now += cimd_cache.MAX_STALE_SECONDS
+        assert (await cimd.resolve_client(KNOWN)).client_id == KNOWN
+        cimd._resolver.known_budget.running = 0
+        self.net.answer[KNOWN] = ClientMetadataError("HTTP 404")
+        self.clock.now += cimd_cache.BACKOFF_SECONDS + 1
+        await cimd.resolve_client(KNOWN)  # stale, while the 404 comes back
+        await settled(KNOWN)
+        with pytest.raises(ClientMetadataError, match="404"):
+            await cimd.resolve_client(KNOWN)
+
+    @pytest.mark.anyio
+    async def test_a_no_store_known_record_is_not_kept(self):
+        self.net.answer[KNOWN] = (client_document(client_id=KNOWN), "no-store")
+        await self._stale_known()
+        self.net.answer[KNOWN] = TransientFetchError("HTTP 503")
+        with pytest.raises(ClientMetadataError, match="503"):
+            await cimd.resolve_client(KNOWN)
 
     @pytest.mark.anyio
     async def test_timeout_from_a_known_host_serves_stale(self):

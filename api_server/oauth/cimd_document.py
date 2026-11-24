@@ -24,7 +24,7 @@ too large, compressed, malformed or names another client).
 
 import json
 from dataclasses import dataclass
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 from mcp.shared.auth import OAuthClientInformationFull
@@ -82,6 +82,18 @@ def is_metadata_document_client_id(client_id: str) -> bool:
         and "/../" not in parts.path
         and not parts.path.endswith(("/.", "/.."))
     )
+
+
+def canonical_client_id(client_id: str) -> str:
+    """``client_id`` with its scheme and host lowercased (RFC 3986 6.2.2.1).
+
+    The resolver keys its caches, and fetches, by this form, so ``HTTPS://
+    Client.Example/m.json`` cannot get a second cache entry or fetch budget,
+    nor poison the real one with a mismatch (the document names the canonical
+    URL). The path is case-sensitive and kept as is.
+    """
+    parts = urlsplit(client_id)
+    return urlunsplit((parts.scheme.lower(), parts.netloc.lower(), parts.path, "", ""))
 
 
 def is_loopback_redirect(uri: str) -> bool:
