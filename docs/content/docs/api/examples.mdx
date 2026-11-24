@@ -144,7 +144,7 @@ API = os.environ["DAYSURFACE_API"]
 KEY = os.environ["DAYSURFACE_API_KEY"]
 CUTOFF = 0.6
 
-with httpx.Client(base_url=API, headers={"Authorization": f"Bearer {KEY}"}) as client:
+with httpx.Client(base_url=API, headers={"X-API-KEY": KEY}) as client:
     resp = client.post(
         "/api/v1/services/gmail_curate_inbox",
         json={"query": "is:unread newer_than:1d", "limit": 25},
