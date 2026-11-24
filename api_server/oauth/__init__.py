@@ -6,7 +6,6 @@ is mounted, and MCP clients keep getting tokens directly from WorkOS AuthKit.
     provider.py   token storage, rotation and revocation (MCP SDK provider)
     flow.py       consent page and WorkOS sign-in (browser leg)
     cimd.py       Client ID Metadata Document fetch and validation
-    fetch_slots.py  per-host and global limits on those fetches
     signing.py    signed, short-lived values carried through the browser
 """
 

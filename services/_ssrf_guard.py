@@ -32,14 +32,26 @@ and *what identity* to present. Callers MUST construct their ``httpx`` client
 with ``trust_env=False`` (an environment proxy could route past this local DNS
 check) and ``follow_redirects=False`` (each hop must be re-validated and
 re-pinned, never followed blindly) - see :func:`build_client`.
+
+A fetch of an attacker-chosen URL also holds a worker thread for as long as
+the far end stalls, so :class:`FetchLimiter` caps how many run at once, in
+total and per target. A target is the network prefix of the pinned address,
+``IPV4_PREFIX`` or ``IPV6_PREFIX`` bits wide, not the hostname: subdomains are
+free to mint, but addresses cost money and one operator usually gets a whole
+/24 or /64, so a host's neighbours share its cap. There is no queue: a caller
+that finds no free slot is refused at once with :class:`FetchLimitBusyError`
+and decides for itself what to do instead (the CIMD resolver serves a stale
+record, for example).
 """
 
 from __future__ import annotations
 
 import ipaddress
 import socket
+import threading
 import time
 from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import cast
 from urllib.parse import urlparse
@@ -75,6 +87,11 @@ class PinnedTarget:
     url: str
     headers: dict[str, str] = field(default_factory=dict)
     extensions: dict[str, str] = field(default_factory=dict)
+
+    @property
+    def address(self) -> str:
+        """The IP address ``url`` connects to, without IPv6 brackets."""
+        return urlparse(self.url).hostname or ""
 
 
 def _resolve(host: str, port: int) -> list[_IPAddress]:
@@ -331,3 +348,74 @@ class _PoolTransport(httpx.BaseTransport):
 
     def close(self) -> None:
         self._pool.close()
+
+
+# -- Concurrency caps (see the module docstring) ---------------------------
+
+IPV4_PREFIX = 24
+IPV6_PREFIX = 64
+
+
+class FetchLimitBusyError(RuntimeError):
+    """Every slot for the target, or in total, is taken."""
+
+
+def target_key(address: str) -> str:
+    """The network a pinned ``address`` counts against, e.g. ``203.0.113.0/24``.
+
+    An IPv4-mapped IPv6 address counts against its IPv4 network, so one host
+    cannot get two caps by being reached both ways.
+    """
+    addr = ipaddress.ip_address(address)
+    if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped is not None:
+        addr = addr.ipv4_mapped
+    prefix = IPV4_PREFIX if addr.version == 4 else IPV6_PREFIX
+    return str(ipaddress.ip_network((addr, prefix), strict=False))
+
+
+@dataclass(frozen=True, slots=True)
+class FetchLimitSnapshot:
+    """What :class:`FetchLimiter` holds at one moment."""
+
+    running: int
+    per_target: dict[str, int]
+
+
+class FetchLimiter:
+    """At most ``total`` fetches at once, and ``per_target`` per target."""
+
+    def __init__(self, *, total: int, per_target: int) -> None:
+        self._total = total
+        self._per_target = per_target
+        self._lock = threading.Lock()
+        self._running = 0
+        # target -> running fetches; a target is removed when it reaches 0, so
+        # this never holds more than ``total`` entries.
+        self._targets: dict[str, int] = {}
+
+    @contextmanager
+    def hold(self, address: str) -> Iterator[None]:
+        """Hold a slot for the target of ``address`` while the block runs.
+
+        Raises :class:`FetchLimitBusyError` at once if none is free.
+        """
+        key = target_key(address)
+        with self._lock:
+            held = self._targets.get(key, 0)
+            if self._running >= self._total or held >= self._per_target:
+                raise FetchLimitBusyError
+            self._running += 1
+            self._targets[key] = held + 1
+        try:
+            yield
+        finally:
+            with self._lock:
+                self._running -= 1
+                if self._targets[key] == 1:
+                    del self._targets[key]
+                else:
+                    self._targets[key] -= 1
+
+    def snapshot(self) -> FetchLimitSnapshot:
+        with self._lock:
+            return FetchLimitSnapshot(self._running, dict(self._targets))

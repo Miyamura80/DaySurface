@@ -1,12 +1,8 @@
 """The CIMD fetch deadline holds against servers that stall mid-response.
 
-Each attack keeps the connection busy with bytes that arrive just inside the
-per-read timeout, so only a deadline enforced on every socket operation cuts
-it off. A real loopback socket server is used because the stalls happen inside
-httpcore/h11, below anything a mock of httpx would exercise.
+See ``tests/stall_server.py`` for the attacks.
 """
 
-import socket
 import threading
 import time
 from unittest.mock import patch
@@ -16,97 +12,18 @@ import pytest
 from api_server.oauth import cimd
 from services._ssrf_guard import PinnedTarget
 from tests.oauth_server_fixture import client_document
+from tests.stall_server import StallServer
 from tests.test_template import TestTemplate
 
 _DEADLINE = 0.5
 _LIMIT = 1.5  # what a fetch may take, deadline plus generous slack
-_ATTACK_SECONDS = 5.0  # how long the server keeps an attack going
-_TICK = 0.05  # well inside the per-read timeout, which equals the deadline
-
-
-def _drip(conn: socket.socket, data: bytes) -> None:
-    for byte in data:
-        conn.sendall(bytes([byte]))
-        time.sleep(_TICK)
-
-
-def _continue_flood(conn: socket.socket) -> None:
-    end = time.monotonic() + _ATTACK_SECONDS
-    while time.monotonic() < end:
-        conn.sendall(b"HTTP/1.1 100 Continue\r\n\r\n")
-        time.sleep(_TICK)
-
-
-def _header_trickle(conn: socket.socket) -> None:
-    pad = b"a" * int(_ATTACK_SECONDS / _TICK)
-    _drip(conn, b"HTTP/1.1 200 OK\r\nX-Pad: " + pad)
-
-
-def _trailer_trickle(conn: socket.socket) -> None:
-    conn.sendall(
-        b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n1\r\n{\r\n0\r\n"
-    )
-    _drip(conn, b"X-T: " + b"a" * int(_ATTACK_SECONDS / _TICK))
-
-
-class _Server:
-    """A loopback HTTP server whose behaviour is picked by the request path."""
-
-    def __init__(self, documents: dict[str, bytes]) -> None:
-        self.documents = documents
-        self.sock = socket.create_server(("127.0.0.1", 0))
-        self.port = self.sock.getsockname()[1]
-        threading.Thread(target=self._accept, daemon=True).start()
-
-    def url(self, path: str) -> str:
-        return f"http://127.0.0.1:{self.port}{path}"
-
-    def _accept(self) -> None:
-        while True:
-            try:
-                conn, _ = self.sock.accept()
-            except OSError:  # closed by the test
-                return
-            threading.Thread(target=self._handle, args=(conn,), daemon=True).start()
-
-    def _handle(self, conn: socket.socket) -> None:
-        with conn:
-            try:
-                request = b""
-                while b"\r\n\r\n" not in request:
-                    data = conn.recv(65536)
-                    if not data:
-                        return
-                    request += data
-                path = request.split(b" ", 2)[1].decode()
-                self._respond(conn, path)
-            except OSError:  # the client hung up, which is the point
-                return
-
-    def _respond(self, conn: socket.socket, path: str) -> None:
-        if path.startswith("/flood"):
-            _continue_flood(conn)
-        elif path.startswith("/header"):
-            _header_trickle(conn)
-        elif path.startswith("/trailer"):
-            _trailer_trickle(conn)
-        else:
-            body = self.documents[path]
-            conn.sendall(
-                b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n"
-                + f"Content-Length: {len(body)}\r\nConnection: close\r\n\r\n".encode()
-                + body
-            )
-
-    def close(self) -> None:
-        self.sock.close()
 
 
 class TestCimdFetchDeadline(TestTemplate):
     @pytest.fixture(autouse=True)
     def _server(self):
         cimd.clear_cache()
-        self.stall_server = _Server({})
+        self.stall_server = StallServer()
         with (
             patch.object(cimd, "_FETCH_DEADLINE_SECONDS", _DEADLINE),
             patch.object(cimd, "validate_and_pin", side_effect=self._pin),
@@ -120,16 +37,24 @@ class TestCimdFetchDeadline(TestTemplate):
         path = "/" + client_id.split("/", 3)[3]
         return PinnedTarget(url=self.stall_server.url(path))
 
-    @pytest.mark.parametrize("mode", ["flood", "header", "trailer"])
+    @pytest.mark.parametrize("mode", ["flood", "header", "trailer", "body"])
     def test_stalling_server_is_cut_off_at_the_deadline(self, mode):
         start = time.monotonic()
+        target = self._pin(f"https://client.test.example/{mode}.json")
         with pytest.raises(cimd.ClientMetadataError):
-            cimd._fetch_document(f"https://client.test.example/{mode}.json")
+            cimd._fetch_document(target, deadline=start + _DEADLINE)
         assert time.monotonic() - start < _LIMIT
 
     def test_stalled_fetches_free_their_slots_at_the_deadline(self):
+        per_target = cimd._MAX_FETCHES_PER_TARGET
+        entered = threading.Barrier(per_target + 1)
+        real_fetch = cimd._fetch_document
         errors: list[Exception] = []
-        per_host = cimd._MAX_FETCHES_PER_HOST
+
+        def fetch(target: PinnedTarget, deadline: float) -> bytes:
+            if "/header-" in target.url:
+                entered.wait(_LIMIT)  # this fetch holds its slot
+            return real_fetch(target, deadline)
 
         def hold(n: int) -> None:
             try:
@@ -137,29 +62,24 @@ class TestCimdFetchDeadline(TestTemplate):
             except cimd.ClientMetadataError as exc:
                 errors.append(exc)
 
-        holders = [threading.Thread(target=hold, args=(n,)) for n in range(per_host)]
-        for thread in holders:
-            thread.start()
-        end = time.monotonic() + _LIMIT
-        while cimd._fetch_slots.snapshot().get("client.test.example") != (
-            per_host,
-            0,
-        ):
-            assert time.monotonic() < end, "the stalled fetches never took a slot"
-            threading.Event().wait(0.001)
-        start = time.monotonic()
-        with (
-            patch.object(cimd, "_SLOT_WAIT_SECONDS", 0.05),
-            pytest.raises(cimd.ClientMetadataError, match="too many"),
-        ):
-            cimd.resolve_client("https://client.test.example/ok.json")
-        assert time.monotonic() - start < _DEADLINE  # refused after a short wait
+        holders = [threading.Thread(target=hold, args=(n,)) for n in range(per_target)]
+        with patch.object(cimd, "_fetch_document", side_effect=fetch):
+            for thread in holders:
+                thread.start()
+            entered.wait(_LIMIT)
+            # Every stall server address is loopback, so one target.
+            start = time.monotonic()
+            with pytest.raises(cimd.ClientMetadataError, match="too many"):
+                cimd.resolve_client("https://client.test.example/ok.json")
+            assert time.monotonic() - start < _DEADLINE  # refused at once
 
-        for thread in holders:
-            thread.join(timeout=_LIMIT)
+            for thread in holders:
+                thread.join(timeout=_LIMIT)
         assert not any(thread.is_alive() for thread in holders)
-        assert len(errors) == per_host
-        assert cimd._fetch_slots.snapshot() == {}
+        assert len(errors) == per_target
+        state = cimd.snapshot()
+        assert state.in_flight == ()
+        assert state.fetches.running == 0
 
         client_id = "https://client.test.example/ok.json"
         self.stall_server.documents["/ok.json"] = client_document(client_id=client_id)
