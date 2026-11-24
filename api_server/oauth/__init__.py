@@ -61,7 +61,13 @@ def authorization_server_metadata() -> dict[str, Any]:
 
 
 def _require_deployment_settings() -> None:
-    """Refuse to run the OAuth server outside development without its settings.
+    """Refuse to run the OAuth server without the settings it depends on.
+
+    * ``WORKOS_CLIENT_ID`` / ``WORKOS_API_KEY``, in every environment: users
+      sign in through WorkOS, so without them every authorization fails at the
+      callback. Failing at startup says so once instead.
+
+    Outside development only:
 
     * ``SESSION_SECRET_KEY`` signs the pending authorization and the WorkOS
       state; with the placeholder, anyone could forge them. The general startup
@@ -70,6 +76,16 @@ def _require_deployment_settings() -> None:
     * ``MCP_PUBLIC_URL`` is the token audience and the issuer's origin; without
       it both fall back to localhost, which no remote client can reach.
     """
+    missing = [
+        name
+        for name in ("WORKOS_CLIENT_ID", "WORKOS_API_KEY")
+        if not getattr(global_config, name)
+    ]
+    if missing:
+        raise RuntimeError(
+            f"MCP_AUTH_MODE=self requires {' and '.join(missing)} to be set "
+            "(users sign in through WorkOS)."
+        )
     if global_config.is_dev:
         return
     default = type(global_config).model_fields["SESSION_SECRET_KEY"].default
