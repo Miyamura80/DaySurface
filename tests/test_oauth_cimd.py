@@ -3,17 +3,22 @@
 import hashlib
 from unittest.mock import MagicMock, patch
 
+import httpx
 import pytest
 from mcp.shared.auth import InvalidRedirectUriError
 from pydantic import AnyUrl
 
-from api_server.oauth import cimd, signing
+from api_server.oauth import cimd, cimd_document, signing
+from api_server.oauth.cimd_document import FetchedDocument, TransientFetchError
 from api_server.server import Sha256SessionMiddleware
+from services._ssrf_guard import PinnedTarget, build_async_client
 from tests.oauth_server_fixture import (
     CLIENT_ID,
     client_document,
 )
 from tests.test_template import TestTemplate
+
+_TARGET = PinnedTarget(url="https://192.0.2.1/meta.json")  # TEST-NET-1
 
 
 class TestClientMetadataDocuments(TestTemplate):
@@ -49,6 +54,14 @@ class TestClientMetadataDocuments(TestTemplate):
         assert client.redirect_uris
         assert str(client.redirect_uris[0]).startswith("http://127.0.0.1")
 
+    def test_redirect_uris_are_capped(self):
+        many = [f"https://client.test.example/cb{n}" for n in range(11)]
+        with pytest.raises(cimd.ClientMetadataError, match="too many"):
+            cimd.parse_document(CLIENT_ID, client_document(redirect_uris=many))
+        assert cimd.parse_document(
+            CLIENT_ID, client_document(redirect_uris=many[:10])
+        ).redirect_uris
+
     def test_confidential_clients_are_refused(self):
         with pytest.raises(cimd.ClientMetadataError):
             cimd.parse_document(
@@ -56,31 +69,11 @@ class TestClientMetadataDocuments(TestTemplate):
                 client_document(token_endpoint_auth_method="private_key_jwt"),
             )
 
-    def test_private_hosts_are_never_fetched(self):
-        with (
-            patch.object(cimd, "build_client", side_effect=AssertionError("fetched")),
-            pytest.raises(cimd.ClientMetadataError, match="not allowed"),
-        ):
-            cimd.resolve_client("https://127.0.0.1/meta.json")
-
     def test_malformed_redirect_uri_is_a_metadata_error(self):
         with pytest.raises(cimd.ClientMetadataError):
             cimd.parse_document(
                 CLIENT_ID, client_document(redirect_uris=["https://[::1/callback"])
             )
-
-    def test_caches_stay_bounded(self):
-        cimd.clear_cache()
-        try:
-            with patch.object(cimd, "_MAX_CACHE_ENTRIES", 3):
-                for n in range(10):
-                    with pytest.raises(cimd.ClientMetadataError):
-                        cimd.resolve_client(f"https://127.0.0.1/meta-{n}.json")
-                assert len(cimd._failures) <= 3
-                # The newest failures are the ones kept.
-                assert "https://127.0.0.1/meta-9.json" in cimd._failures
-        finally:
-            cimd.clear_cache()
 
     def test_non_ascii_client_ids_are_refused(self):
         # Cyrillic "і" in a look-alike host.
@@ -100,34 +93,106 @@ class TestClientMetadataDocuments(TestTemplate):
             with pytest.raises(InvalidRedirectUriError):
                 client.validate_redirect_uri(AnyUrl(bad))
 
-    def test_slow_document_is_abandoned_at_the_deadline(self):
-        response = MagicMock(status_code=200, headers={})
-        response.iter_raw.return_value = iter([b"{", b" ", b" ", b" "])
-        http = MagicMock()
-        http.__enter__.return_value.stream.return_value.__enter__.return_value = (
-            response
-        )
-        clock = iter(range(0, 100, 3))  # each read takes three seconds
-        with (
-            patch.object(cimd, "validate_and_pin", return_value=MagicMock(headers={})),
-            patch.object(cimd, "build_client", return_value=http),
-            patch.object(cimd.time, "monotonic", side_effect=lambda: next(clock)),
-            pytest.raises(cimd.ClientMetadataError, match="too long"),
-        ):
-            cimd._fetch_document(CLIENT_ID)
 
-    def test_compressed_document_is_refused(self):
-        response = MagicMock(status_code=200, headers={"content-encoding": "gzip"})
-        http = MagicMock()
-        http.__enter__.return_value.stream.return_value.__enter__.return_value = (
-            response
+class _Body(httpx.AsyncByteStream):
+    """A streamed body, as a real server sends it (``content=`` is pre-read)."""
+
+    def __init__(self, data: bytes) -> None:
+        self._data = data
+
+    async def __aiter__(self):
+        yield self._data
+
+
+def _response(status: int, body: bytes = b"", **headers: str) -> httpx.Response:
+    return httpx.Response(status, stream=_Body(body), headers=headers)
+
+
+def _mock_client(handler):
+    """build_async_client's stand-in: the same flags over a mock transport."""
+
+    def build(*, timeout: float) -> httpx.AsyncClient:
+        return httpx.AsyncClient(
+            transport=httpx.MockTransport(handler),
+            timeout=timeout,
+            trust_env=False,
+            follow_redirects=False,
         )
-        with (
-            patch.object(cimd, "validate_and_pin", return_value=MagicMock(headers={})),
-            patch.object(cimd, "build_client", return_value=http),
-            pytest.raises(cimd.ClientMetadataError, match="compressed"),
-        ):
-            cimd._fetch_document(CLIENT_ID)
+
+    return build
+
+
+async def _fetch(handler) -> FetchedDocument:
+    with patch.object(cimd_document, "build_async_client", _mock_client(handler)):
+        return await cimd_document.fetch_document(_TARGET, timeout=1.0)
+
+
+class TestFetchDocument(TestTemplate):
+    """What a response means: a document, a definite failure or a transient one."""
+
+    @pytest.fixture
+    def anyio_backend(self):
+        return "asyncio"
+
+    @pytest.mark.anyio
+    async def test_document_and_cache_control_are_returned(self):
+        fetched = await _fetch(
+            lambda _: _response(200, b"{}", **{"Cache-Control": "max-age=60"})
+        )
+        assert fetched == FetchedDocument(b"{}", "max-age=60")
+
+    @pytest.mark.anyio
+    async def test_compressed_document_is_refused(self):
+        with pytest.raises(cimd.ClientMetadataError, match="compressed") as info:
+            await _fetch(
+                lambda _: _response(200, b"{}", **{"Content-Encoding": "gzip"})
+            )
+        assert not isinstance(info.value, TransientFetchError)
+
+    @pytest.mark.anyio
+    async def test_oversized_document_is_refused(self):
+        big = b"x" * (cimd_document._MAX_DOCUMENT_BYTES + 1)
+        with pytest.raises(cimd.ClientMetadataError, match="too large") as info:
+            await _fetch(lambda _: _response(200, big))
+        assert not isinstance(info.value, TransientFetchError)
+
+    @pytest.mark.anyio
+    @pytest.mark.parametrize("status", [301, 400, 404, 410, 429])
+    async def test_other_statuses_are_definite(self, status):
+        with pytest.raises(cimd.ClientMetadataError) as info:
+            await _fetch(lambda _: httpx.Response(status))
+        assert not isinstance(info.value, TransientFetchError)
+
+    @pytest.mark.anyio
+    @pytest.mark.parametrize("status", [500, 502, 503, 504])
+    async def test_server_errors_are_transient(self, status):
+        with pytest.raises(TransientFetchError):
+            await _fetch(lambda _: httpx.Response(status))
+
+    @pytest.mark.anyio
+    async def test_network_errors_are_transient(self):
+        def refuse(request: httpx.Request) -> httpx.Response:
+            raise httpx.ConnectError("refused", request=request)
+
+        with pytest.raises(TransientFetchError):
+            await _fetch(refuse)
+
+    @pytest.mark.anyio
+    async def test_redirects_are_not_followed(self):
+        seen: list[str] = []
+
+        def redirect(request: httpx.Request) -> httpx.Response:
+            seen.append(str(request.url))
+            return httpx.Response(302, headers={"Location": "http://127.0.0.1/"})
+
+        with pytest.raises(cimd.ClientMetadataError, match="HTTP 302"):
+            await _fetch(redirect)
+        assert seen == [_TARGET.url]
+
+    def test_async_client_keeps_the_hardening(self):
+        client = build_async_client(timeout=1.0)
+        assert client.trust_env is False
+        assert client.follow_redirects is False
 
 
 class TestSignedValues(TestTemplate):

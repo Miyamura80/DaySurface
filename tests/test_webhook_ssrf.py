@@ -19,10 +19,12 @@ that disagreement IS the rebind.
 from __future__ import annotations
 
 import socket
+import threading
 import time
 from contextlib import ExitStack
 from unittest.mock import patch
 
+import httpcore
 import httpx
 import pytest
 
@@ -32,10 +34,15 @@ from db import engine as db_engine
 from db.models.webhooks import WebhookDelivery
 from models.webhooks import WebhookSubscribeInput
 from services._ssrf_guard import (
+    HostLookupRunningError,
     PinnedTarget,
+    ResolverBusyError,
+    ResolverThreads,
     SsrfError,
+    UnresolvableHostError,
     build_client,
     validate_and_pin,
+    validate_and_pin_async,
 )
 from services.webhook_delivery_svc import drain_due_deliveries
 from services.webhooks_svc import enqueue_event, webhook_subscribe
@@ -158,19 +165,24 @@ class TestSsrfGuard(TestTemplate):
         ):
             validate_and_pin("https://nope.invalid/p")
 
-    def test_build_client_disables_env_and_redirects(self):
-        client = build_client(timeout=1.0)
+    def test_deadline_client_keeps_the_hardening(self):
+        client = build_client(timeout=1.0, deadline=time.monotonic() + 1.0)
         try:
             assert client.trust_env is False
             assert client.follow_redirects is False
         finally:
             client.close()
 
-    def test_deadline_client_keeps_the_hardening(self):
+    def test_deadline_transport_replaces_httpx_pool(self):
+        # _DeadlineTransport swaps httpx's private HTTPTransport._pool; if an
+        # httpx upgrade renames it, the deadline would silently stop applying.
         client = build_client(timeout=1.0, deadline=time.monotonic() + 1.0)
         try:
-            assert client.trust_env is False
-            assert client.follow_redirects is False
+            transport = client._transport
+            assert isinstance(transport, httpx.HTTPTransport)
+            pool = transport._pool
+            assert isinstance(pool, httpcore.ConnectionPool)
+            assert isinstance(pool._network_backend, ssrf_guard._DeadlineBackend)
         finally:
             client.close()
 
@@ -181,6 +193,110 @@ class TestSsrfGuard(TestTemplate):
                 client.get("http://127.0.0.1:9/")
         finally:
             client.close()
+
+
+class TestAsyncPin(TestTemplate):
+    """validate_and_pin_async: the same validation, DNS on capped threads."""
+
+    @pytest.fixture
+    def anyio_backend(self):
+        return "asyncio"
+
+    async def _pin(self, url: str, addrinfo, resolver=None) -> PinnedTarget:
+        with patch.object(ssrf_guard.socket, "getaddrinfo", return_value=addrinfo):
+            return await validate_and_pin_async(
+                url, resolver=resolver or ResolverThreads(1)
+            )
+
+    @pytest.mark.anyio
+    async def test_pins_like_the_sync_path(self):
+        t = await self._pin("https://hook.example/path", _PUBLIC_ADDRINFO)
+        assert t.url == f"https://{_PUBLIC_IP}/path"
+        assert t.headers["Host"] == "hook.example"
+        assert t.extensions["sni_hostname"] == "hook.example"
+
+    @pytest.mark.anyio
+    async def test_rejects_every_internal_answer(self):
+        for ip in _INTERNAL_ADDRS:
+            with pytest.raises(SsrfError, match="non-public") as info:
+                await self._pin("https://hook.example/p", _addrinfo(ip))
+            assert ip not in str(info.value)  # no internal address in the text
+        mixed = _PUBLIC_ADDRINFO + _addrinfo("10.0.0.9")
+        with pytest.raises(SsrfError, match="non-public"):
+            await self._pin("https://hook.example/p", mixed)
+
+    @pytest.mark.anyio
+    async def test_rejects_scheme_and_internal_literals_without_a_lookup(self):
+        busy = ResolverThreads(0)  # any lookup would be refused as busy
+        with pytest.raises(SsrfError, match="scheme"):
+            await validate_and_pin_async("file:///etc/passwd", resolver=busy)
+        with pytest.raises(SsrfError, match="non-public"):
+            await validate_and_pin_async("https://169.254.169.254/x", resolver=busy)
+        t = await validate_and_pin_async(f"https://{_PUBLIC_IP}/p", resolver=busy)
+        assert t == PinnedTarget(url=f"https://{_PUBLIC_IP}/p")
+
+    @pytest.mark.anyio
+    async def test_unresolvable_host_is_its_own_error(self):
+        resolver = ResolverThreads(1)
+        with (
+            patch.object(ssrf_guard.socket, "getaddrinfo", side_effect=socket.gaierror),
+            pytest.raises(UnresolvableHostError, match="cannot resolve"),
+        ):
+            await validate_and_pin_async("https://nope.invalid/p", resolver=resolver)
+        assert resolver.running == 0
+
+    @pytest.mark.anyio
+    async def test_busy_resolver_refuses_at_once(self):
+        with pytest.raises(ResolverBusyError):
+            await self._pin(
+                "https://hook.example/p", _PUBLIC_ADDRINFO, ResolverThreads(0)
+            )
+
+
+class TestTimedResolve(TestTemplate):
+    """Sync callers (webhook delivery) bound DNS with a timed lookup."""
+
+    def test_a_hanging_lookup_times_out_and_holds_one_thread(self):
+        release = threading.Event()
+
+        def hang(*_args, **_kwargs):
+            release.wait(10)
+            return _PUBLIC_ADDRINFO
+
+        threads = ResolverThreads(4)
+        with patch.object(ssrf_guard.socket, "getaddrinfo", side_effect=hang):
+            start = time.monotonic()
+            with pytest.raises(UnresolvableHostError, match="timed out"):
+                validate_and_pin(
+                    "https://hang.example/p", resolver=threads, timeout=0.2
+                )
+            assert time.monotonic() - start < 1.0
+            with pytest.raises(HostLookupRunningError):
+                validate_and_pin(
+                    "https://HANG.example/q", resolver=threads, timeout=0.2
+                )
+            assert threads.running == 1
+            release.set()
+            deadline = time.monotonic() + 2
+            while threads.running and time.monotonic() < deadline:
+                time.sleep(0.01)  # poll for the thread to return
+        assert threads.running == 0
+
+    def test_timed_lookup_pins_like_the_plain_one(self):
+        with patch.object(
+            ssrf_guard.socket, "getaddrinfo", return_value=_PUBLIC_ADDRINFO
+        ):
+            t = validate_and_pin(
+                "https://hook.example/p", resolver=ResolverThreads(1), timeout=1.0
+            )
+        assert t.url == f"https://{_PUBLIC_IP}/p"
+
+    def test_pins_the_first_ipv4_answer(self):
+        both = _addrinfo(_PUBLIC_V6) + _PUBLIC_ADDRINFO
+        with patch.object(ssrf_guard.socket, "getaddrinfo", return_value=both):
+            assert validate_and_pin("https://hook.example/p").url == (
+                f"https://{_PUBLIC_IP}/p"
+            )
 
 
 # ---------------------------------------------------------------------------

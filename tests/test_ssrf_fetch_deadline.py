@@ -3,8 +3,8 @@
 Image URLs come from attacker-controlled email (and the inbox app fires many
 fetches at once); webhook subscribers are third-party servers. Either may
 trickle bytes just inside the per-read timeout, so only a deadline enforced on
-every socket operation cuts it off. Uses the real loopback stall server from
-the CIMD deadline tests: the stalls happen inside httpcore/h11, below anything
+every socket operation cuts it off. Uses the real loopback stall server in
+``tests/stall_server.py``: the stalls happen inside httpcore/h11, below anything
 a mock of httpx would exercise.
 """
 
@@ -18,14 +18,17 @@ import pytest
 from db.models.webhooks import WebhookDelivery, WebhookEvent
 from services import image_proxy, webhook_delivery_svc
 from services._ssrf_guard import PinnedTarget
-from tests.test_oauth_cimd_deadline import _DEADLINE, _LIMIT, _Server
+from tests.stall_server import StallServer
 from tests.test_template import TestTemplate
+
+_DEADLINE = 0.5
+_LIMIT = 1.5  # what a fetch may take, deadline plus generous slack
 
 
 class TestImageFetchDeadline(TestTemplate):
     @pytest.fixture(autouse=True)
     def _server(self):
-        self.stall_server = _Server({})
+        self.stall_server = StallServer()
         with (
             patch.object(image_proxy, "_TOTAL_DEADLINE_SECONDS", _DEADLINE),
             patch.object(image_proxy, "validate_and_pin", side_effect=self._pin),
@@ -49,7 +52,7 @@ class TestImageFetchDeadline(TestTemplate):
 class TestWebhookDeliveryDeadline(TestTemplate):
     @pytest.fixture(autouse=True)
     def _server(self):
-        self.stall_server = _Server({})
+        self.stall_server = StallServer()
         with (
             patch.object(webhook_delivery_svc, "_DELIVERY_DEADLINE_S", _DEADLINE),
             patch.object(

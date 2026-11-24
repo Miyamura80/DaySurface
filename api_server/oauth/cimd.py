@@ -1,288 +1,350 @@
-"""OAuth Client ID Metadata Documents (CIMD) for DaySurface's OAuth server.
+"""Resolve a Client ID Metadata Document (CIMD) client_id to a client record.
 
-An MCP client such as claude.ai identifies itself with an HTTPS URL as its
-``client_id``. That URL serves a JSON document describing the client (its name
-and redirect URIs). This module fetches and validates that document, following
-the MCP authorization spec (2026-07-28, Client Registration) and
-draft-ietf-oauth-client-id-metadata-document-00.
+The URL shape, the fetch and the document itself are
+:mod:`api_server.oauth.cimd_document`, and the cache state and its constants
+(the names below without a module) :mod:`api_server.oauth.cimd_cache`; this
+module decides when to fetch, how
+many fetches may run, and what to serve while one cannot. Everything here runs
+on the event loop: no worker thread ever waits on a fetch.
 
-The fetch targets a client-chosen URL, so it is treated as hostile:
+    resolve_client(id)
+      fresh record ............................ return it
+      cached definite failure ................. raise it
+      backing off after a failed refetch ...... stale record, else raise
+      known client, stale but usable .......... return it; refresh in background
+      fetch already running for id ............ wait for it (a coroutine)
+      otherwise take a fetch slot (fail fast) . run the fetch as a task in the
+                                                lifespan's task group, wait on it
 
-* It goes through the shared SSRF guard: the host is resolved once, every
-  address must be public, and the connection is pinned to a validated IP.
-  Redirects are not followed.
-* The whole fetch, DNS lookup included, has a 5 second deadline. It is enforced
-  on every connect, TLS handshake, read and write (see
-  :func:`services._ssrf_guard.build_client`), so a server that trickles its
-  headers, floods ``100 Continue`` responses or stalls in a chunk trailer is cut
-  off at the deadline, not merely at each per-read timeout. A slow DNS answer
-  cannot be interrupted, but it uses up the same budget. The body is capped at
-  10 KB as sent, with compression refused so the cap cannot be inflated past.
-* At most four fetches run at once; any beyond that fail immediately rather than
-  queue. Fetches share the worker threads that serve /mcp, so a flood of slow
-  client ids must not be able to occupy them.
-* Results are cached: a valid document for five minutes, a failure for one.
-  Each cache holds at most 1,000 entries.
+The fetch task, under one deadline (``_FETCH_DEADLINE_SECONDS``), resolves the
+host on a capped resolver thread, checks every answer is public, pins an IP
+and GETs the document from it. The deadline is a cancel scope, so it cuts off
+a stalled DNS answer, connect, TLS handshake or body alike, and the slot is
+released the moment it fires. A host whose previous lookup is still running
+(the system resolver has no timeout we control) gets no second thread. The
+task outlives the request that started it, so a client hanging up cannot
+abort a fetch other requests are waiting on. Outside the app lifespan (tests,
+scripts) there is no task group and the first resolve runs the fetch itself.
+
+Two budgets, each a fetch-slot cap plus a resolver-thread cap, refused at once
+when full: one for known clients and one for everyone else. The cap is global,
+not per target: a per-target key would be the attacker's own DNS answer. So a
+flood of slow client ids can fill the shared budget and make new clients wait
+(``busy``, never cached), but cannot touch known clients' budget or records.
+
+A client is known once this server issued it a code or tokens, or accepted
+its access token (``mark_known``, called by storage and the provider, after
+the commit, with the user it was for). A user vouches for at most
+``MAX_KNOWN_PER_SUBJECT`` client ids at once and at most
+``NEW_VOUCHES_PER_DAY`` new ones per day (re-vouching is free: every token use
+re-vouches), so signing in with one's own client ids buys a bounded share of
+the reserved budget. An id keeps at most ``MAX_VOUCHERS_PER_ID`` vouchers,
+known ids are capped overall (``Resolver(known_clients=)``), and an id that
+loses its last voucher becomes an ordinary cached entry again.
+
+Records honour the document's ``Cache-Control``: ``max-age`` sets freshness,
+clamped to ``[MIN_FRESH_SECONDS, MAX_FRESH_SECONDS]`` with
+``DEFAULT_FRESH_SECONDS`` when absent. After freshness a record may be served
+stale while one refetch runs or after one fails without an answer:
+
+* a known client's record, always, until a refetch gives a definite answer
+  (a new document, a 4xx, an invalid document) or it is
+  ``KNOWN_MAX_AGE_SECONDS`` old (stale-while-revalidate, and
+  stale-if-error). Flooding the known budget can therefore delay a known
+  client's refresh but not take it offline;
+* anyone else's, for at most ``MAX_STALE_SECONDS``, while a refetch is busy,
+  backing off, or fails with a 5xx, network error or timeout (RFC 5861
+  stale-if-error).
+
+``no-store`` / ``no-cache`` records are never served stale. A definite failure
+drops the record and is cached for ``FAILURE_CACHE_SECONDS``. A fetch that
+fails without an answer, or finds this host's previous lookup still running,
+starts a per-id backoff of ``BACKOFF_SECONDS``, during which the id is not
+fetched again. A refusal because a whole budget is full leaves no state at
+all, so a flood cannot extend its effect on ids it pokes.
+
+Deliberate deviation from RFC 9111: a ``no-store`` / ``no-cache`` document is
+still kept for ``MIN_FRESH_SECONDS``, without revalidation. Taken literally,
+those directives would make every authorize, consent and token request a
+fetch of a URL the client chooses; the floor bounds that, and stale serving
+stays forbidden.
 """
 
-import json
-import threading
-import time
-from urllib.parse import urlsplit
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager, suppress
+from dataclasses import dataclass
 
-import httpx
+import anyio
+from anyio.abc import TaskGroup
+from loguru import logger as log
 from mcp.shared.auth import OAuthClientInformationFull
-from pydantic import AnyUrl, ValidationError
 
-from api_server.auth.scopes import ALL_SCOPES
-from services._ssrf_guard import SsrfError, build_client, validate_and_pin
+from api_server.oauth.cimd_cache import (
+    Budget,
+    BusyError,
+    Failed,
+    Fetched,
+    Flight,
+    Kind,
+    Outcome,
+    Record,
+    Resolver,
+    lifetimes,
+    now,
+)
+from api_server.oauth.cimd_document import (
+    ClientMetadataError,
+    FetchedDocument,
+    TransientFetchError,
+    canonical_client_id,
+    fetch_document,
+    is_loopback_redirect,
+    is_metadata_document_client_id,
+    parse_document,
+)
+from services._ssrf_guard import (
+    HostLookupRunningError,
+    ResolverBusyError,
+    SsrfError,
+    UnresolvableHostError,
+    validate_and_pin_async,
+)
+
+__all__ = [
+    "ClientMetadataError",
+    "is_loopback_redirect",
+    "is_metadata_document_client_id",
+    "lifespan",
+    "mark_known",
+    "parse_document",
+    "resolve_client",
+]
 
 _FETCH_DEADLINE_SECONDS = 5.0
-_MAX_DOCUMENT_BYTES = 10_000
-_MAX_CLIENT_ID_LENGTH = 2000  # oauth_codes.client_id is String(2048)
-_CACHE_SECONDS = 300
-_FAILURE_CACHE_SECONDS = 60
-_MAX_CONCURRENT_FETCHES = 4
-# Entries kept per cache. Expired entries are dropped first, then the oldest,
-# so a flood of distinct client ids cannot grow memory without bound.
-_MAX_CACHE_ENTRIES = 1000
-# Scopes a client may request. The identity scopes are what MCP clients ask for
-# when they want refresh tokens and a profile; the rest are DaySurface's own.
-# A token always grants full access unless it carries DaySurface scopes (see
-# api_server.auth.authkit_auth._resolve_scopes), so this list only gates what a
-# request may name, not what it gets.
-_REQUESTABLE_SCOPES = sorted(
-    {"openid", "profile", "email", "offline_access", *ALL_SCOPES}
-)
-_LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1"}
-
-_cache: dict[str, tuple[float, "OAuthClientInformationFull"]] = {}
-_failures: dict[str, tuple[float, str]] = {}
-_cache_lock = threading.Lock()
-_fetch_slots = threading.BoundedSemaphore(_MAX_CONCURRENT_FETCHES)
+# A waiter gives the fetch task this long past the shared deadline to report,
+# so the two timers firing together never turn a result into a timeout.
+_WAIT_GRACE_SECONDS = 0.5
+_BUSY_MESSAGE = "too many client metadata fetches in progress"
+_TIMEOUT_MESSAGE = "client metadata document took too long"
+_TIMED_OUT = Failed(Kind.TRANSIENT, _TIMEOUT_MESSAGE)
 
 
-def _remember(cache: dict, client_id: str, value: tuple) -> None:
-    """Store ``value`` in ``cache``, keeping the cache bounded. Hold _cache_lock."""
-    cache.pop(client_id, None)
-    if len(cache) >= _MAX_CACHE_ENTRIES:
-        now = time.monotonic()
-        for key in [key for key, entry in cache.items() if entry[0] <= now]:
-            del cache[key]
-    while len(cache) >= _MAX_CACHE_ENTRIES:
-        del cache[next(iter(cache))]  # dicts keep insertion order: oldest first
-    cache[client_id] = value
+@dataclass(frozen=True, slots=True)
+class CimdSnapshot:
+    """The resolver's state at one moment, for tests and diagnostics."""
+
+    known: tuple[str, ...]
+    protected: tuple[str, ...]
+    cached: tuple[str, ...]
+    failed: tuple[str, ...]
+    backing_off: tuple[str, ...]
+    in_flight: tuple[str, ...]
+    fetches: int
+    known_fetches: int
+    resolver_threads: int
 
 
-class ClientMetadataError(ValueError):
-    """The client_id is not a usable Client ID Metadata Document."""
+_resolver = Resolver()
+# The app lifespan's task group, which owns every fetch task (see lifespan).
+_task_group: TaskGroup | None = None
 
 
-def is_metadata_document_client_id(client_id: str) -> bool:
-    """Whether ``client_id`` has the shape of a CIMD URL.
+def mark_known(client_id: str, subject: str) -> None:
+    """Record that ``subject`` (a user) holds a code or token for ``client_id``.
 
-    The spec requires https and a path component, and forbids a fragment.
-    Userinfo, query strings, dot segments and non-ASCII characters are refused
-    as well, so one client cannot be addressed by several spellings or shown
-    under a look-alike host.
+    Called by :mod:`api_server.oauth.storage` and the provider once a code or
+    tokens are committed, and whenever an access token is accepted, so the set
+    refills after a restart as clients come back. A known client's record
+    moves to the protected tier and its fetches use the reserved budget.
     """
-    if not client_id.isascii() or len(client_id) > _MAX_CLIENT_ID_LENGTH:
-        return False
-    try:
-        parts = urlsplit(client_id)
-    except ValueError:
-        return False
-    return (
-        parts.scheme == "https"
-        and bool(parts.hostname)
-        and parts.path not in ("", "/")
-        and not parts.fragment
-        and not parts.query
-        and "@" not in parts.netloc
-        and "/./" not in parts.path
-        and "/../" not in parts.path
-        and not parts.path.endswith(("/.", "/.."))
-    )
+    _resolver.mark_known(canonical_client_id(client_id), subject)
 
 
-def is_loopback_redirect(uri: str) -> bool:
-    return urlsplit(uri).hostname in _LOOPBACK_HOSTS
+@asynccontextmanager
+async def lifespan() -> AsyncIterator[None]:
+    """Own the fetch tasks for the app's lifetime; cancel them at shutdown."""
+    global _task_group  # noqa: PLW0603
+    async with anyio.create_task_group() as tg:
+        _task_group = tg
+        try:
+            yield
+        finally:
+            _task_group = None
+            tg.cancel_scope.cancel()
 
 
-def _same_loopback_target(registered: str, requested: str) -> bool:
-    """Loopback redirects match on everything but the port (RFC 8252 section 7.3).
-
-    Native apps listen on whatever port the OS hands them, so a registered
-    ``http://127.0.0.1/callback`` must accept ``http://127.0.0.1:53817/callback``.
-    """
-    a, b = urlsplit(registered), urlsplit(requested)
-    return (
-        a.scheme == b.scheme == "http"
-        and a.hostname == b.hostname
-        and a.hostname in _LOOPBACK_HOSTS
-        and a.path == b.path
-        and a.query == b.query
-    )
-
-
-class MetadataDocumentClient(OAuthClientInformationFull):
-    """A client from a metadata document, with RFC 8252 loopback port matching."""
-
-    def validate_redirect_uri(self, redirect_uri: AnyUrl | None) -> AnyUrl:
-        if redirect_uri is not None and self.redirect_uris:
-            requested = str(redirect_uri)
-            if is_loopback_redirect(requested) and any(
-                _same_loopback_target(str(registered), requested)
-                for registered in self.redirect_uris
-            ):
-                return redirect_uri
-        return super().validate_redirect_uri(redirect_uri)
-
-
-def _validate_redirect_uri(uri: object) -> str:
-    if not isinstance(uri, str) or not uri.isascii():
-        raise ClientMetadataError("redirect_uris must be ASCII strings")
-    try:
-        parts = urlsplit(uri)
-        hostname = parts.hostname
-    except ValueError as exc:  # e.g. an unbalanced IPv6 bracket
-        raise ClientMetadataError("redirect_uris must be valid URLs") from exc
-    if parts.fragment:
-        raise ClientMetadataError("redirect_uris must not contain a fragment")
-    if parts.scheme == "https" and hostname:
-        return uri
-    if parts.scheme == "http" and hostname in _LOOPBACK_HOSTS:
-        return uri
-    raise ClientMetadataError("redirect_uris must use https or a loopback address")
-
-
-def _fetch_document(client_id: str) -> bytes:
-    # Started before DNS so a slow resolver eats into the budget, not past it.
-    deadline = time.monotonic() + _FETCH_DEADLINE_SECONDS
-    try:
-        target = validate_and_pin(client_id)
-    except SsrfError as exc:
-        raise ClientMetadataError(f"client_id host is not allowed: {exc}") from exc
-    # Ask for the bytes as stored, so the size cap applies to what is sent.
-    headers = {
-        **target.headers,
-        "Accept": "application/json",
-        "Accept-Encoding": "identity",
-    }
-    try:
-        with (
-            build_client(timeout=_FETCH_DEADLINE_SECONDS, deadline=deadline) as client,
-            client.stream(
-                "GET", target.url, headers=headers, extensions=target.extensions
-            ) as response,
-        ):
-            if response.status_code != 200:
-                raise ClientMetadataError(
-                    f"client metadata fetch returned HTTP {response.status_code}"
-                )
-            if (
-                response.headers.get("content-encoding", "identity").lower()
-                != "identity"
-            ):
-                raise ClientMetadataError(
-                    "client metadata document must not be compressed"
-                )
-            body = bytearray()
-            for chunk in response.iter_raw():
-                body.extend(chunk)
-                if len(body) > _MAX_DOCUMENT_BYTES:
-                    raise ClientMetadataError("client metadata document is too large")
-                if time.monotonic() > deadline:
-                    raise ClientMetadataError("client metadata document took too long")
-            return bytes(body)
-    except httpx.HTTPError as exc:
-        raise ClientMetadataError(
-            "client metadata document could not be fetched"
-        ) from exc
-    except UnicodeError as exc:  # a header or host httpx cannot encode
-        raise ClientMetadataError(
-            "client metadata document could not be fetched"
-        ) from exc
-
-
-def parse_document(client_id: str, raw: bytes) -> OAuthClientInformationFull:
-    """Validate a fetched document and turn it into an SDK client record."""
-    try:
-        doc = json.loads(raw)
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise ClientMetadataError("client metadata document is not JSON") from exc
-    if not isinstance(doc, dict):
-        raise ClientMetadataError("client metadata document must be a JSON object")
-    # The document must name itself: this is what binds the URL to the client.
-    if doc.get("client_id") != client_id:
-        raise ClientMetadataError("client_id in the document does not match its URL")
-    redirect_uris = doc.get("redirect_uris")
-    if not isinstance(redirect_uris, list) or not redirect_uris:
-        raise ClientMetadataError("client metadata document has no redirect_uris")
-    validated = [_validate_redirect_uri(uri) for uri in redirect_uris]
-    auth_method = doc.get("token_endpoint_auth_method", "none")
-    if auth_method != "none":
-        # Only public clients are supported; a client that expects to
-        # authenticate with a key we never verify must not be treated as public.
-        raise ClientMetadataError(
-            "only public clients (token_endpoint_auth_method=none) are supported"
-        )
-    name = doc.get("client_name")
-    client_name = (
-        name if isinstance(name, str) and name.strip() else urlsplit(client_id).hostname
-    )
-    try:
-        return MetadataDocumentClient(
-            client_id=client_id,
-            client_name=client_name,
-            redirect_uris=[AnyUrl(uri) for uri in validated],
-            token_endpoint_auth_method="none",
-            grant_types=["authorization_code", "refresh_token"],
-            response_types=["code"],
-            scope=" ".join(_REQUESTABLE_SCOPES),
-        )
-    except ValidationError as exc:
-        raise ClientMetadataError("client metadata document is invalid") from exc
-
-
-def resolve_client(client_id: str) -> OAuthClientInformationFull:
-    """Return the validated client for ``client_id``, fetching it if not cached.
+async def resolve_client(client_id: str) -> OAuthClientInformationFull:
+    """Return the validated client for ``client_id``, fetching it if needed.
 
     Raises :class:`ClientMetadataError` when the URL or its document is not
-    acceptable, when it failed within the last minute, or when the fetch limit
-    is reached.
+    acceptable, when it failed definitely within ``FAILURE_CACHE_SECONDS``,
+    or when no fetch can run or finish and there is no usable stale record.
     """
     if not is_metadata_document_client_id(client_id):
         raise ClientMetadataError("client_id is not a Client ID Metadata Document URL")
-    now = time.monotonic()
-    with _cache_lock:
-        cached = _cache.get(client_id)
-        if cached and cached[0] > now:
-            return cached[1]
-        failed = _failures.get(client_id)
-        if failed and failed[0] > now:
-            raise ClientMetadataError(failed[1])
-    if not _fetch_slots.acquire(blocking=False):
-        raise ClientMetadataError("too many client metadata fetches in progress")
-    try:
-        client = parse_document(client_id, _fetch_document(client_id))
-    except ClientMetadataError as exc:
-        with _cache_lock:
-            _remember(
-                _failures,
-                client_id,
-                (time.monotonic() + _FAILURE_CACHE_SECONDS, str(exc)),
+    client_id = canonical_client_id(client_id)
+    resolver = _resolver
+    deadline = now() + _FETCH_DEADLINE_SECONDS
+    with resolver.lock:
+        found = _from_cache(resolver, client_id, now())
+        if isinstance(found, OAuthClientInformationFull):
+            return found
+        record = found
+        known = client_id in resolver.known
+        budget = resolver.known_budget if known else resolver.budget
+        flight = resolver.in_flight.get(client_id)
+        lead = None
+        if known and record is not None and _task_group is not None:
+            # Stale-while-revalidate: a known client never waits on its own
+            # host while its record is within the staleness bound.
+            if flight is None:
+                with suppress(BusyError):
+                    _start(resolver, client_id, budget)
+            return record.client
+        if flight is None:
+            try:
+                flight = lead = _start(resolver, client_id, budget)
+            except BusyError:
+                if record is not None:
+                    return record.client
+                raise ClientMetadataError(_BUSY_MESSAGE) from None
+    if lead is not None and _task_group is None:
+        await _fly(resolver, client_id, lead, budget)  # no task group: run it here
+    return await _wait(resolver, client_id, flight, deadline)
+
+
+def _from_cache(
+    resolver: Resolver, client_id: str, now: float
+) -> OAuthClientInformationFull | Record | None:
+    """A fresh client, else the stale record (or None) to fall back on.
+
+    Raises a cached definite failure, or the last failure while backing off
+    with no stale record. Hold the lock.
+    """
+    record = resolver.record(client_id, now)
+    if record is not None and record.fresh_until > now:
+        return record.client
+    failure = resolver.failures.get(client_id)
+    if failure is not None and failure.until > now:
+        raise ClientMetadataError(failure.message)
+    if (wait := resolver.backing_off(client_id, now)) is not None:
+        if record is not None:
+            return record.client
+        raise ClientMetadataError(wait.message)
+    return record
+
+
+def _start(resolver: Resolver, client_id: str, budget: Budget) -> Flight:
+    """Take a slot and start the fetch, if a task group is running. Hold lock."""
+    budget.take()
+    flight = resolver.in_flight[client_id] = Flight()
+    if _task_group is not None:
+        try:
+            _task_group.start_soon(
+                _fly, resolver, client_id, flight, budget, name=f"cimd {client_id}"
             )
-        raise
+        except RuntimeError:  # the task group is shutting down
+            del resolver.in_flight[client_id]
+            budget.running -= 1
+            raise BusyError from None
+    return flight
+
+
+async def _wait(
+    resolver: Resolver, client_id: str, flight: Flight, deadline: float
+) -> OAuthClientInformationFull:
+    with anyio.move_on_after(deadline - now() + _WAIT_GRACE_SECONDS):
+        await flight.done.wait()
+    outcome = flight.outcome or _TIMED_OUT
+    if isinstance(outcome, Fetched):
+        return outcome.client
+    stale = None if outcome.kind is Kind.DEFINITE else resolver.usable_stale(client_id)
+    if stale is not None:
+        return stale
+    raise ClientMetadataError(
+        _BUSY_MESSAGE
+        if outcome.kind in (Kind.BUSY, Kind.HOST_BUSY)
+        else outcome.message
+    )
+
+
+async def _fly(
+    resolver: Resolver, client_id: str, flight: Flight, budget: Budget
+) -> None:
+    """The fetch task: fetch, record the outcome, release everything."""
+    outcome: Outcome | None = None
+    try:
+        outcome = await _fetch(resolver, client_id, budget)
+    except Exception:  # noqa: BLE001
+        # Task boundary: an unexpected error must not escape into the
+        # lifespan's task group (it would cancel every fetch and the app).
+        log.exception("oauth: client metadata fetch crashed for {}", client_id)
+        outcome = _TIMED_OUT
     finally:
-        _fetch_slots.release()
-    with _cache_lock:
-        _remember(_cache, client_id, (time.monotonic() + _CACHE_SECONDS, client))
-        _failures.pop(client_id, None)
-    return client
+        # Runs on success, failure and cancellation alike. The cache is
+        # written before the flight goes, so a resolve arriving in between
+        # finds one or the other.
+        with resolver.lock:
+            if isinstance(outcome, Failed):
+                resolver.settle(client_id, outcome)
+            del resolver.in_flight[client_id]
+            budget.running -= 1
+        flight.outcome = outcome
+        flight.done.set()
+
+
+async def _fetch(resolver: Resolver, client_id: str, budget: Budget) -> Outcome:
+    try:
+        with anyio.fail_after(_FETCH_DEADLINE_SECONDS):
+            target = await validate_and_pin_async(client_id, resolver=budget.resolver)
+            fetched = await fetch_document(target, timeout=_FETCH_DEADLINE_SECONDS)
+        client = parse_document(client_id, fetched.body)
+    except HostLookupRunningError:
+        return Failed(Kind.HOST_BUSY, _BUSY_MESSAGE)
+    except ResolverBusyError:
+        return Failed(Kind.BUSY, _BUSY_MESSAGE)
+    except TimeoutError:
+        return _TIMED_OUT
+    except UnresolvableHostError as exc:
+        return Failed(Kind.TRANSIENT, f"client_id host: {exc}")
+    except SsrfError as exc:
+        return Failed(Kind.DEFINITE, f"client_id host is not allowed: {exc}")
+    except TransientFetchError as exc:
+        return Failed(Kind.TRANSIENT, str(exc))
+    except ClientMetadataError as exc:
+        return Failed(Kind.DEFINITE, str(exc))
+    _store(resolver, client_id, client, fetched)
+    return Fetched(client)
+
+
+def _store(
+    resolver: Resolver,
+    client_id: str,
+    client: OAuthClientInformationFull,
+    fetched: FetchedDocument,
+) -> None:
+    fresh, stale = lifetimes(fetched.cache_control)
+    resolver.store(client_id, client, fresh, stale)
+
+
+def snapshot() -> CimdSnapshot:
+    resolver = _resolver
+    with resolver.lock:
+        return CimdSnapshot(
+            known=tuple(resolver.known),
+            protected=tuple(resolver.protected),
+            cached=tuple(resolver.cache),
+            failed=tuple(resolver.failures),
+            backing_off=(*resolver.backoff, *resolver.known_backoff),
+            in_flight=tuple(resolver.in_flight),
+            fetches=resolver.budget.running,
+            known_fetches=resolver.known_budget.running,
+            resolver_threads=resolver.budget.resolver.running
+            + resolver.known_budget.resolver.running,
+        )
 
 
 def clear_cache() -> None:
-    with _cache_lock:
-        _cache.clear()
-        _failures.clear()
+    """Start over with a fresh resolver: records, flights, budgets (tests)."""
+    global _resolver  # noqa: PLW0603
+    _resolver = Resolver()

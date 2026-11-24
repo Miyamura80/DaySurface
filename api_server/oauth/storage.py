@@ -4,6 +4,11 @@ Codes and tokens are random, opaque, and stored only as SHA-256 hashes (see
 ``db/models/oauth.py``). The provider (``provider.py``) and the WorkOS callback
 (``flow.py``) call these; they are synchronous, so async callers run them off
 the event loop.
+
+Every client this issues a code to, or accepts an access token from, is
+reported to :func:`api_server.oauth.cimd.mark_known` with the user it is for,
+once the row is committed, so that client's metadata record is protected from
+unknown client ids. The provider reports token issuance the same way.
 """
 
 import hashlib
@@ -15,6 +20,7 @@ from mcp.shared.auth import OAuthToken as TokenResponse
 from sqlalchemy import delete, select, update
 
 from api_server.auth.authkit_auth import _resolve_scopes, mcp_resource_url
+from api_server.oauth.cimd import mark_known
 from db.engine import use_db_session
 from db.models.oauth import OAuthCode, OAuthSignOut, OAuthToken, lock_user
 
@@ -127,6 +133,7 @@ def store_authorization_code(
             )
         )
         session.commit()
+    mark_known(client_id, user_id)
     return code
 
 
@@ -228,6 +235,7 @@ def lookup_access_token(token: str) -> AccessToken | None:
             or not resource_matches(row.resource)
         ):
             return None
+        mark_known(row.client_id, row.user_id)
         return AccessToken(
             token=token,
             client_id=row.client_id,

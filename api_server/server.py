@@ -29,6 +29,7 @@ from api_server.middleware.mcp_auth import MCPAuthMiddleware
 from api_server.middleware.rate_limit import RateLimitMiddleware
 from api_server.middleware.security_headers import SecurityHeadersMiddleware
 from api_server.oauth import flow as oauth_flow
+from api_server.oauth.cimd import lifespan as cimd_lifespan
 from api_server.routes import (
     agentic_payments,
     ask,
@@ -150,8 +151,8 @@ class Sha256SessionMiddleware(SessionMiddleware):
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Compose the MCPServer session manager with the periodic webhook runner."""
-    async with mcp_lifespan(app), runner_lifespan(app):
+    """Compose MCP sessions, the periodic runners and the CIMD fetch tasks."""
+    async with mcp_lifespan(app), runner_lifespan(app), cimd_lifespan():
         yield
 
 

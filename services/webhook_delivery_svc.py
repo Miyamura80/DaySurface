@@ -35,7 +35,7 @@ from sqlalchemy.orm import Session
 from common import global_config
 from db.engine import use_db_session
 from db.models.webhooks import WebhookDelivery, WebhookEvent, WebhookSubscription
-from services._ssrf_guard import build_client, validate_and_pin
+from services._ssrf_guard import ResolverThreads, build_client, validate_and_pin
 from services.webhooks_svc import (
     DELIVERY_ID_HEADER,
     EVENT_ID_HEADER,
@@ -53,6 +53,9 @@ _HTTP_TIMEOUT_S = 10.0
 # Wall-clock ceiling on one delivery POST: the per-operation timeout alone lets a
 # subscriber that trickles its response hold the runner indefinitely.
 _DELIVERY_DEADLINE_S = 30.0
+# Delivery DNS runs on these threads; a hung lookup holds one (and only one
+# per host) until the system resolver gives up, never the runner itself.
+_RESOLVER = ResolverThreads(8)
 _DEFAULT_BATCH = 20
 # A claimed ("sending") row left behind by a crashed runner is reclaimable
 # after this many seconds so deliveries never get stranded.
@@ -141,8 +144,15 @@ def _post(
     }
     # Loopback subscribers exist only in dev (subscribe-time guard enforces this),
     # so mirror that allowance here rather than resolving them to a hard reject.
-    target = validate_and_pin(url, allow_loopback=global_config.is_dev)
+    # The deadline starts before DNS, and the lookup is timed against it: a
+    # subscriber whose DNS never answers cannot hold the runner thread.
     deadline = time.monotonic() + _DELIVERY_DEADLINE_S
+    target = validate_and_pin(
+        url,
+        allow_loopback=global_config.is_dev,
+        resolver=_RESOLVER,
+        timeout=_HTTP_TIMEOUT_S,
+    )
     with build_client(timeout=_HTTP_TIMEOUT_S, deadline=deadline) as client:
         resp = client.post(
             target.url,
