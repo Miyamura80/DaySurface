@@ -11,7 +11,8 @@ from email.utils import format_datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
-from googleapiclient.discovery import build
+from googleapiclient.discovery import build, build_from_document
+from googleapiclient.discovery_cache import get_static_doc
 from googleapiclient.errors import HttpError
 from googleapiclient.http import HttpMockSequence
 
@@ -193,7 +194,14 @@ class TestGmailRateLimitRetry(TestTemplate):
             load_row.return_value.refresh_token_enc = b"enc"
             gmail_svc._get_gmail_client("alice")
 
-        assert fake_build.call_args.kwargs["requestBuilder"] is RateLimitRetryingRequest
+        # Build a real client with the same arguments: its requests must be
+        # the retrying class (each on its own connection, for thread safety).
+        doc = json.loads(get_static_doc("gmail", "v1"))
+        kwargs = dict(fake_build.call_args.kwargs)
+        kwargs.pop("cache_discovery")  # build()-only: no discovery fetch here
+        client = build_from_document(doc, **kwargs)
+        request = client.users().labels().list(userId="me")
+        assert isinstance(request, RateLimitRetryingRequest)
 
     def test_rate_limit_reports_whether_a_write_already_landed(self, sleeps):
         # A draft created, then its re-read refused: the write may stand, so
