@@ -7,6 +7,7 @@ for record lifetimes, and the app lifespan's task group around the test.
 
 from collections import Counter
 from collections.abc import AsyncIterator
+from typing import Any
 from unittest.mock import patch
 
 import anyio
@@ -82,7 +83,8 @@ def small_resolver(**caps: int) -> cimd_cache.Resolver:
         "known_fetches": 2,
         "known_resolver_threads": 2,
     }
-    return cimd_cache.Resolver(**(defaults | caps))
+    sizes: dict[str, Any] = defaults | caps  # every int keyword of Resolver
+    return cimd_cache.Resolver(**sizes)
 
 
 class CimdCase(TestTemplate):

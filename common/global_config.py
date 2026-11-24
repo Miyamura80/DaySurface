@@ -28,6 +28,7 @@ from .config_models import (
     GmailConfig,
     LlmConfig,
     LoggingConfig,
+    OAuthConfig,
     PdfFormsConfig,
     RateLimitConfig,
     ServerConfig,
@@ -203,6 +204,7 @@ class Config(BaseSettings):
         default_factory=lambda: SubscriptionConfig()
     )
     rate_limit: RateLimitConfig = Field(default_factory=lambda: RateLimitConfig())
+    oauth: OAuthConfig = Field(default_factory=lambda: OAuthConfig())
     payments: AgenticPaymentsConfig = Field(
         default_factory=lambda: AgenticPaymentsConfig()
     )

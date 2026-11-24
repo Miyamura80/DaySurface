@@ -9,6 +9,7 @@ fresh one.
 import threading
 import time
 from collections import OrderedDict
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -134,6 +135,7 @@ class Resolver:
         known_resolver_threads: int = 8,
         cache_entries: int = 1000,
         known_clients: int = 10_000,
+        pinned: Iterable[str] = (),
     ) -> None:
         self.lock = threading.Lock()
         self.budget = Budget(fetches, resolver_threads)
@@ -149,10 +151,18 @@ class Resolver:
         self.in_flight: dict[str, Flight] = {}
         self.known_limit = known_clients
         self.new_vouches: dict[str, list[float]] = {}  # subject -> recent times
+        # Known from startup, with no voucher, and never evicted: the set is
+        # otherwise empty after a restart, when a flood would delay these
+        # clients' first sign-ins. Not counted against ``known_limit``.
+        self.pinned = frozenset(pinned)
+        for client_id in self.pinned:
+            self.known[client_id] = set()
 
     # -- known clients -------------------------------------------------------
 
     def mark_known(self, client_id: str, subject: str) -> None:
+        if client_id in self.pinned:
+            return  # known for good; a voucher would only cost memory
         with self.lock:
             ids = self.subjects.get(subject)
             if ids is not None and client_id in ids:
@@ -176,8 +186,9 @@ class Resolver:
             vouchers.add(subject)
             self.known[client_id] = vouchers
             self.known.move_to_end(client_id)
-            while len(self.known) > self.known_limit:
-                evicted, gone = self.known.popitem(last=False)
+            while len(self.known) - len(self.pinned) > self.known_limit:
+                evicted = next(k for k in self.known if k not in self.pinned)
+                gone = self.known.pop(evicted)
                 for who in gone:
                     self._drop_subject_id(who, evicted)
                 self._demote(evicted)

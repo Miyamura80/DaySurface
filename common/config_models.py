@@ -190,6 +190,13 @@ class WebBotAuthConfig(BaseModel):
     key_lifetime_days: int = Field(default=365, ge=1)
 
 
+class OAuthConfig(BaseModel):
+    """Settings for this server's own OAuth server (``api_server/oauth/``)."""
+
+    # CIMD client ids treated as known from startup (see api_server/oauth/cimd).
+    cimd_known_clients: list[str] = Field(default_factory=list)
+
+
 class RateLimitConfig(BaseModel):
     """Rate limiting configuration."""
 

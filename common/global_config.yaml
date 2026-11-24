@@ -84,6 +84,13 @@ logging:
 ########################################################
 # Rate Limiting
 ########################################################
+oauth:
+  # CIMD client ids (https URLs) that are known from startup and never evicted,
+  # so a flood of attacker client ids right after a restart cannot delay these
+  # clients' sign-ins. Other ids become known as users sign in with them.
+  cimd_known_clients:
+    - "https://claude.ai/oauth/mcp-oauth-client-metadata"
+
 rate_limit:
   enabled: true
   trust_proxy_headers: false

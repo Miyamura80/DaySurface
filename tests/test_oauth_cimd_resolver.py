@@ -177,7 +177,7 @@ class TestCleanup(CimdCase):
             cimd.mark_known(KNOWN, USER)
             cimd.clear_cache()  # the running fetch belongs to the old state
             assert_clean()
-            assert cimd.snapshot().known == ()
+            assert cimd.snapshot().known == tuple(cimd._resolver.pinned)
             self.net.hold[slow].set()
 
 
