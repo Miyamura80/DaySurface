@@ -320,10 +320,11 @@ class TestHungDns(CimdCase):
                 release.set()
                 await self._threads_drain()
 
-    def test_resolver_threads_refuse_when_full(self):
+    @pytest.mark.anyio
+    async def test_resolver_threads_refuse_when_full(self):
         threads = ResolverThreads(0)
         with pytest.raises(ResolverBusyError):
-            anyio.run(threads.getaddrinfo, "example.com", 443)
+            await threads.getaddrinfo("example.com", 443)
 
 
 class TestRealFetchDeadline(TestTemplate):
