@@ -34,6 +34,9 @@ from api_server.auth.scopes import ALL_SCOPES
 from services._ssrf_guard import PinnedTarget, build_async_client
 
 _MAX_DOCUMENT_BYTES = 10_000
+# Real clients list one to three (claude.ai one, VS Code a loopback port plus
+# vscode.dev); every record is held in memory, so a document cannot list more.
+_MAX_REDIRECT_URIS = 10
 _MAX_CLIENT_ID_LENGTH = 2000  # oauth_codes.client_id is String(2048)
 # Scopes a client may request. The identity scopes are what MCP clients ask for
 # when they want refresh tokens and a profile; the rest are DaySurface's own.
@@ -208,6 +211,8 @@ def parse_document(client_id: str, raw: bytes) -> OAuthClientInformationFull:
     redirect_uris = doc.get("redirect_uris")
     if not isinstance(redirect_uris, list) or not redirect_uris:
         raise ClientMetadataError("client metadata document has no redirect_uris")
+    if len(redirect_uris) > _MAX_REDIRECT_URIS:
+        raise ClientMetadataError("client metadata document has too many redirect_uris")
     validated = [_validate_redirect_uri(uri) for uri in redirect_uris]
     auth_method = doc.get("token_endpoint_auth_method", "none")
     if auth_method != "none":

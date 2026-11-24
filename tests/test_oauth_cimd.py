@@ -54,6 +54,14 @@ class TestClientMetadataDocuments(TestTemplate):
         assert client.redirect_uris
         assert str(client.redirect_uris[0]).startswith("http://127.0.0.1")
 
+    def test_redirect_uris_are_capped(self):
+        many = [f"https://client.test.example/cb{n}" for n in range(11)]
+        with pytest.raises(cimd.ClientMetadataError, match="too many"):
+            cimd.parse_document(CLIENT_ID, client_document(redirect_uris=many))
+        assert cimd.parse_document(
+            CLIENT_ID, client_document(redirect_uris=many[:10])
+        ).redirect_uris
+
     def test_confidential_clients_are_refused(self):
         with pytest.raises(cimd.ClientMetadataError):
             cimd.parse_document(

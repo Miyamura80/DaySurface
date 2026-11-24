@@ -5,9 +5,10 @@ Codes and tokens are random, opaque, and stored only as SHA-256 hashes (see
 (``flow.py``) call these; they are synchronous, so async callers run them off
 the event loop.
 
-Every client this issues a code or tokens to, or accepts an access token from,
-is reported to :func:`api_server.oauth.cimd.mark_known`, which protects that
-client's metadata record from being evicted by unknown client ids.
+Every client this issues a code to, or accepts an access token from, is
+reported to :func:`api_server.oauth.cimd.mark_known` with the user it is for,
+once the row is committed, so that client's metadata record is protected from
+unknown client ids. The provider reports token issuance the same way.
 """
 
 import hashlib
@@ -132,7 +133,7 @@ def store_authorization_code(
             )
         )
         session.commit()
-    mark_known(client_id)
+    mark_known(client_id, user_id)
     return code
 
 
@@ -177,7 +178,6 @@ def _issue_token_pair(
             **common,
         )
     )
-    mark_known(client_id)
     return TokenResponse(
         access_token=access,
         token_type="Bearer",
@@ -235,7 +235,7 @@ def lookup_access_token(token: str) -> AccessToken | None:
             or not resource_matches(row.resource)
         ):
             return None
-        mark_known(row.client_id)
+        mark_known(row.client_id, row.user_id)
         return AccessToken(
             token=token,
             client_id=row.client_id,

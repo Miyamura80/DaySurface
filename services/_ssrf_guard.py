@@ -175,7 +175,7 @@ def _parse_url(url: str) -> _Url:
 def _pin(
     url: str, target: _Url, addresses: list[_IPAddress], *, allow_loopback: bool
 ) -> PinnedTarget:
-    """Check every answer, then pin ``url`` to the first. Shared by both paths."""
+    """Check every answer, then pin ``url`` to one. Shared by both paths."""
     host, port = target.host, target.port
     for addr in addresses:
         if not is_public_address(addr, allow_loopback=allow_loopback):
@@ -190,7 +190,9 @@ def _pin(
     except ValueError:
         pass
 
-    ip = str(addresses[0])
+    # Every answer passed; connect to the first IPv4 one when there is one,
+    # since IPv6 egress is the likelier to be missing on a server.
+    ip = str(next((a for a in addresses if a.version == 4), addresses[0]))
     ip_netloc = f"[{ip}]" if ":" in ip else ip
     if port:
         ip_netloc += f":{port}"
@@ -207,8 +209,8 @@ def validate_and_pin(url: str, *, allow_loopback: bool = False) -> PinnedTarget:
     """Validate ``url`` and pin it to one resolved, allowlisted IP.
 
     Resolves the host once, requires every answer to satisfy
-    :func:`is_public_address`, then rewrites the URL to target the first
-    validated IP while preserving the hostname in ``Host`` + SNI. IP-literal
+    :func:`is_public_address`, then rewrites the URL to target one validated
+    IP (the first IPv4 answer, else the first) while preserving the hostname in ``Host`` + SNI. IP-literal
     hosts are validated and passed through unchanged.
 
     Raises :class:`SsrfError` on any rejection.
@@ -357,8 +359,10 @@ class ResolverThreads:
     A thread cannot be interrupted, so a caller whose deadline passes stops
     waiting but leaves the lookup running until the system resolver gives up.
     Each thread is therefore counted from start until ``getaddrinfo`` really
-    returns, not until its caller stops waiting, and a lookup that finds every
-    thread taken is refused at once with :class:`ResolverBusyError`. These are
+    returns, not until its caller stops waiting, and a lookup is refused at
+    once with :class:`ResolverBusyError` when every thread is taken or when a
+    lookup of the same host is still running (so one slow host holds at most
+    one thread, however often it is asked for). These are
     this class's own threads, so a hung lookup never holds one of anyio's
     worker threads (the pool that serves /mcp and sync routes).
     """
@@ -367,6 +371,7 @@ class ResolverThreads:
         self._limit = limit
         self._lock = threading.Lock()
         self._running = 0
+        self._hosts: set[str] = set()  # hosts with a lookup still running
 
     @property
     def running(self) -> int:
@@ -374,10 +379,12 @@ class ResolverThreads:
             return self._running
 
     async def getaddrinfo(self, host: str, port: int) -> list:
+        key = host.lower()
         with self._lock:
-            if self._running >= self._limit:
+            if self._running >= self._limit or key in self._hosts:
                 raise ResolverBusyError
             self._running += 1
+            self._hosts.add(key)
         done = anyio.Event()
         token = anyio.lowlevel.current_token()
         answer: list = []
@@ -391,6 +398,7 @@ class ResolverThreads:
             finally:
                 with self._lock:
                     self._running -= 1
+                    self._hosts.discard(key)
                 # RuntimeError: the event loop is gone, so nobody waits.
                 with suppress(RuntimeError):
                     anyio.from_thread.run_sync(done.set, token=token)
@@ -400,6 +408,7 @@ class ResolverThreads:
         except RuntimeError:  # no thread could be started
             with self._lock:
                 self._running -= 1
+                self._hosts.discard(key)
             raise
         await done.wait()
         if failure:

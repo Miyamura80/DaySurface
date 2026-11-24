@@ -192,6 +192,8 @@ exclude = [
     # anyio_backend and autouse fixtures, reached by pytest only.
     "tests/test_oauth_cimd.py",
     "tests/test_oauth_cimd_resolver.py",
+    "tests/test_oauth_cimd_cache.py",
+    "tests/cimd_fakes.py",
     "tests/test_scopes.py",
     "utils/llm/",
     "common/",

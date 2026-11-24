@@ -208,6 +208,7 @@ class DaySurfaceOAuthProvider(
                     family_expires_at=_now() + FAMILY_LIFETIME,
                 )
                 session.commit()
+                cimd.mark_known(row.client_id, row.user_id)
                 return response
 
         return await anyio.to_thread.run_sync(_exchange)
@@ -301,6 +302,7 @@ class DaySurfaceOAuthProvider(
                     family_expires_at=row.family_expires_at,
                 )
                 session.commit()
+                cimd.mark_known(row.client_id, row.user_id)
                 return response
 
         return await anyio.to_thread.run_sync(_exchange)
