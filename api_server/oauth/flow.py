@@ -149,12 +149,12 @@ def _nonce_matches(request: Request, flow_id: object, presented: object) -> bool
 
 
 @router.get("/consent", include_in_schema=False)
-def consent_page(
+async def consent_page(
     request: Request, request_token: str = Query(alias="request")
 ) -> Response:
     try:
         pending = signing.load_pending_authorization(request_token)
-        client = cimd.resolve_client(pending["client_id"])
+        client = await cimd.resolve_client(pending["client_id"])
     except (signing.InvalidSignedValueError, cimd.ClientMetadataError, KeyError):
         return _error_page("This sign-in link is invalid or has expired.")
 

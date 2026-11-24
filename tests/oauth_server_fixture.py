@@ -22,6 +22,7 @@ from sqlalchemy.pool import StaticPool
 
 import api_server.oauth as oauth_server
 from api_server.oauth import cimd, flow
+from api_server.oauth.cimd_document import FetchedDocument
 from api_server.routes import well_known
 from common import global_config
 from db.base import Base
@@ -105,8 +106,10 @@ class OAuthServerCase(TestTemplate):
             patch.object(
                 global_config, "SESSION_SECRET_KEY", "test-secret-" + "x" * 32
             ),
-            patch("api_server.oauth.cimd.validate_and_pin", side_effect=self._pin),
-            patch("api_server.oauth.cimd._fetch_document", side_effect=self._fetch),
+            patch(
+                "api_server.oauth.cimd.validate_and_pin_async", side_effect=self._pin
+            ),
+            patch("api_server.oauth.cimd.fetch_document", side_effect=self._fetch),
             patch(
                 "api_server.oauth.flow._authenticate_with_workos",
                 return_value=(USER_ID, WORKOS_SESSION),
@@ -127,12 +130,12 @@ class OAuthServerCase(TestTemplate):
             p.stop()
         cimd.clear_cache()
 
-    def _pin(self, client_id: str) -> PinnedTarget:
+    def _pin(self, client_id: str, **_) -> PinnedTarget:
         assert client_id == CLIENT_ID
         return PinnedTarget(url="https://192.0.2.1/meta.json")  # TEST-NET-1
 
-    def _fetch(self, target: PinnedTarget, deadline: float) -> bytes:
-        return self.document
+    def _fetch(self, target: PinnedTarget, **_) -> FetchedDocument:
+        return FetchedDocument(self.document, None)
 
     # -- helpers -----------------------------------------------------------
 
