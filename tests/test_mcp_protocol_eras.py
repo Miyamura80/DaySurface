@@ -18,11 +18,11 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from common import global_config
-from tests.test_mcp_e2e import (
-    _McpSession,
-    _read_sse_first_message,
-    _wire_client,
-    _wire_session,
+from tests._mcp_wire import (
+    McpSession,
+    read_sse_first_message,
+    wire_client,
+    wire_session,
 )
 from tests.test_template import TestTemplate
 
@@ -83,7 +83,7 @@ class _ModernMcpClient:
         # Stateless core: the server never mints a session.
         assert "mcp-session-id" not in resp.headers, resp.headers
         if resp.headers.get("content-type", "").startswith("text/event-stream"):
-            return resp, _read_sse_first_message(resp)
+            return resp, read_sse_first_message(resp)
         return resp, resp.json()
 
     def request(self, method: str, params: dict | None = None) -> dict:
@@ -116,7 +116,7 @@ class TestMCPProtocolEras(TestTemplate):
     handshake-era sessions side by side (python-sdk 2.x era routing)."""
 
     def test_modern_server_discover_replaces_initialize(self):
-        with _wire_client("u-era-discover") as (client, key):
+        with wire_client("u-era-discover") as (client, key):
             result = _ModernMcpClient(client, key).request("server/discover")
             assert _MODERN in result["supportedVersions"]
             caps = result["capabilities"]
@@ -130,7 +130,7 @@ class TestMCPProtocolEras(TestTemplate):
             assert info["name"] == "daysurface"
 
     def test_modern_stateless_list_and_call_without_handshake(self):
-        with _wire_client("u-era-modern") as (client, key):
+        with wire_client("u-era-modern") as (client, key):
             modern = _ModernMcpClient(client, key)
             tools = {t["name"]: t for t in modern.request("tools/list")["tools"]}
             compose = tools["gmail_compose"]
@@ -154,7 +154,7 @@ class TestMCPProtocolEras(TestTemplate):
         """Capabilities are known per request on 2026-07-28: a client that
         declares ``elicitation.url`` gets the -32042 error carrying the consent
         URL."""
-        with _google_configured(), _wire_client("u-era-url") as (client, key):
+        with _google_configured(), wire_client("u-era-url") as (client, key):
             modern = _ModernMcpClient(
                 client, key, capabilities={"elicitation": {"url": {}}}
             )
@@ -172,7 +172,7 @@ class TestMCPProtocolEras(TestTemplate):
         """A client that declared capabilities without url-mode elicitation
         gets an isError result whose text is the first-party recovery script -
         not the SDK's sanitized ``Error executing tool <name>``."""
-        with _google_configured(), _wire_client("u-era-form") as (client, key):
+        with _google_configured(), wire_client("u-era-form") as (client, key):
             modern = _ModernMcpClient(client, key, capabilities={})
             result = modern.request(
                 "tools/call", {"name": "gmail_list_inbox", "arguments": {}}
@@ -182,7 +182,7 @@ class TestMCPProtocolEras(TestTemplate):
             assert "gmail_connect" in text
 
     def test_legacy_2025_11_25_handshake_session(self):
-        with _wire_session("u-era-legacy", protocol_version=_LEGACY_LATEST) as s:
+        with wire_session("u-era-legacy", protocol_version=_LEGACY_LATEST) as s:
             assert s._protocol_version == _LEGACY_LATEST
             result = s.request(
                 "tools/call", {"name": "gmail_get_focused_email", "arguments": {}}
@@ -191,8 +191,8 @@ class TestMCPProtocolEras(TestTemplate):
             assert result["structuredContent"]["focused"] is False
 
     def test_legacy_unknown_version_negotiates_down_to_latest_handshake(self):
-        with _wire_client("u-era-negotiate") as (client, key):
-            session = _McpSession(client, key, protocol_version="2099-01-01")
+        with wire_client("u-era-negotiate") as (client, key):
+            session = McpSession(client, key, protocol_version="2099-01-01")
             result = session.handshake()
             assert result["protocolVersion"] == _LEGACY_LATEST
             assert session.request("tools/list")["tools"]

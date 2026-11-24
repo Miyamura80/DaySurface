@@ -25,7 +25,7 @@ from models.curation import CurationBucket, ThreadJudgment
 from services import _gmail_retry, get_registry
 from services._gmail_retry import RateLimitRetryingRequest
 from services.curation_ledger import upsert_judgments
-from tests.test_mcp_e2e import _wire_session
+from tests._mcp_wire import wire_session
 from tests.test_template import TestTemplate
 
 _QUOTA_BODY = json.dumps(
@@ -122,7 +122,7 @@ def _curation_session(user: str, client):
     enc = FernetEncryption(Fernet.generate_key().decode())
     with (
         patch.object(token_encryption, "require_encryption", return_value=enc),
-        _wire_session(user) as session,
+        wire_session(user) as session,
         patch("services.inbox_curation_svc._get_gmail_client", return_value=client),
     ):
         upsert_judgments(
@@ -252,7 +252,7 @@ class TestRateLimitIdempotency(TestTemplate):
         with (
             patch.object(_gmail_retry.time, "sleep"),
             _fake_gmail(_compose_responder(quota)) as (client, hits),
-            _wire_session("u-idem-free") as session,
+            wire_session("u-idem-free") as session,
             patch("services.gmail_drafts_svc._get_gmail_client", return_value=client),
         ):
             assert _compose(session, "k-free").status_code == 429
@@ -273,7 +273,7 @@ class TestRateLimitIdempotency(TestTemplate):
         with (
             patch.object(_gmail_retry.time, "sleep"),
             _fake_gmail(_compose_responder(quota)) as (client, hits),
-            _wire_session("u-idem-held") as session,
+            wire_session("u-idem-held") as session,
             patch("services.gmail_drafts_svc._get_gmail_client", return_value=client),
         ):
             assert _compose(session, "k-held").status_code == 429
@@ -293,7 +293,7 @@ class TestRateLimitIdempotency(TestTemplate):
         with (
             patch.object(_gmail_retry.time, "sleep"),
             _fake_gmail(_compose_responder(quota)) as (client, _hits),
-            _wire_session("u-idem-paid") as session,
+            wire_session("u-idem-paid") as session,
             patch("services.gmail_drafts_svc._get_gmail_client", return_value=client),
             patch.object(entry, "price", "0.01"),
             patch("api_server.routes.services.enforce_payment", return_value=True),
