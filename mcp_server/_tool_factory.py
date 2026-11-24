@@ -193,7 +193,7 @@ def _make_headless_tool(mcp: MCPServer, entry: ServiceEntry) -> None:
     input_model = entry.input_model
     output_model = entry.output_model
 
-    def tool_fn(ctx: Context | None = None, **kwargs):  # ctx: see _current_session
+    def tool_fn(*, ctx: Context | None = None, **kwargs):  # ctx: see _current_session
         _check_scopes()
         if "user_id" in input_model.model_fields:  # ty: ignore[unresolved-attribute]
             user = current_user()
@@ -210,13 +210,7 @@ def _make_headless_tool(mcp: MCPServer, entry: ServiceEntry) -> None:
             # error (-32042) so capable hosts open the consent flow natively.
             reraise_with_elicitation(_current_session(ctx), exc)
 
-    _apply_tool_signature(
-        tool_fn,
-        entry,
-        return_annotation=output_model,
-        include_context=True,
-        optional_context=True,
-    )
+    _apply_tool_signature(tool_fn, entry, return_annotation=output_model)
     mcp.tool(name=entry.name, description=entry.description)(tool_fn)
 
 
@@ -228,7 +222,7 @@ def _make_enhanced_tool(
     input_model = entry.input_model
     output_model = entry.output_model
 
-    async def tool_fn(ctx: Context, **kwargs) -> CallToolResult:
+    async def tool_fn(*, ctx: Context, **kwargs) -> CallToolResult:
         _check_scopes()
         if "user_id" in input_model.model_fields:  # ty: ignore[unresolved-attribute]
             user = current_user()
@@ -262,9 +256,7 @@ def _make_enhanced_tool(
 
         return _build_call_tool_result(result, tool)
 
-    _apply_tool_signature(
-        tool_fn, entry, return_annotation=CallToolResult, include_context=True
-    )
+    _apply_tool_signature(tool_fn, entry, return_annotation=CallToolResult)
     # Declare the app's ui:// resource on the tool definition so hosts see it
     # in tools/list (per MCP Apps spec) and not only on the call result.
     meta = (
@@ -372,23 +364,22 @@ def _apply_tool_signature(
     tool_fn: Any,
     entry: ServiceEntry,
     return_annotation: type,
-    include_context: bool = False,
-    optional_context: bool = False,
 ) -> None:
     """Synthesize __signature__ and __annotations__ so the SDK derives input/output schema.
 
-    ``include_context`` adds a ``ctx: Context`` parameter, which the SDK
-    detects by annotation, injects per request and excludes from the input
-    schema. ``optional_context`` makes it a trailing keyword-only parameter
-    defaulting to None, so in-process callers (tests) can omit it.
+    Every wrapper declares one keyword-only ``ctx`` parameter, which the SDK
+    detects by its ``Context`` annotation, injects per request by keyword and
+    excludes from the input schema. It is carried over as the wrapper declares
+    it, after the service's own parameters: the headless wrapper defaults it
+    to None so in-process callers (tests) can omit it; the enhanced wrapper
+    requires it.
     """
     tool_fn.__name__ = entry.name
     tool_fn.__doc__ = entry.description
 
     input_sig = inspect.signature(entry.input_model)
     annotations: dict = {k: v.annotation for k, v in input_sig.parameters.items()}
-    if include_context:
-        annotations["ctx"] = Context
+    annotations["ctx"] = Context
     annotations["return"] = return_annotation
     tool_fn.__annotations__ = annotations
 
@@ -403,16 +394,10 @@ def _apply_tool_signature(
         p.replace(default=_resolve_signature_default(p, field_by_param.get(name)))
         for name, p in input_sig.parameters.items()
     ]
-    if include_context and optional_context:
-        ctx_param = inspect.Parameter(
-            "ctx", inspect.Parameter.KEYWORD_ONLY, annotation=Context, default=None
-        )
-        params = [*params, ctx_param]
-    elif include_context:
-        ctx_param = inspect.Parameter(
-            "ctx", inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=Context
-        )
-        params = [ctx_param, *params]
+    ctx_param = inspect.signature(tool_fn).parameters["ctx"]
+    if ctx_param.kind is not inspect.Parameter.KEYWORD_ONLY:
+        raise TypeError(f"{entry.name}: the tool wrapper's ctx must be keyword-only")
+    params = [*params, ctx_param.replace(annotation=Context)]
     tool_fn.__signature__ = input_sig.replace(
         parameters=params, return_annotation=return_annotation
     )

@@ -1,6 +1,7 @@
 """Tests for MCP server tool registration."""
 
 import asyncio
+import inspect
 from pathlib import Path
 
 from mcp.server.mcpserver import MCPServer
@@ -113,6 +114,21 @@ class TestMCPServer(TestTemplate):
             assert tool.context_kwarg == "ctx"
             assert "ctx" not in tool.parameters.get("properties", {})
             assert "ctx" not in tool.parameters.get("required", [])
+
+    def test_every_tool_takes_one_keyword_only_ctx(self):
+        # Headless (gmail_send) and enhanced (gmail_compose) wrappers share one
+        # shape: a trailing keyword-only ctx the SDK injects by name. Only the
+        # headless one may be called in-process without it.
+        for tool_name, has_default in (("gmail_send", True), ("gmail_compose", False)):
+            tool = mcp._tool_manager._tools[tool_name]
+            params = list(inspect.signature(tool.fn).parameters.values())
+            ctx = params[-1]
+            assert ctx.name == "ctx", tool_name
+            assert ctx.kind is inspect.Parameter.KEYWORD_ONLY, tool_name
+            assert [p.name for p in params].count("ctx") == 1, tool_name
+            assert (ctx.default is None) is has_default, tool_name
+            assert tool.context_kwarg == "ctx"
+            assert "ctx" not in tool.parameters.get("properties", {})
 
     def test_default_factory_fields_resolve_to_concrete_defaults(self):
         # Regression: inspect.signature() renders a Pydantic default_factory
