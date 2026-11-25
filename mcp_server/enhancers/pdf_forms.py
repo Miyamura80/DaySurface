@@ -19,7 +19,7 @@ Part of the PDF core (isolation seam): no Gmail imports.
 import asyncio
 
 from mcp.server.elicitation import AcceptedElicitation
-from mcp.shared.exceptions import McpError
+from mcp.shared.exceptions import MCPError
 from pydantic import BaseModel, Field
 
 from mcp_server.enhancers import enhance
@@ -101,7 +101,7 @@ async def pdf_request_signature_enhanced(
                 ),
                 schema=_ElicitedSignature,
             )
-        except McpError:
+        except MCPError:
             # Declared-but-broken host (see pdf_signer.sign for the Goose
             # variant). Letting this propagate would trip the enhancer's
             # headless fallback, whose idempotent awaiting branch returns

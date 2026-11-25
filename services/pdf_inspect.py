@@ -17,6 +17,7 @@ from pypdf.generic import DictionaryObject
 
 from common import global_config
 from models.pdf_forms import PdfFormField, PdfPageSize, PdfTextLine
+from services import ModelFacingError
 
 # Non-PDF magic numbers we can name in the "not a PDF" error message.
 _KNOWN_MAGIC: tuple[tuple[bytes, str], ...] = (
@@ -38,7 +39,7 @@ _FF_PUSHBUTTON = 1 << 16
 _LINE_Y_TOLERANCE = 2.0
 
 
-class PdfNotAPdfError(Exception):
+class PdfNotAPdfError(ModelFacingError):
     """Raised when the fetched bytes are not a PDF."""
 
     def __init__(self, detected: str) -> None:
@@ -49,7 +50,7 @@ class PdfNotAPdfError(Exception):
         )
 
 
-class PdfEncryptedError(Exception):
+class PdfEncryptedError(ModelFacingError):
     """Raised when the PDF is password-protected and cannot be opened."""
 
     def __init__(self) -> None:
@@ -60,7 +61,7 @@ class PdfEncryptedError(Exception):
         )
 
 
-class PdfCorruptError(Exception):
+class PdfCorruptError(ModelFacingError):
     """Raised when bytes that look like a PDF cannot actually be parsed."""
 
     def __init__(self) -> None:

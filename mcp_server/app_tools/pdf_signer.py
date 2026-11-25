@@ -25,12 +25,12 @@ import base64
 
 from loguru import logger as log
 from mcp.server.elicitation import AcceptedElicitation
-from mcp.server.fastmcp.server import Context
-from mcp.shared.exceptions import McpError
-from mcp.types import ClientCapabilities, ElicitationCapability
+from mcp.server.mcpserver import Context
+from mcp.shared.exceptions import MCPError
 from pydantic import BaseModel, Field
 
 from mcp_server.app_tools._auth_guard import guard_user_id
+from mcp_server.enhancers.base import client_can_elicit
 from mcp_server.server import mcp
 from models.pdf_forms import (
     PdfDocStatus,
@@ -107,15 +107,14 @@ async def sign(
     doc = load_document(doc_id, uid)
     name = validate_ceremony(doc, typed_name, consent)
     confirmed = False
-    # Declared-capability gate, never attempt-when-unknown: under stateless
-    # HTTP (production default) client_params is absent and ctx.elicit()
-    # would hang, so this correctly degrades to the app-ceremony-only path
-    # with the audit recording confirmed_via_elicitation=False. Stateful
-    # deployments (server.mcp_stateless_http: false) with capable hosts get
-    # the extra host-native dialog. See mcp_server/server.py.
-    if ctx.session.check_client_capability(
-        ClientCapabilities(elicitation=ElicitationCapability())
-    ):
+    # Declared-capability + back-channel gate, never attempt-when-unknown:
+    # on 2026-07-28 (no server-initiated requests) and under stateless legacy
+    # HTTP (production default) ctx.elicit() cannot complete, so this
+    # degrades to the app-ceremony-only path with the audit recording
+    # confirmed_via_elicitation=False. Stateful legacy deployments
+    # (server.mcp_stateless_http: false) with capable hosts get the extra
+    # host-native dialog. See mcp_server/server.py.
+    if client_can_elicit(ctx.session):
         try:
             result = await ctx.elicit(
                 message=(
@@ -125,7 +124,7 @@ async def sign(
                 ),
                 schema=_SignConfirmation,
             )
-        except McpError as exc:
+        except MCPError as exc:
             # Declared-but-broken hosts exist: Goose advertises elicitation
             # yet errors requests that originate from an iframe callServerTool
             # (its elicitation routing follows chat tool-streams). The dialog

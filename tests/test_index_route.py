@@ -189,7 +189,7 @@ class TestNotFoundFallback(TestTemplate):
         assert resp.headers.get("access-control-allow-origin") == "*"
 
     def test_fallback_does_not_shadow_the_mcp_mount(self):
-        # /mcp is still FastMCP's; unauthenticated callers get the JSON-RPC 401
+        # /mcp is still the SDK's; unauthenticated callers get the JSON-RPC 401
         # challenge, not the landing-page 404.
         resp = self._client().get("/mcp")
         assert resp.status_code == 401

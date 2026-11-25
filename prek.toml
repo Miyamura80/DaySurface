@@ -19,6 +19,7 @@ hooks = [
     { id = "pylint-duplicate-code", name = "Detect duplicate code", entry = "uv run python -m pylint --disable=all --enable=R0801 src common utils", language = "system", pass_filenames = false, always_run = true },
     { id = "ai-writing-check", name = "AI writing check", entry = "uv run python scripts/check_ai_writing.py", language = "system", pass_filenames = false, always_run = true },
     { id = "blind-except-check", name = "Check `# noqa: BLE001` justifications", entry = "uv run python scripts/check_blind_except_justification.py", language = "system", pass_filenames = false, always_run = true },
+    { id = "api-key-header-check", name = "Check docs send API keys in X-API-KEY, not Bearer", entry = "uv run python scripts/check_api_key_header_examples.py", language = "system", pass_filenames = false, always_run = true },
 ]
 
 # Claude <-> Codex skill & subagent sync

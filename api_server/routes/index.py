@@ -7,8 +7,8 @@ question - *what is this server and how do I talk to it?* - one at ``/`` with a
 200, one at every unmatched path with a 404 that names the endpoint the caller
 was probably reaching for.
 
-Routing note: ``mcp_server.server.mount_on`` mounts FastMCP's Starlette app at
-``/`` (FastMCP serves ``/mcp`` internally), so *that* sub-app - not FastAPI -
+Routing note: ``mcp_server.server.mount_on`` mounts the SDK's Starlette app at
+``/`` (MCPServer serves ``/mcp`` internally), so *that* sub-app - not FastAPI -
 handles every path the API's own routers don't claim. :func:`not_found_handler`
 is therefore registered on the mounted sub-app in ``api_server/server.py``; a
 FastAPI-level 404 handler would never fire.
@@ -161,7 +161,7 @@ def _authentication() -> dict:
 def _tool_names() -> list[str]:
     """Names of the tools exposed over MCP, from the live service registry.
 
-    Imported lazily - ``mcp_server.server`` builds the FastMCP singleton at
+    Imported lazily - ``mcp_server.server`` builds the MCPServer singleton at
     import time, so we defer it to request time to keep this module cheap to
     import. Names only: the server card carries the full descriptions.
     """
@@ -361,7 +361,7 @@ async def not_found_handler(request: Request, exc: Exception) -> Response:
     request ID on it.
 
     Registration is by status code, so this also sees any ``HTTPException(404)``
-    raised *inside* the MCP transport. Today FastMCP emits its protocol 404s
+    raised *inside* the MCP transport. Today MCPServer emits its protocol 404s
     (terminated or unknown session) as direct responses, so none arrive here -
     but the transport owns that surface either way, and answering a stale
     session with a landing document would be a protocol error. Hence the guard:

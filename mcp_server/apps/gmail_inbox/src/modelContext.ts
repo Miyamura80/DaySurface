@@ -6,7 +6,7 @@
 // starting one. The host keeps only the latest update, so each call re-sends a
 // short log of recent actions rather than just the newest. The log is per App
 // instance, i.e. per rendered iframe: each view reports what happened in it.
-import type { ComposerDraft, McpAppLike } from "./types";
+import type { ComposerDraft, McpAppLike, SendResult } from "./types";
 
 export type ComposerAction = {
   kind: "sent" | "discarded";
@@ -44,7 +44,7 @@ export async function reportComposerAction(
   app: McpAppLike,
   kind: ComposerAction["kind"],
   draft: ComposerDraft,
-  sent?: { message_id?: string; thread_id?: string },
+  sent?: SendResult,
 ): Promise<void> {
   // Best-effort end to end: the user's action already succeeded, and a host
   // that throws (here or on the update) only leaves the model as unaware as

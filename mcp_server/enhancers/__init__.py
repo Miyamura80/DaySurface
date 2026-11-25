@@ -44,7 +44,7 @@ def enhance(
     """Register an MCP-specific enhancement for a pure service.
 
     fallback="headless" - if the enhancer raises, fall back to the pure service result.
-    fallback="error" - propagate the exception (FastMCP turns it into isError).
+    fallback="error" - propagate the exception (MCPServer turns it into isError).
     app_uri - the ``ui://`` resource this tool renders. Declared in the tool's
     ``_meta.ui.resourceUri`` in ``tools/list`` so hosts can pre-fetch the app
     HTML and apply CSP before the first call. Enhancers that call

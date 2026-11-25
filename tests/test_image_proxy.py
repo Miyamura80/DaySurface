@@ -1,7 +1,7 @@
 """Tests for the SSRF-guarded remote image fetcher (services/image_proxy.py).
 
 All network I/O is mocked: DNS via ``socket.getaddrinfo`` and HTTP via a fake
-``httpx.Client``. The suite pins the security contract - scheme allowlist,
+client in place of ``build_client``. The suite pins the security contract - scheme allowlist,
 malformed-URL rejection, public-address-only DNS, IP-pinned connections with
 Host/SNI preservation, per-hop redirect validation, image-only content type,
 the streamed size cap, and the wall-clock deadline - plus the happy path's
@@ -18,6 +18,7 @@ from unittest import mock
 
 import pytest
 
+import services._ssrf_guard as ssrf_guard
 import services.image_proxy as image_proxy
 from services.image_proxy import ImageFetchError, fetch_remote_image
 from tests.test_template import TestTemplate
@@ -75,8 +76,8 @@ def _patched_fetch(
 ) -> tuple[Any, _FakeClient]:
     client = _FakeClient(responses)
     with (
-        mock.patch.object(image_proxy.socket, "getaddrinfo", return_value=addrinfo),
-        mock.patch.object(image_proxy.httpx, "Client", return_value=client),
+        mock.patch.object(ssrf_guard.socket, "getaddrinfo", return_value=addrinfo),
+        mock.patch.object(image_proxy, "build_client", return_value=client),
     ):
         result = fetch_remote_image(url)
     return result, client
@@ -99,7 +100,7 @@ class TestImageProxy(TestTemplate):
     def test_rejects_host_resolving_to_private_address(self):
         with (
             mock.patch.object(
-                image_proxy.socket, "getaddrinfo", return_value=_PRIVATE_ADDRINFO
+                ssrf_guard.socket, "getaddrinfo", return_value=_PRIVATE_ADDRINFO
             ),
             pytest.raises(ImageFetchError, match="non-public"),
         ):
@@ -110,20 +111,20 @@ class TestImageProxy(TestTemplate):
         with pytest.raises(ImageFetchError, match="non-public"):
             fetch_remote_image("http://127.0.0.1:8080/admin.png")
 
-    def test_client_does_not_trust_proxy_env(self):
-        # An environment proxy could route past the local DNS validation, so
-        # the client must be constructed with trust_env=False.
+    def test_client_is_the_hardened_deadline_client(self):
+        # build_client sets trust_env=False / follow_redirects=False; the
+        # deadline makes it bound every socket operation, not just each read.
         client = _FakeClient([_FakeResponse()])
         with (
             mock.patch.object(
-                image_proxy.socket, "getaddrinfo", return_value=_PUBLIC_ADDRINFO
+                ssrf_guard.socket, "getaddrinfo", return_value=_PUBLIC_ADDRINFO
             ),
             mock.patch.object(
-                image_proxy.httpx, "Client", return_value=client
+                image_proxy, "build_client", return_value=client
             ) as client_factory,
         ):
             fetch_remote_image("https://example.com/a.png")
-        assert client_factory.call_args.kwargs["trust_env"] is False
+        assert client_factory.call_args.kwargs["deadline"] is not None
 
     def test_pins_connection_to_validated_ip_with_host_and_sni(self):
         result, client = _patched_fetch("https://example.com/a.png", [_FakeResponse()])
@@ -227,11 +228,11 @@ class TestImageProxy(TestTemplate):
         # per-hop re-validation must catch the second one.
         with (
             mock.patch.object(
-                image_proxy.socket,
+                ssrf_guard.socket,
                 "getaddrinfo",
                 side_effect=[_PUBLIC_ADDRINFO, _PRIVATE_ADDRINFO],
             ),
-            mock.patch.object(image_proxy.httpx, "Client", return_value=client),
+            mock.patch.object(image_proxy, "build_client", return_value=client),
             pytest.raises(ImageFetchError, match="non-public"),
         ):
             fetch_remote_image("https://example.com/a.png")
