@@ -61,6 +61,24 @@ class TestDoctor(TestTemplate):
         assert result.name == "Git repo"
         assert result.status == "pass"
 
+    def test_check_git_repo_accepts_git_dir(self, tmp_path):
+        (tmp_path / ".git").mkdir()
+        with patch("services.doctor_svc._ROOT_DIR", tmp_path):
+            assert _check_git_repo().status == "pass"
+
+    def test_check_git_repo_accepts_worktree_git_file(self, tmp_path):
+        # A git worktree or submodule has a `.git` file pointing at the real
+        # git dir instead of a `.git/` directory.
+        (tmp_path / ".git").write_text("gitdir: /elsewhere/.git/worktrees/x\n")
+        with patch("services.doctor_svc._ROOT_DIR", tmp_path):
+            assert _check_git_repo().status == "pass"
+
+    def test_check_git_repo_missing(self, tmp_path):
+        with patch("services.doctor_svc._ROOT_DIR", tmp_path):
+            result = _check_git_repo()
+        assert result.status == "fail"
+        assert result.message == ".git not found"
+
     def test_check_env_exists_missing(self, tmp_path):
         with patch("services.doctor_svc._ROOT_DIR", tmp_path):
             result = _check_env_exists()
