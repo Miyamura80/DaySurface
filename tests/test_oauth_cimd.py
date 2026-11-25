@@ -69,6 +69,43 @@ class TestClientMetadataDocuments(TestTemplate):
                 client_document(token_endpoint_auth_method="private_key_jwt"),
             )
 
+    def test_chatgpt_document_negotiates_public_authentication(self):
+        # ChatGPT's shape: prefers private_key_jwt but lists none as supported.
+        client = cimd.parse_document(
+            CLIENT_ID,
+            client_document(
+                token_endpoint_auth_method="private_key_jwt",
+                token_endpoint_auth_methods_supported=["none", "private_key_jwt"],
+                jwks_uri="https://client.test.example/jwks.json",
+            ),
+        )
+        assert client.token_endpoint_auth_method == "none"
+        assert client.client_secret is None
+
+    def test_supported_methods_list_is_authoritative(self):
+        # The list overrides the singular preference in both directions.
+        with pytest.raises(cimd.ClientMetadataError, match="only public clients"):
+            cimd.parse_document(
+                CLIENT_ID,
+                client_document(
+                    token_endpoint_auth_method="none",
+                    token_endpoint_auth_methods_supported=["private_key_jwt"],
+                ),
+            )
+        assert cimd.parse_document(
+            CLIENT_ID, client_document(token_endpoint_auth_methods_supported=["none"])
+        )
+
+    @pytest.mark.parametrize(
+        "methods", [None, "none", [], ["none", 42], {"none": True}]
+    )
+    def test_malformed_supported_methods_are_refused(self, methods):
+        with pytest.raises(cimd.ClientMetadataError, match="non-empty array"):
+            cimd.parse_document(
+                CLIENT_ID,
+                client_document(token_endpoint_auth_methods_supported=methods),
+            )
+
     def test_malformed_redirect_uri_is_a_metadata_error(self):
         with pytest.raises(cimd.ClientMetadataError):
             cimd.parse_document(

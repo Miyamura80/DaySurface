@@ -61,6 +61,19 @@ class TestOAuthServer(OAuthServerCase):
         assert user.user_id == USER_ID
         assert user.auth_method == "oauth"
 
+    def test_client_preferring_private_key_jwt_signs_in_as_public(self):
+        # ChatGPT's document: private_key_jwt preferred, none supported. The
+        # token request carries no client authentication, as our metadata
+        # advertises only none.
+        self.document = client_document(
+            token_endpoint_auth_method="private_key_jwt",
+            token_endpoint_auth_methods_supported=["none", "private_key_jwt"],
+        )
+        code, verifier = self._sign_in()
+        tokens = self._exchange(code, verifier)
+        assert tokens["status"] == 200
+        assert tokens["access_token"].startswith("dsa_")
+
     def test_tokens_are_stored_only_as_hashes(self):
         code, verifier = self._sign_in()
         tokens = self._exchange(code, verifier)

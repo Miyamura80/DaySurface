@@ -209,6 +209,39 @@ async def fetch_document(target: PinnedTarget, *, timeout: float) -> FetchedDocu
         ) from exc
 
 
+def _require_public_client(doc: dict) -> None:
+    """Refuse a document whose client cannot authenticate as a public client.
+
+    A document may list every method it can use in
+    ``token_endpoint_auth_methods_supported`` (CIMD draft-03, OpenID Connect
+    RP Metadata Choices), keeping ``token_endpoint_auth_method`` as its single
+    preference for servers that read only that. ChatGPT, for one, sends
+    ``["none", "private_key_jwt"]`` with ``private_key_jwt`` as the
+    preference. When the list is present it is authoritative, so the client
+    is accepted if it names ``none``; our own metadata advertises only
+    ``none``, which is how the client learns which one we picked. A client
+    that can only authenticate with a key we never verify must not be treated
+    as public.
+    """
+    if "token_endpoint_auth_methods_supported" in doc:
+        methods = doc["token_endpoint_auth_methods_supported"]
+        if (
+            not isinstance(methods, list)
+            or not methods
+            or not all(isinstance(m, str) for m in methods)
+        ):
+            raise ClientMetadataError(
+                "token_endpoint_auth_methods_supported must be a non-empty"
+                " array of strings"
+            )
+    else:
+        methods = [doc.get("token_endpoint_auth_method", "none")]
+    if "none" not in methods:
+        raise ClientMetadataError(
+            "only public clients (token_endpoint_auth_method=none) are supported"
+        )
+
+
 def parse_document(client_id: str, raw: bytes) -> OAuthClientInformationFull:
     """Validate a fetched document and turn it into an SDK client record."""
     try:
@@ -226,13 +259,7 @@ def parse_document(client_id: str, raw: bytes) -> OAuthClientInformationFull:
     if len(redirect_uris) > _MAX_REDIRECT_URIS:
         raise ClientMetadataError("client metadata document has too many redirect_uris")
     validated = [_validate_redirect_uri(uri) for uri in redirect_uris]
-    auth_method = doc.get("token_endpoint_auth_method", "none")
-    if auth_method != "none":
-        # Only public clients are supported; a client that expects to
-        # authenticate with a key we never verify must not be treated as public.
-        raise ClientMetadataError(
-            "only public clients (token_endpoint_auth_method=none) are supported"
-        )
+    _require_public_client(doc)
     name = doc.get("client_name")
     client_name = (
         name if isinstance(name, str) and name.strip() else urlsplit(client_id).hostname
