@@ -207,14 +207,15 @@ def _check_prek_hooks() -> CheckResultModel:
 
 
 def _check_git_repo() -> CheckResultModel:
-    git_dir = _ROOT_DIR / ".git"
+    # `.git` is a directory in a normal clone but a file ("gitdir: ...") in a
+    # git worktree or submodule; either one means this is a git checkout.
+    git_path = _ROOT_DIR / ".git"
+    found = git_path.exists()
     return CheckResultModel(
         name="Git repo",
-        status="pass" if git_dir.is_dir() else "fail",
-        message="git repository found"
-        if git_dir.is_dir()
-        else ".git/ directory not found",
-        detail=f"checked {git_dir}",
+        status="pass" if found else "fail",
+        message="git repository found" if found else ".git not found",
+        detail=f"checked {git_path}",
     )
 
 
