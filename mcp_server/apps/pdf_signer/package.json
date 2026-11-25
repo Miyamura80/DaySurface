@@ -28,5 +28,8 @@
     "vite": "^6.0.5",
     "vite-plugin-singlefile": "^2.1.0",
     "vitest": "^3.0.0"
+  },
+  "overrides": {
+    "hono": "4.13.16"
   }
 }

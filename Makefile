@@ -16,7 +16,9 @@ PROJECT_ROOT=.
 # Minimum uv version required by this repo. `[tool.uv]` in pyproject.toml uses a
 # relative `exclude-newer` duration that only uv >= 0.9.17 can parse; an older uv
 # silently discards the whole table (guard included) and rewrites uv.lock. See #196.
-MIN_UV_VERSION=0.9.17
+# Raised to 0.13.5, which rejects chains containing the compromised eMudhra
+# intermediate keys (0.13.4 only dropped the root, GHSA-hq85-5cpj-mr62).
+MIN_UV_VERSION=0.13.5
 
 .DEFAULT_GOAL := help
 
@@ -57,7 +59,7 @@ check_uv:
 		exit 1; \
 	fi; \
 	if [ "$$(printf '%s\n' "$(MIN_UV_VERSION)" "$$UV_VERSION" | sort -V | head -n1)" != "$(MIN_UV_VERSION)" ]; then \
-		echo "$(RED)uv $$UV_VERSION is too old - this repo needs uv >= $(MIN_UV_VERSION) (relative exclude-newer in [tool.uv]).$(RESET)"; \
+		echo "$(RED)uv $$UV_VERSION is too old - this repo needs uv >= $(MIN_UV_VERSION) (relative exclude-newer in [tool.uv]; eMudhra CA root-store fix, GHSA-hq85-5cpj-mr62).$(RESET)"; \
 		echo "$(RED)Fix: run .claude/hooks/session-start.sh, or 'uv tool install --force uv>=$(MIN_UV_VERSION)'.$(RESET)"; \
 		exit 1; \
 	fi
@@ -322,6 +324,17 @@ file_len_check: check_uv ## Check source files (.py/.ts/.tsx) don't exceed max l
 	@uv run python scripts/check_file_length.py
 	@echo "$(GREEN)✅File length check completed.$(RESET)"
 
+.PHONY: lint_immutable_refs
+lint_immutable_refs: ## Fail if a Dockerfile or GitHub Actions file uses a mutable image tag or action ref
+	@echo "$(YELLOW)🔍Checking for mutable image/action references...$(RESET)"
+	@python3 scripts/check_immutable_refs.py
+	@echo "$(GREEN)✅All non-exempt references are pinned$(RESET)"
+
+api_key_header_check: check_uv ## Fail if docs send the API key as Authorization: Bearer instead of X-API-KEY
+	@echo "$(YELLOW)🔍Checking API-key header examples...$(RESET)"
+	@uv run python scripts/check_api_key_header_examples.py
+	@echo "$(GREEN)✅API-key header check completed.$(RESET)"
+
 blind_except_check: check_uv ## Check every `# noqa: BLE001` has a justification comment
 	@echo "$(YELLOW)🔍Checking blind-except justifications...$(RESET)"
 	@uv run python scripts/check_blind_except_justification.py
@@ -337,7 +350,7 @@ docs_links_check: check_uv ## Check absolute links in docs content resolve to re
 	@uv run python scripts/check_docs_links.py
 	@echo "$(GREEN)✅Docs link check completed.$(RESET)"
 
-ci: ruff vulture import_lint ty docs_lint docs_test apps_check check_deps file_len_check blind_except_check tool_surface_docs_check docs_links_check ## Run all CI checks (ruff, vulture, import_lint, ty, docs_lint, docs_test, apps_check, check_deps, file_len_check, blind_except_check, tool_surface_docs_check, docs_links_check)
+ci: ruff vulture import_lint ty docs_lint docs_test apps_check check_deps file_len_check blind_except_check api_key_header_check tool_surface_docs_check docs_links_check lint_immutable_refs ## Run all CI checks (ruff, vulture, import_lint, ty, docs_lint, docs_test, apps_check, check_deps, file_len_check, blind_except_check, api_key_header_check, tool_surface_docs_check, docs_links_check, lint_immutable_refs)
 	@echo "$(GREEN)✅CI checks completed.$(RESET)"
 
 .PHONY: sync-agent-config

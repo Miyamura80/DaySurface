@@ -190,8 +190,8 @@ class TestGmailInboxAppTools(TestTemplate):
         m = build_mcp_server()
         for name in self.EXPECTED:
             tool = m._tool_manager._tools[name]
-            # FastMCP stores meta either under ``annotations``, ``meta`` or
-            # the FastMCPTool's own ``__dict__``; the canonical location for
+            # MCPServer stores meta either under ``annotations``, ``meta`` or
+            # the SDK Tool's own ``__dict__``; the canonical location for
             # custom keys is ``_meta`` on the underlying MCP Tool. Reach in
             # via the public ``to_mcp_tool`` style or fallback to dict.
             meta = getattr(tool, "meta", None) or tool.__dict__.get("meta")

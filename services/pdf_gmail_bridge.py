@@ -26,6 +26,7 @@ from models.gmail import (
     GmailGetAttachmentInput,
 )
 from models.pdf_forms import PdfDelivery, PdfExportedAttachment
+from services import ModelFacingError
 from services.gmail_attachments_svc import gmail_add_attachment
 from services.gmail_messages_svc import gmail_get_attachment
 from services.gmail_svc import _get_gmail_client
@@ -36,7 +37,7 @@ from services.pdf_ports import (
 )
 
 
-class GmailAttachmentNotFoundError(Exception):
+class GmailAttachmentNotFoundError(ModelFacingError):
     """Raised when the attachment_id is not present on the given message."""
 
     def __init__(self, *, message_id: str, attachment_id: str) -> None:

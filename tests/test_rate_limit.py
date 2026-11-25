@@ -1,8 +1,10 @@
 """Tests for rate limiting middleware."""
 
 import os
+from pathlib import Path
 from unittest.mock import patch
 
+import yaml
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -101,3 +103,29 @@ class TestRateLimit(TestTemplate):
         assert "error" in body
         assert body["error"]["code"] == "rate_limited"
         assert "Retry" in body["error"]["message"]
+
+    @patch("api_server.middleware.rate_limit._trust_proxy_headers", return_value=True)
+    @patch("api_server.middleware.rate_limit._get_tier_limits")
+    def test_proxy_header_gives_each_caller_its_own_bucket(self, mock_limits, _):
+        """Behind Railway's edge every socket peer is the edge: X-Real-IP is
+        the only thing telling anonymous callers apart."""
+        mock_limits.return_value = {"rps": 1, "rpm": 1000, "rph": 10000, "rpd": 100000}
+        client = TestClient(_make_app())
+        assert (
+            client.get("/test", headers={"X-Real-IP": "203.0.113.1"}).status_code == 200
+        )
+        assert (
+            client.get("/test", headers={"X-Real-IP": "203.0.113.1"}).status_code == 429
+        )
+        assert (
+            client.get("/test", headers={"X-Real-IP": "203.0.113.2"}).status_code == 200
+        )
+
+
+class TestProductionTrustsTheEdge(TestTemplate):
+    def test_production_overlay_trusts_proxy_headers(self):
+        """The prod deploy sits behind Railway's edge (see production_config)."""
+        overlay = yaml.safe_load(
+            (Path(__file__).parent.parent / "common/production_config.yaml").read_text()
+        )
+        assert overlay["rate_limit"]["trust_proxy_headers"] is True

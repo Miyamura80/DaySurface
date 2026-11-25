@@ -90,7 +90,7 @@ class TestGmailAttachmentEnhancer(TestTemplate):
         assert len(tool.extra_content) == 1
         block = tool.extra_content[0]
         assert block.type == "image"
-        assert block.mimeType == "image/png"
+        assert block.mime_type == "image/png"
         # The image block carries the same base64 bytes as the structured result.
         assert block.data == _b64(_PNG)
 

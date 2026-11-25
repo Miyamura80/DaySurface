@@ -22,7 +22,7 @@ from contextlib import contextmanager
 from datetime import UTC, datetime
 from email.message import EmailMessage, MIMEPart
 from email.utils import getaddresses
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlencode
 
 import httpx
@@ -42,8 +42,12 @@ from models.gmail import (
     GmailStatusResult,
     InlineImageUpload,
 )
-from services import ConnectRequiredError, service
+from services import ConnectRequiredError, ModelFacingError, service
 from services._gmail_fake_backend import build_fake_gmail_client
+
+if TYPE_CHECKING:
+    from google.oauth2.credentials import Credentials
+    from googleapiclient.http import HttpRequest
 
 # ---------------------------------------------------------------------------
 # Domain errors
@@ -91,7 +95,7 @@ class GmailNotConnectedError(ConnectRequiredError):
             return None
 
 
-class GmailAttachmentTooLargeError(Exception):
+class GmailAttachmentTooLargeError(ModelFacingError):
     """Raised when a fetched attachment exceeds the configured size ceiling.
 
     Carries the sizes so a transport can build a precise client-facing message
@@ -568,20 +572,39 @@ def _get_gmail_client(user_id: str):  # noqa: ANN202 - googleapiclient Resource 
 
     # Call-time import: tests patch common.token_encryption.require_encryption.
     from common.token_encryption import require_encryption  # noqa: PLC0415
-    from services._gmail_retry import RateLimitRetryingRequest  # noqa: PLC0415
 
     refresh_token = require_encryption().decrypt(encrypted)
     access_token = _mint_access_token(refresh_token)
     creds = Credentials(token=access_token)
-    client = build(
-        "gmail",
-        "v1",
-        credentials=creds,
-        cache_discovery=False,
-        requestBuilder=RateLimitRetryingRequest,
-    )
+    client = build("gmail", "v1", cache_discovery=False, **_gmail_build_kwargs(creds))
     _store_client(user_id, client)
     return client
+
+
+def _gmail_build_kwargs(creds: Credentials) -> dict[str, Any]:
+    """Keyword arguments for building the cached Gmail client.
+
+    Every Gmail request goes through ``RateLimitRetryingRequest`` (rate-limit
+    backoff) on its own connection. The cached client is shared by every
+    thread serving this user (the MCP composer fires several tool calls at
+    once), but httplib2 connections are not thread-safe: two threads on one
+    connection interleave TLS records (``ssl.SSLError: record layer
+    failure``) and can take the whole process down. This is Google's
+    documented pattern for multi-threaded use
+    (googleapis.github.io/google-api-python-client/docs/thread_safety.html):
+    share the client and credentials, build a fresh ``Http`` per request.
+    Batches inherit the first request's connection, so they are covered too.
+    """
+    from google_auth_httplib2 import AuthorizedHttp  # noqa: PLC0415
+    from googleapiclient.http import build_http  # noqa: PLC0415
+
+    from services._gmail_retry import RateLimitRetryingRequest  # noqa: PLC0415
+
+    def build_request(_shared_http: Any, *args: Any, **kwargs: Any) -> HttpRequest:
+        http = AuthorizedHttp(creds, http=build_http())
+        return RateLimitRetryingRequest(http, *args, **kwargs)
+
+    return {"credentials": creds, "requestBuilder": build_request}
 
 
 def _invalidate_gmail_client(user_id: str) -> None:

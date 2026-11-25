@@ -17,7 +17,7 @@ fi
 API_KEY="$(cat "$API_KEY_FILE")"; export API_KEY
 log "API key: ${API_KEY:0:12}..."
 
-# 2) DaySurface server (FastAPI + FastMCP /mcp mount). SQLite persists on disk.
+# 2) DaySurface server (FastAPI + MCPServer /mcp mount). SQLite persists on disk.
 # GMAIL_PUBSUB_TOPIC is a real config field (common/global_config.py) - setting it
 # flips push_available true so the Settings app renders its "Add endpoint" control,
 # which the settings_subscribe scenario clicks. No Pub/Sub is ever contacted (there

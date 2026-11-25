@@ -126,6 +126,13 @@ export type ToolCallResult = {
   structuredContent?: unknown;
 };
 
-// gmail_composer.send's confirmation. Empty when the send was confirmed only
-// by the draft being gone (see confirmSend), so Gmail's ids are unknown.
-export type SendResult = { message_id?: string; thread_id?: string };
+// gmail_composer.send's confirmation, or the server's sent record of it after
+// a lost reply (see confirmSend).
+export type SendResult = { message_id: string; thread_id?: string | null };
+
+// gmail_composer.send_status (models/gmail_composer.py:GmailComposerSendStatus).
+// `result` is set only when state is "sent".
+export type SendStatus = {
+  state: "sent" | "unsent" | "gone";
+  result?: SendResult | null;
+};

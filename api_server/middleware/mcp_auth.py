@@ -5,7 +5,7 @@ flow - discovery via RFC 9728, registration and PKCE handled by AuthKit),
 WorkOS session JWTs, and API keys - so REST credentials keep working as a
 parallel path. Implemented as pure ASGI middleware (not
 :class:`BaseHTTPMiddleware`) so it doesn't buffer the streaming SSE responses
-FastMCP emits.
+MCPServer emits.
 
 401 responses advertise the Protected Resource Metadata URL via
 ``WWW-Authenticate`` when OAuth is configured, which is how MCP clients
@@ -17,13 +17,16 @@ import json
 import anyio
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+import api_server.oauth as oauth_server
 from api_server.auth.api_key_auth import validate_api_key
 from api_server.auth.authkit_auth import (
+    _resolve_scopes,
     resource_metadata_url,
     verify_authkit_token,
 )
 from api_server.auth.unified_auth import AuthenticatedUser
 from api_server.auth.workos_auth import verify_workos_token
+from api_server.oauth.storage import lookup_access_token
 from common import global_config
 from db.engine import use_db_session
 from src.payments.request_context import reset_payment_header, set_payment_header
@@ -92,6 +95,22 @@ def _authenticate(scope: Scope) -> AuthenticatedUser | None:
     }
 
     auth_header = headers.get("authorization", "")
+    scheme, _, credentials = auth_header.partition(" ")
+    if scheme.lower() == "bearer" and oauth_server.is_self_mode():
+        # DaySurface issued, stores and can revoke these tokens. The MCP spec
+        # forbids accepting tokens from any other authorization server, so
+        # AuthKit and WorkOS JWTs are not tried in this mode. The scheme is
+        # case-insensitive (RFC 9110 section 11.1).
+        token = credentials.strip()
+        access = lookup_access_token(token)
+        if access is None or not access.subject:
+            return None
+        scopes = _resolve_scopes(" ".join(access.scopes))
+        if scopes is None:
+            return None
+        return AuthenticatedUser(
+            user_id=access.subject, auth_method="oauth", scopes=scopes
+        )
     if auth_header.startswith("Bearer "):
         token = auth_header.removeprefix("Bearer ").strip()
         oauth_user = verify_authkit_token(token)
@@ -130,7 +149,7 @@ def _authenticate(scope: Scope) -> AuthenticatedUser | None:
 def _www_authenticate_value() -> bytes:
     """Build the 401 challenge; advertise PRM discovery when OAuth is on."""
     value = 'Bearer realm="mcp"'
-    if global_config.WORKOS_AUTHKIT_DOMAIN:
+    if global_config.WORKOS_AUTHKIT_DOMAIN or oauth_server.is_self_mode():
         value += f', resource_metadata="{resource_metadata_url()}"'
     return value.encode("latin-1")
 
