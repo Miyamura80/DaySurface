@@ -41,6 +41,7 @@ from common import global_config
 from common.global_config import root_dir
 from db.models.pdf_documents import PdfDocument
 from models.pdf_forms import PdfDocStatus, SignaturePlacement
+from services import ModelFacingError
 from services.pdf_documents_repo import load_document, update_document
 from services.pdf_inspect import inspect_pdf
 from services.pdf_overlay import (
@@ -66,7 +67,7 @@ _STAMP_DESCENT = 4.0  # below the anchor, covering the last metadata line
 _STAMP_ASCENT = _NAME_BASELINE_OFFSET + _NAME_FONT_SIZE  # top of the typed name
 
 
-class PdfSigningStateError(Exception):
+class PdfSigningStateError(ModelFacingError):
     """Signing attempted on a document that is not awaiting a signature."""
 
     def __init__(self, *, doc_id: str, status: str) -> None:
@@ -77,11 +78,11 @@ class PdfSigningStateError(Exception):
         )
 
 
-class PdfSigningInputError(Exception):
+class PdfSigningInputError(ModelFacingError):
     """Missing typed name or consent - the ceremony inputs are mandatory."""
 
 
-class PdfPlacementResolutionError(Exception):
+class PdfPlacementResolutionError(ModelFacingError):
     """The recorded placement no longer resolves to a spot on the document.
 
     Raised instead of silently stamping a default position - a signature at

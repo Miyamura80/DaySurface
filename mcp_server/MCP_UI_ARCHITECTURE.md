@@ -49,7 +49,7 @@
 
 ## Other
 - `outputSchema` auto-generated from `output_model` for all tools (headless and enhanced)
-- Wrapper returns Pydantic model directly (not dict). Try/except removed - exceptions propagate; FastMCP turns them into `isError: true` text responses
+- Wrapper returns Pydantic model directly (not dict). Try/except removed - exceptions propagate; the SDK turns them into `isError: true` text responses (first-party error text is kept, third-party crashes are sanitized - see `mcp_server/_tool_errors.py`)
 - Resources & Prompts: out of scope
 - SDK pin: `mcp[cli]>=1.28.1,<2.0.0`
 - Testing initial PR: pytest + vitest only

@@ -21,6 +21,7 @@ from common import global_config
 from db.engine import use_db_session
 from db.models.pdf_documents import PdfDocument
 from models.pdf_forms import PdfDocStatus
+from services import ModelFacingError
 
 # Short aliases: the status type itself lives in models/pdf_forms.py so every
 # layer (models, services, app tools) shares one definition.
@@ -42,7 +43,7 @@ _VALID_TRANSITIONS: dict[PdfDocStatus, frozenset[PdfDocStatus]] = {
 _UNSET: Any = object()
 
 
-class PdfDocumentError(Exception):
+class PdfDocumentError(ModelFacingError):
     """Base class for PDF document-session errors."""
 
 

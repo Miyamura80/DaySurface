@@ -22,9 +22,15 @@ SSRF surface. Guards, in order:
   guard (an environment proxy could reach destinations this check can't see);
 - redirects are followed manually and every hop re-validated + re-pinned;
 - the response must declare an ``image/*`` content type;
-- the body is streamed, capped at ``_MAX_IMAGE_BYTES``, and subject to a
-  wall-clock deadline enforced between chunks (a trickling sender cannot
-  hold a slot past ``_TOTAL_DEADLINE_SECONDS``).
+- the body is streamed and capped at ``_MAX_IMAGE_BYTES``;
+- the whole fetch (every hop) has a wall-clock deadline enforced on every
+  socket operation via :func:`services._ssrf_guard.build_client`, so a sender
+  that trickles its status line, headers, body or chunk trailers just inside
+  the per-read timeout cannot hold a slot past ``_TOTAL_DEADLINE_SECONDS``.
+
+Resolution, the address allowlist and pinning are the shared
+:func:`services._ssrf_guard.validate_and_pin`; a rejection surfaces as
+:class:`ImageFetchError`.
 
 Not an ``@service``: this is an app-only capability of the inbox reader, so
 it must not be auto-registered as an LLM-facing MCP tool / CLI command / API
@@ -34,15 +40,18 @@ route the way registry services are.
 from __future__ import annotations
 
 import base64
-import ipaddress
-import socket
 import time
 from typing import Any
-from urllib.parse import urlparse
 
 import httpx
 
 from models.gmail import GmailFetchImageResult
+from services._ssrf_guard import (
+    PinnedTarget,
+    SsrfError,
+    build_client,
+    validate_and_pin,
+)
 
 _MAX_IMAGE_BYTES = 2 * 1024 * 1024  # cap per image; emails shouldn't need more
 _MAX_REDIRECTS = 3
@@ -57,57 +66,12 @@ class ImageFetchError(ValueError):
     """Raised when a remote image URL is rejected or cannot be fetched."""
 
 
-def _validate_and_pin(url: str) -> tuple[str, dict[str, str], dict[str, str]]:
-    """Validate ``url`` and return (pinned_url, headers, extensions).
-
-    Resolves the host, requires every DNS answer to be a global address, then
-    rewrites the URL to target one validated IP while preserving the original
-    hostname in the Host header and (for https) TLS SNI - closing the
-    resolve-then-reconnect DNS-rebinding window. IP-literal hosts are
-    validated and passed through unchanged.
-    """
-    parsed = urlparse(url)
-    if parsed.scheme not in ("http", "https"):
-        raise ImageFetchError(f"unsupported URL scheme: {parsed.scheme!r}")
-    host = parsed.hostname
-    if not host:
-        raise ImageFetchError("URL has no host")
+def _pin(url: str) -> PinnedTarget:
+    """Validate and pin ``url`` with the shared guard, as an ImageFetchError."""
     try:
-        port = parsed.port  # raises ValueError on e.g. "https://h:abc/"
-    except ValueError as exc:
-        raise ImageFetchError(f"invalid port in URL {url!r}") from exc
-    default_port = 80 if parsed.scheme == "http" else 443
-    try:
-        infos = socket.getaddrinfo(host, port or default_port, proto=socket.IPPROTO_TCP)
-    except (socket.gaierror, OSError) as exc:
-        raise ImageFetchError(f"cannot resolve host {host!r}") from exc
-    if not infos:
-        raise ImageFetchError(f"cannot resolve host {host!r}")
-    addresses: list[str] = []
-    for info in infos:
-        addr = ipaddress.ip_address(info[4][0])
-        if not addr.is_global:
-            raise ImageFetchError(f"host {host!r} resolves to non-public address")
-        addresses.append(str(addr))
-
-    try:
-        ipaddress.ip_address(host)
-        # Host is already an IP literal (validated above): nothing to pin.
-        return url, {}, {}
-    except ValueError:
-        pass
-
-    ip = addresses[0]
-    ip_netloc = f"[{ip}]" if ":" in ip else ip
-    if port:
-        ip_netloc += f":{port}"
-    pinned = parsed._replace(netloc=ip_netloc).geturl()
-    host_header = host if not port else f"{host}:{port}"
-    headers = {"Host": host_header}
-    # httpcore uses sni_hostname for both the TLS handshake and certificate
-    # hostname verification, so cert checks still run against the real host.
-    extensions = {"sni_hostname": host} if parsed.scheme == "https" else {}
-    return pinned, headers, extensions
+        return validate_and_pin(url)
+    except SsrfError as exc:
+        raise ImageFetchError(str(exc)) from exc
 
 
 def _read_image_response(resp: Any, url: str, deadline: float) -> GmailFetchImageResult:
@@ -151,16 +115,17 @@ def fetch_remote_image(url: str) -> GmailFetchImageResult:
     """
     current = url
     deadline = time.monotonic() + _TOTAL_DEADLINE_SECONDS
-    with httpx.Client(
-        timeout=_TIMEOUT_SECONDS, follow_redirects=False, trust_env=False
-    ) as client:
+    with build_client(timeout=_TIMEOUT_SECONDS, deadline=deadline) as client:
         for _ in range(_MAX_REDIRECTS + 1):
             if time.monotonic() > deadline:
                 raise ImageFetchError("image fetch deadline exceeded")
-            target, headers, extensions = _validate_and_pin(current)
+            target = _pin(current)
             try:
                 with client.stream(
-                    "GET", target, headers=headers, extensions=extensions
+                    "GET",
+                    target.url,
+                    headers=target.headers,
+                    extensions=target.extensions,
                 ) as resp:
                     if resp.is_redirect:
                         # is_redirect implies a Location header exists. Join
@@ -169,6 +134,8 @@ def fetch_remote_image(url: str) -> GmailFetchImageResult:
                         current = str(httpx.URL(current).join(location))
                         continue
                     return _read_image_response(resp, url, deadline)
+            except httpx.TimeoutException as exc:
+                raise ImageFetchError("image fetch timed out") from exc
             except httpx.HTTPError as exc:
                 raise ImageFetchError(f"image fetch failed: {exc}") from exc
     raise ImageFetchError("too many redirects")

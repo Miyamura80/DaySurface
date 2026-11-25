@@ -23,7 +23,7 @@ build under `$E2E_HOME/goose_src` is repo-agnostic and shared with it.
         │  Playwright-Electron drives the DOM
         ▼
    mock LLM ──emits webhook_settings──► Goose desktop GUI ──/mcp──► DaySurface server
-   (scenario engine)                    (Electron, real)            (FastMCP + enhancer
+   (scenario engine)                    (Electron, real)            (MCPServer + enhancer
         ▲                                     │  renders ui://       attaches ui://daysurface/settings)
         │                                     ▼
         └──────────────────────────  sandboxed iframe (Settings app)

@@ -27,7 +27,35 @@ class ServiceEntry:
     asset: str = "USDC"
 
 
-class ConnectRequiredError(Exception):
+class ModelFacingError(Exception):
+    """A failure whose text is written for the model (or API caller) to read.
+
+    Transports may show ``str(exc)`` verbatim: on MCP it is the only
+    exception text that crosses the SDK's sanitization (see
+    ``mcp_server/_tool_errors.py``). The contract is on the raiser: the message
+    is composed here, in first-party code, and NEVER wraps third-party text
+    (``str()`` of an HTTP-client, SDK, parser, or OS error), which can carry
+    hostnames, pinned IPs, server paths, or credentials. Internal faults
+    (config errors, missing adapters, upstream protocol surprises) must not
+    subclass this - they stay sanitized.
+    """
+
+
+class InvalidArgument(ModelFacingError, ValueError):  # noqa: N818 - name shared across the template family
+    """A service rejected one of its arguments; the caller can correct it.
+
+    Also a ``ValueError`` so existing ``except ValueError`` callers keep
+    working. REST answers 400 (``api_server.middleware.error_handler``).
+    ``side_effects_possible`` records at raise time whether an earlier upstream
+    write in the same call already landed, as ``ClientRefusalError`` does.
+    """
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.side_effects_possible = upstream_write_done()
+
+
+class ConnectRequiredError(ModelFacingError):
     """A service call requires the user to first complete an external connect flow.
 
     Transport-agnostic contract: each integration that links a third-party
@@ -53,7 +81,7 @@ class ConnectRequiredError(Exception):
         raise NotImplementedError
 
 
-class RetryLaterError(Exception):
+class RetryLaterError(ModelFacingError):
     """An upstream refused the call for now (e.g. a rate limit) after retries.
 
     Transport-agnostic contract: re-running the same call immediately would
@@ -71,7 +99,7 @@ class RetryLaterError(Exception):
         self.side_effects_possible = side_effects_possible
 
 
-class ClientRefusalError(ValueError):
+class ClientRefusalError(ModelFacingError, ValueError):
     """The service refused the call for a reason the caller can act on.
 
     Raised before the call's own write, so nothing changed upstream unless an

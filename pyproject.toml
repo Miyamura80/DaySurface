@@ -30,7 +30,8 @@ dependencies = [
     "vulture>=2.14",
     "dspy>=3.1.2",
     "langfuse>=4.14.1",
-    "litellm>=1.96.2,!=1.82.*",
+    # Backdoored litellm releases: 1.82.7/1.82.8 (Mar 2026) and 1.107.0 (Oct 2026). Never resolve them.
+    "litellm>=1.96.2,!=1.82.*,!=1.107.0",
     "tenacity>=9.0.0",
     "pillow>=12.3.0",
     "ty>=0.0.14",
@@ -48,7 +49,7 @@ dependencies = [
     "rich>=15.0.0",
     "packaging>=26.2",
     "keyring>=25.0.0",
-    "mcp[cli]>=1.28.1,<2.0.0",
+    "mcp[cli]>=2.3,<3",
     "fastapi>=0.141.1",
     "httpx>=0.28.0",
     "anyio>=4.14.2",
@@ -67,9 +68,11 @@ dependencies = [
     "google-auth>=2.53.0",
     "psycopg2-binary>=2.9.12",
     "rank-bm25>=0.2.2",
-    "pypdf>=6.19.0",
+    "pypdf>=7.0.0",
     "pyhanko>=0.35.2",
     "pypdfium2>=5.12.1",
+    "httpcore>=1.0.9",
+    "google-auth-httplib2>=0.4.0",
 ]
 readme = "README.md"
 requires-python = ">= 3.12"
@@ -167,6 +170,7 @@ exclude = [
     "tests/test_webhook_ssrf.py",
     # http.server dispatches do_GET / log_message by name.
     "tests/test_gmail_retry_wire.py",
+    "tests/test_gmail_client_threading.py",
     "tests/test_service_route_scopes.py",
     "tests/test_logging_security.py",
     "tests/test_logging_thread_safety.py",
@@ -187,6 +191,11 @@ exclude = [
     "tests/test_paywall.py",
     "tests/test_enhancer_fallback.py",
     "tests/test_image_proxy.py",
+    # anyio_backend and autouse fixtures, reached by pytest only.
+    "tests/test_oauth_cimd.py",
+    "tests/test_oauth_cimd_resolver.py",
+    "tests/test_oauth_cimd_cache.py",
+    "tests/cimd_fakes.py",
     "tests/test_scopes.py",
     "utils/llm/",
     "common/",
@@ -254,7 +263,10 @@ omit = [
 show_missing = true
 
 [tool.uv]
-# Relative `exclude-newer` durations (below) are only understood by uv >= 0.9.17.
+# Relative `exclude-newer` durations (below) are only understood by uv >= 0.9.17;
+# the floor is 0.13.5 because it rejects certificate chains containing the
+# compromised eMudhra intermediate keys (rustls-webpki 0.103.16); 0.13.4 only
+# dropped the eMudhra CA root (GHSA-hq85-5cpj-mr62).
 # WARNING: this `required-version` guard does NOT protect older uv here. An old
 # uv can't parse `exclude-newer = "7 days"`, so it warns and discards the WHOLE
 # `[tool.uv]` table - required-version included - then resolves without the
@@ -262,9 +274,11 @@ show_missing = true
 # table parses, i.e. on uv that's already new enough. The real guarantee that a
 # new-enough uv is present comes from the SessionStart hook
 # (.claude/hooks/session-start.sh), which upgrades uv before any sync.
-required-version = ">=0.9.17"
+required-version = ">=0.13.5"
 # 7-day quarantine on freshly-published packages (supply-chain defense).
 exclude-newer = "7 days"
+# Exempt certifi so the eMudhra CA response (2026.10.19, drops emSign ECC Root CA - G3) isn't quarantined.
+exclude-newer-package = { certifi = false }
 
 [dependency-groups]
 dev = [

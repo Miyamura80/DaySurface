@@ -1,0 +1,34 @@
+name: Pinned refs
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  pinned-refs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # On pull requests, run the base branch's copy of the guard so a PR cannot weaken
+      # the checker script (falls back to the PR's copy until the base has one). This
+      # workflow file still comes from the PR, so protect it with CODEOWNERS or a ruleset.
+      - name: Fetch the base branch's guard
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.base_ref }}
+          path: .pinned-refs-base
+          sparse-checkout: scripts/check_immutable_refs.py
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Check images and actions are pinned
+        run: |
+          guard=scripts/check_immutable_refs.py
+          if [ -f ".pinned-refs-base/$guard" ]; then guard=".pinned-refs-base/$guard"; fi
+          python3 "$guard"

@@ -2,7 +2,7 @@
 
 Visibility is hinted via `meta={"ui": {"visibility": ["app"]}}`. Per spec this is
 not a hard guarantee - some clients may still expose these to the LLM. For hard
-isolation, run a separate FastMCP instance (out of scope). See mcp_server/MCP_UI_EDGE_CASES.md A4.
+isolation, run a separate MCPServer instance (out of scope). See mcp_server/MCP_UI_EDGE_CASES.md A4.
 """
 
 import importlib
