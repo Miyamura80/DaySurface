@@ -13,5 +13,8 @@
   "devDependencies": {
     "playwright": "^1.52.0",
     "typescript": "^5.7.2"
+  },
+  "overrides": {
+    "hono": "4.13.16"
   }
 }

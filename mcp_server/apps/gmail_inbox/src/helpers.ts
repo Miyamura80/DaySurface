@@ -6,6 +6,7 @@ import type {
   LabelChip,
   McpAppLike,
   SendResult,
+  SendStatus,
   ToolCallResult,
 } from "./types";
 
@@ -170,43 +171,61 @@ function toolErrorText(raw: unknown): string | null {
   return null;
 }
 
-// Gmail deletes a draft once it is sent, so after a lost send reply only a
-// definite "gone" counts as sent. Any doubt (the check fails too) reads as
-// "not sent" and the composer stays editable.
-async function draftGone(app: McpAppLike, draftId: string): Promise<boolean> {
+const GONE_UNRECORDED =
+  "This draft is no longer in Gmail, and the server has no record of sending it. Check your Sent folder.";
+
+// A lost send's reply, said without claiming more than the status probe knows:
+// "unsent" only means the draft still exists.
+function lostError(err: unknown, status: SendStatus | null): Error {
+  const reason = errMsg(err);
+  return new Error(
+    status?.state === "unsent"
+      ? `Not sent yet: your draft is still in Gmail (${reason}). Try again.`
+      : `No confirmation from the server (${reason}). Check your Sent folder before retrying.`,
+  );
+}
+
+// What became of the draft per the server, or null if the check failed too.
+async function sendStatus(app: McpAppLike, draftId: string): Promise<SendStatus | null> {
   try {
     const raw = await app.callServerTool({
       name: "gmail_composer.send_status",
       arguments: { draft_id: draftId },
     });
-    return extractStructuredContent<{ draft_exists?: boolean }>(raw)?.draft_exists === false;
+    return extractStructuredContent<SendStatus>(raw);
   } catch {
-    return false;
+    return null;
   }
 }
 
 // Send the draft and return Gmail's confirmation, or throw the error to show.
 // "Sent" is terminal, so a false positive is unrecoverable: a definite server
-// failure (isError) is shown as-is, even though a discarded draft is also
-// "gone". Only a lost reply (the call rejected, or resolved without a
-// message_id) asks the server whether the draft is gone.
+// failure (isError) is shown as-is. Only a lost reply (the call rejected, or
+// resolved without a message_id) asks the server for its sent record, the
+// only proof of a send: Gmail also deletes a discarded draft, so "gone" alone
+// is not "sent". Any doubt keeps the composer editable.
 export async function confirmSend(
   app: McpAppLike,
   args: Record<string, unknown> & { draft_id: string },
 ): Promise<SendResult> {
   let raw: unknown;
+  let lost: unknown;
   try {
     raw = await app.callServerTool({ name: "gmail_composer.send", arguments: args });
   } catch (err) {
-    if (await draftGone(app, args.draft_id)) return {};
-    throw err;
+    lost = err;
   }
-  const result = (raw ?? {}) as ToolCallResult;
-  if (result.isError) throw new Error(toolErrorText(result) ?? "the send failed");
-  const sent = extractStructuredContent<SendResult>(raw);
-  if (sent?.message_id) return sent;
-  if (await draftGone(app, args.draft_id)) return {};
-  throw new Error("the server did not confirm the send");
+  if (lost === undefined) {
+    const result = (raw ?? {}) as ToolCallResult;
+    if (result.isError) throw new Error(toolErrorText(result) ?? "the send failed");
+    const sent = extractStructuredContent<SendResult>(raw);
+    if (sent?.message_id) return sent;
+    lost = new Error("the server did not confirm the send");
+  }
+  const status = await sendStatus(app, args.draft_id);
+  if (status?.state === "sent" && status.result?.message_id) return status.result;
+  if (status?.state === "gone") throw new Error(GONE_UNRECORDED);
+  throw lostError(lost, status);
 }
 
 // Call a write tool and return its result, throwing the server's own text when
@@ -221,8 +240,21 @@ export async function callWriteTool(
   return raw;
 }
 
+// An error as one readable line. Hosts reject a tool call that never got an
+// answer with raw transport text, e.g. `MCP error -32603: Error POSTing to
+// endpoint: {<Cloudflare 502 JSON>}`; keep that body's title (or status) and
+// cut it short if it won't parse. Other messages pass through unchanged.
 export function errMsg(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
+  const text = (err instanceof Error ? err.message : String(err)).replace(/^MCP error -?\d+:\s*/, "");
+  const open = text.indexOf("{");
+  const close = text.lastIndexOf("}");
+  if (open < 0 || close < open) return text;
+  try {
+    const body = JSON.parse(text.slice(open, close + 1)) as { title?: unknown; status?: unknown };
+    if (typeof body.title === "string" && body.title) return body.title;
+    if (typeof body.status === "number") return `HTTP ${body.status}`;
+  } catch { /* not a JSON body */ }
+  return text.length > 120 ? `${text.slice(0, 117)}...` : text;
 }
 
 export function formatFileSize(bytes: number): string {

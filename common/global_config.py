@@ -3,7 +3,7 @@ import re
 import warnings
 from copy import deepcopy
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from cryptography.fernet import Fernet
@@ -28,6 +28,7 @@ from .config_models import (
     GmailConfig,
     LlmConfig,
     LoggingConfig,
+    OAuthConfig,
     PdfFormsConfig,
     RateLimitConfig,
     ServerConfig,
@@ -123,8 +124,10 @@ class YamlSettingsSource(PydanticBaseSettingsSource):
                         prod_config_data = yaml.safe_load(file)
                     if prod_config_data:
                         config_data = recursive_update(config_data, prod_config_data)
-                        logger.warning(
-                            "\033[33m❗️ Overwriting common/global_config.yaml with common/production_config.yaml\033[0m"
+                        # Expected on every prod boot, so debug: it runs before
+                        # setup_logging and would otherwise land on stderr.
+                        logger.debug(
+                            "Overwriting common/global_config.yaml with common/production_config.yaml"
                         )
                 except FileNotFoundError:
                     logger.warning(
@@ -201,6 +204,7 @@ class Config(BaseSettings):
         default_factory=lambda: SubscriptionConfig()
     )
     rate_limit: RateLimitConfig = Field(default_factory=lambda: RateLimitConfig())
+    oauth: OAuthConfig = Field(default_factory=lambda: OAuthConfig())
     payments: AgenticPaymentsConfig = Field(
         default_factory=lambda: AgenticPaymentsConfig()
     )
@@ -232,6 +236,11 @@ class Config(BaseSettings):
     # Canonical public URL of the /mcp endpoint (RFC 8707 resource identifier);
     # must match the resource indicator configured in the WorkOS dashboard
     MCP_PUBLIC_URL: str | None = None
+    # Who issues the tokens MCP clients use. "authkit": WorkOS AuthKit issues
+    # them and /mcp verifies them. "self": DaySurface's own OAuth server
+    # (api_server/oauth/) issues, stores and revokes them, with WorkOS AuthKit
+    # doing only the sign-in. Switching back to "authkit" is the rollback.
+    MCP_AUTH_MODE: Literal["authkit", "self"] = "authkit"
     # Canonical public base URL of the HTTP API (no trailing slash, e.g.
     # https://api.example.com). When set, it is advertised as the `servers`
     # entry in the published OpenAPI spec so codegen / Swagger "Try it out" and
@@ -555,7 +564,10 @@ if os.getenv("DEV_ENV") == "prod":
     load_dotenv(dotenv_path=root_dir / ".prod.env", override=True)
 
 # Check if .env file has been properly loaded
-is_local = os.getenv("GITHUB_ACTIONS") != "true"
+# Railway injects secrets as real env vars, so no .prod.env there is expected.
+is_local = os.getenv("GITHUB_ACTIONS") != "true" and not os.getenv(
+    "RAILWAY_ENVIRONMENT_ID"
+)
 if is_local:
     env_file_to_check = ".prod.env" if os.getenv("DEV_ENV") == "prod" else ".env"
     env_values = dotenv_values(root_dir / env_file_to_check)

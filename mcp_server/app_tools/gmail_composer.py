@@ -32,6 +32,7 @@ from models.gmail import (
     _UnsetType,
 )
 from models.gmail_composer import GmailComposerSendStatus
+from services import InvalidArgument
 from services.gmail_attachments_svc import (
     gmail_add_attachment as _gmail_add_attachment,
 )
@@ -40,9 +41,13 @@ from services.gmail_attachments_svc import (
 )
 from services.gmail_draft_helpers import DraftGoneError
 from services.gmail_drafts_svc import (
+    find_sent,
+    gmail_draft_exists,
+    sent_or_reraise,
+)
+from services.gmail_drafts_svc import (
     gmail_discard_draft as _gmail_discard_draft,
 )
-from services.gmail_drafts_svc import gmail_draft_exists
 from services.gmail_drafts_svc import (
     gmail_get_draft as _gmail_get_draft,
 )
@@ -69,7 +74,7 @@ def _gone_for_user() -> Iterator[None]:
         yield
     except DraftGoneError as exc:
         # DraftGoneError's text is written for the model; the user sees this.
-        raise ValueError(
+        raise InvalidArgument(
             "This draft no longer exists in Gmail. It was probably already sent "
             "or discarded."
         ) from exc
@@ -93,7 +98,7 @@ def _coerce_attachments(
         elif a.get("attachment_id"):
             out.append(AttachmentReference(attachment_id=a["attachment_id"]))
         else:
-            raise ValueError(
+            raise InvalidArgument(
                 "attachment must have either 'data_base64' (new upload) or "
                 "'attachment_id' (existing file reference)"
             )
@@ -166,19 +171,24 @@ def send(
     # send path saves the visible fields then sends, leaving files intact.
     uid = guard_user_id(user_id)
     with _gone_for_user():
-        _gmail_update_draft(
-            GmailUpdateDraftInput(
-                user_id=uid,
-                draft_id=draft_id,
-                to=to,
-                subject=subject,
-                body=body,
-                cc=cc,
-                bcc=bcc,
-                attachments=_patch_attachments(attachments),
+        try:
+            _gmail_update_draft(
+                GmailUpdateDraftInput(
+                    user_id=uid,
+                    draft_id=draft_id,
+                    to=to,
+                    subject=subject,
+                    body=body,
+                    cc=cc,
+                    bcc=bcc,
+                    attachments=_patch_attachments(attachments),
+                )
             )
-        )
-        return _gmail_send(GmailSendInput(user_id=uid, draft_id=draft_id))
+            return _gmail_send(GmailSendInput(user_id=uid, draft_id=draft_id))
+        except DraftGoneError as exc:
+            # A retry after a lost reply: the save finds the draft gone because
+            # it already went out, so answer with that first send.
+            return sent_or_reraise(uid, draft_id, exc)
 
 
 @mcp.tool(
@@ -227,14 +237,24 @@ def remove_attachment(
 
 @mcp.tool(
     name="gmail_composer.send_status",
-    description="Report whether a draft still exists after an unconfirmed send.",
+    description="Report whether a draft was sent or still exists after an unconfirmed send.",
     meta=_APP_META,
 )
 def send_status(draft_id: str, user_id: str = "") -> GmailComposerSendStatus:
     # The composer asks only when a send's reply was lost (host timeout, dropped
     # result), never after a definite server error.
     uid = guard_user_id(user_id)
-    return GmailComposerSendStatus(draft_exists=gmail_draft_exists(uid, draft_id))
+    sent = find_sent(uid, draft_id)
+    if sent is not None:
+        return GmailComposerSendStatus(state="sent", result=sent)
+    if gmail_draft_exists(uid, draft_id):
+        return GmailComposerSendStatus(state="unsent")
+    # gmail_send records only after Gmail confirms and deletes the draft, so a
+    # probe landing in between sees it gone; look once more before saying so.
+    sent = find_sent(uid, draft_id)
+    if sent is not None:
+        return GmailComposerSendStatus(state="sent", result=sent)
+    return GmailComposerSendStatus(state="gone")
 
 
 @mcp.tool(

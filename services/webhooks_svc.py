@@ -42,7 +42,7 @@ from models.webhooks import (
     WebhookUnsubscribeInput,
     WebhookUnsubscribeResult,
 )
-from services import service
+from services import InvalidArgument, service
 
 # Header names on delivered POSTs (kept here so the delivery module imports one).
 SIGNATURE_HEADER = "X-Webhook-Signature"
@@ -135,22 +135,24 @@ def _validate_webhook_url(url: str) -> None:
     """
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https"):
-        raise ValueError("Webhook url must be an http(s) URL")
+        raise InvalidArgument("Webhook url must be an http(s) URL")
     host = parsed.hostname
     if not host:
-        raise ValueError("Webhook url must include a host")
+        raise InvalidArgument("Webhook url must include a host")
 
     dev = global_config.is_dev
     is_loopback_name = host.lower() in {"localhost", "ip6-localhost"}
     if parsed.scheme == "http" and not (dev and is_loopback_name):
-        raise ValueError("Webhook url must use https")
+        raise InvalidArgument("Webhook url must use https")
 
     for ip in _candidate_ips(host):
         if ip.is_loopback:
             if not dev:
-                raise ValueError("Webhook url must not target a loopback address")
+                raise InvalidArgument("Webhook url must not target a loopback address")
         elif not ip.is_global:
-            raise ValueError("Webhook url must not target a private/reserved address")
+            raise InvalidArgument(
+                "Webhook url must not target a private/reserved address"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -272,7 +274,7 @@ def webhook_rotate_secret(
             .one_or_none()
         )
         if row is None:
-            raise ValueError("Subscription not found")
+            raise InvalidArgument("Subscription not found")
         row.secret_enc = secret_enc
         row.key_id = key_id
         session.commit()

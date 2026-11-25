@@ -1,28 +1,35 @@
 """FastAPI application - CORS, session middleware, route registration."""
 
+import hashlib
 import logging
 import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
-from typing import Literal, TypedDict
+from typing import Any, Literal, TypedDict
 
+import itsdangerous
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.types import ASGIApp
 
+import api_server.oauth as oauth_server
 from api_server.middleware.error_handler import (
     ErrorHandlerMiddleware,
     RequestIdMiddleware,
     attachment_too_large_handler,
     client_refusal_handler,
+    invalid_argument_handler,
     retry_later_handler,
 )
 from api_server.middleware.mcp_auth import MCPAuthMiddleware
 from api_server.middleware.rate_limit import RateLimitMiddleware
 from api_server.middleware.security_headers import SecurityHeadersMiddleware
+from api_server.oauth import flow as oauth_flow
+from api_server.oauth.cimd import lifespan as cimd_lifespan
 from api_server.routes import (
     agentic_payments,
     ask,
@@ -40,7 +47,7 @@ from api_server.runner import runner_lifespan
 from common import global_config
 from mcp_server.server import lifespan as mcp_lifespan
 from mcp_server.server import mount_on as mount_mcp_server
-from services import ClientRefusalError, RetryLaterError
+from services import ClientRefusalError, InvalidArgument, RetryLaterError
 from services.gmail_svc import GmailAttachmentTooLargeError
 
 # Logging (scrubber + prod diagnose gating) is configured in api_server/__init__.py,
@@ -127,10 +134,25 @@ def session_cookie_policy() -> SessionCookiePolicy:
     return {"https_only": not global_config.is_dev, "same_site": "lax"}
 
 
+class Sha256SessionMiddleware(SessionMiddleware):
+    """Starlette's ``SessionMiddleware``, signing the cookie with HMAC-SHA256.
+
+    Starlette builds an itsdangerous ``TimestampSigner`` with its default
+    digest, SHA-1. HMAC-SHA1 is not broken, but nothing here should depend on
+    SHA-1, so the signer is replaced with a SHA-256 one.
+    """
+
+    def __init__(self, app: ASGIApp, secret_key: str, **kwargs: Any) -> None:
+        super().__init__(app, secret_key, **kwargs)
+        self.signer = itsdangerous.TimestampSigner(
+            str(secret_key), digest_method=hashlib.sha256
+        )
+
+
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Compose the FastMCP session manager with the periodic webhook runner."""
-    async with mcp_lifespan(app), runner_lifespan(app):
+    """Compose MCP sessions, the periodic runners and the CIMD fetch tasks."""
+    async with mcp_lifespan(app), runner_lifespan(app), cimd_lifespan():
         yield
 
 
@@ -153,7 +175,7 @@ app.add_middleware(RequestIdMiddleware)  # type: ignore[arg-type]
 app.add_middleware(MCPAuthMiddleware)  # type: ignore[arg-type]
 
 app.add_middleware(
-    SessionMiddleware,  # type: ignore[arg-type]
+    Sha256SessionMiddleware,  # type: ignore[arg-type]
     secret_key=global_config.SESSION_SECRET_KEY,
     **session_cookie_policy(),
 )
@@ -168,7 +190,7 @@ app.add_middleware(
 
 # Outermost, deliberately: it is the only middleware that must stamp *every*
 # byte-producing path, including CORS preflights, the MCPAuthMiddleware 401
-# challenge (which writes to `send` directly), and the FastMCP mount below.
+# challenge (which writes to `send` directly), and the MCPServer mount below.
 #
 # On the mount: `mount_mcp_server(app)` calls `app.mount("/", mcp_app)`, which
 # registers an ordinary route on `app.router`. `add_middleware` wraps the
@@ -202,6 +224,8 @@ app.add_exception_handler(GmailAttachmentTooLargeError, attachment_too_large_han
 app.add_exception_handler(RetryLaterError, retry_later_handler)
 # A deliberate refusal (draft gone, duplicate reply) is the caller's 4xx.
 app.add_exception_handler(ClientRefusalError, client_refusal_handler)
+# A service rejecting one of its arguments is the caller's 400.
+app.add_exception_handler(InvalidArgument, invalid_argument_handler)
 
 # --- Routes ---------------------------------------------------------------
 
@@ -220,8 +244,15 @@ app.include_router(agentic_payments.router)
 app.include_router(ask.router)
 app.include_router(waitlist.router)
 
+# --- OAuth authorization server for MCP clients ----------------------------
+# Only with MCP_AUTH_MODE=self (api_server/oauth/). Registered before the MCP
+# mount below, which sits at "/" and would otherwise answer /authorize and /token.
+if oauth_server.is_self_mode():
+    app.include_router(oauth_flow.router)
+    app.router.routes.extend(oauth_server.create_sdk_routes())
+
 # --- MCP server (streamable HTTP) -----------------------------------------
-# Mounts FastMCP at /mcp so CLI/API/MCP share one process, port, and middleware.
+# Mounts MCPServer at /mcp so CLI/API/MCP share one process, port, and middleware.
 _mcp_app = mount_mcp_server(app)
 
 # The mount sits at "/", so it - not FastAPI - answers every path the routers

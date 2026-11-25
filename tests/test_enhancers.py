@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from mcp.server.elicitation import AcceptedElicitation
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 from mcp.types import AudioContent, TextContent
 from pydantic import BaseModel
 
@@ -102,7 +102,7 @@ class TestEnhancedTool(TestTemplate):
         block = tool.extra_content[0]
         assert isinstance(block, AudioContent)
         assert block.data == "UklGRg=="
-        assert block.mimeType == "audio/wav"
+        assert block.mime_type == "audio/wav"
 
     def test_audience_annotations_attached(self):
         tool = EnhancedTool(ctx=_make_mock_ctx(), input=_Input(), service_fn=_service)
@@ -207,7 +207,7 @@ class TestEnhancedToolContextInjection(TestTemplate):
 
         try:
             entry = next(e for e in get_registry() if e.name == svc_name)
-            test_mcp = FastMCP("test_context_schema")
+            test_mcp = MCPServer("test_context_schema")
             make_tool(test_mcp, entry)
             tool = test_mcp._tool_manager._tools[svc_name]
 
@@ -216,7 +216,7 @@ class TestEnhancedToolContextInjection(TestTemplate):
             assert "ctx" not in tool.parameters.get("required", [])
 
             result = asyncio.run(tool.run({"x": 7}, context=_make_mock_ctx()))
-            assert result.structuredContent == {"value": 7}
+            assert result.structured_content == {"value": 7}
         finally:
             _registry[:] = [e for e in _registry if e.name != svc_name]
             _enhancers.pop(svc_name, None)
@@ -225,7 +225,7 @@ class TestEnhancedToolContextInjection(TestTemplate):
 class TestHeadlessToolErrorPath(TestTemplate):
     """Headless wrappers must propagate service exceptions unchanged.
 
-    There is deliberately no try/except in `_make_headless_tool` - FastMCP
+    There is deliberately no try/except in `_make_headless_tool` - MCPServer
     converts the raised exception into a protocol-level error result. If a
     future refactor swallows the exception, the client would get a bogus
     success payload instead.
@@ -246,7 +246,7 @@ class TestHeadlessToolErrorPath(TestTemplate):
         )(fn)
 
         entry = next(e for e in get_registry() if e.name == svc_name)
-        test_mcp = FastMCP("test_headless")
+        test_mcp = MCPServer("test_headless")
         make_tool(test_mcp, entry)
         tool_fn = test_mcp._tool_manager._tools[svc_name].fn
 
@@ -292,7 +292,7 @@ class TestBuildCallToolResultTypeGuard(TestTemplate):
     def test_accepts_basemodel_result(self):
         tool = EnhancedTool(ctx=_make_mock_ctx(), input=_Input(), service_fn=_service)
         result = _build_call_tool_result(_Output(doubled=4), tool)
-        assert result.structuredContent == {"doubled": 4}
+        assert result.structured_content == {"doubled": 4}
 
 
 class TestConfigImageEnhancer(TestTemplate):

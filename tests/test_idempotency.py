@@ -21,6 +21,7 @@ from api_server.idempotency import (
 from db.base import Base
 from db.models.idempotency_keys import IdempotencyRecord
 from services import (
+    InvalidArgument,
     ServiceEntry,
     discover_services,
     get_registry,
@@ -68,6 +69,8 @@ EXPECTED_MUTATING_SERVICES = frozenset(
         "webhook_subscribe",
         "webhook_unsubscribe",
         "webhook_rotate_secret",
+        # Account
+        "sign_out",
     }
 )
 
@@ -275,6 +278,33 @@ class TestExecuteIdempotent(TestTemplate):
 
     def test_client_refusal_after_a_write_keeps_claim(self):
         self._refuse("k1", after_write=True)
+        with pytest.raises(HTTPException) as retry:
+            self._run("k1", {"a": 1}, {"n": 0})
+        assert retry.value.status_code == 409
+
+    def _reject(self, key, *, after_write: bool):
+        def _compute_reject():
+            if after_write:
+                record_upstream_write()
+            raise InvalidArgument("Pass 'to' explicitly.")
+
+        with pytest.raises(InvalidArgument):
+            execute_idempotent(
+                request=_request(key),
+                user_id="u1",
+                route="demo",
+                request_payload={"a": 1},
+                compute=_compute_reject,
+            )
+
+    def test_invalid_argument_releases_claim(self):
+        # Answered 400, before any write: a corrected same-key retry runs.
+        self._reject("k1", after_write=False)
+        counter = {"n": 0}
+        assert self._run("k1", {"a": 1}, counter).value == 1
+
+    def test_invalid_argument_after_a_write_keeps_claim(self):
+        self._reject("k1", after_write=True)
         with pytest.raises(HTTPException) as retry:
             self._run("k1", {"a": 1}, {"n": 0})
         assert retry.value.status_code == 409
